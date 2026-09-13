@@ -78,4 +78,8 @@ El primer vertical sólo usa `LegacyRead`.
 - objetos cifrados/no incluidos;
 - jobs, linked servers y dependencias externas;
 - descripción de catálogos 4 y 33.
+## Metadatos de la validación de contratos
 
+La consulta inicial se diseñó para SQL Server 2022 (16.0.1135.2), sobre la base `pr_t`, con collation `SQL_Latin1_General_CP1_CI_AS`, nivel de compatibilidad 100 y un volumen de referencia de 859,813 contratos.
+
+La paginación usa `ROW_NUMBER()` y `CTO_FL_CVE` como desempate estable; no usa `OFFSET/FETCH`. La consulta de total es independiente y usa `COUNT_BIG`. No se modifican objetos, compatibilidad, tablas, vistas, procedimientos ni índices.

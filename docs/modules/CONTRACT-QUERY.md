@@ -88,4 +88,12 @@ Devuelve el resumen inicial de sólo lectura.
 - orden predeterminado;
 - política de auditoría de consultas;
 - campos exactos del detalle inicial.
+## Implementación inicial de búsqueda
 
+Metadatos de referencia: SQL Server 2022 (16.0.1135.2), base `pr_t`, collation `SQL_Latin1_General_CP1_CI_AS`, compatibilidad 100 y 859,813 contratos.
+
+`SearchAsync` implementa por ahora coincidencia exacta para número de contrato, clave de persona, RFC, tipo de operación y estatus. La consulta usa `ROW_NUMBER()` para paginación estable, con `CTO_FL_CVE` como desempate, y una consulta independiente `COUNT_BIG`.
+
+El catálogo 33 se une por código (`PAR_CL_VALOR`) y no por descripción; por ello los códigos de estatus 7 y 10 permanecen separados aunque ambos describan `PERDIDA`. El ordenamiento se selecciona de una lista fija y todos los valores llegan como parámetros Dapper tipados.
+
+Nombre, VIN y solicitud se rechazan como filtros no implementados hasta revisar índices y confirmar la semántica de coincidencia parcial.
