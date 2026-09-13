@@ -13,9 +13,24 @@ Fecha: 13 de septiembre de 2026
 - SQL de detalle usa el parámetro `@ContractNumber`.
 - El paquete excluye `node_modules`, `dist`, `bin` y `obj`.
 
+
+## Cambios de esta validación
+
+- Se agregó `uCredit.Modules.Contracts.IntegrationTests` a `uCredit.slnx`.
+- El proyecto de integración usa xUnit y referencia `uCredit.Modules.Contracts` y `uCredit.Infrastructure.LegacySql`.
+- Se agregó una prueba inicial de consulta omitida explícitamente porque aún no existe una conexión segura de pruebas.
+- Se ampliaron las pruebas de arquitectura para validar límites entre Contracts, Branding, API y LegacySql, además de prohibir `System.Web`, `DataSet` y `DataTable` en módulos funcionales.
+- No se implementó `SearchAsync`, no se agregó ninguna cadena de conexión y no se realizaron conexiones a SQL Server.
+
+## Resultado backend
+
+```text
+dotnet build uCredit.slnx: bloqueado por `Access denied` al escribir artefactos `obj` preexistentes
+dotnet test uCredit.slnx: 3 pruebas ejecutadas correctamente (1 arquitectura, 2 unitarias); la integración no pudo ejecutarse porque su DLL no llegó a compilar por el bloqueo de `obj`
+```
 ## Pendiente
 
-- Compilar backend y ejecutar xUnit con .NET SDK 10; el SDK no está instalado en el entorno donde se generó el esqueleto.
+- Repetir la validación backend cuando se liberen los artefactos `obj` bloqueados por el entorno.
 - Restaurar paquetes NuGet desde el repositorio autorizado por TI.
 - Validar consulta contra una copia local/QA.
 - Confirmar versión y collation de SQL Server.
