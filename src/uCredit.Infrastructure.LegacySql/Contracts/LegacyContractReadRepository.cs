@@ -172,7 +172,7 @@ public sealed class LegacyContractReadRepository(
         return await connection.QuerySingleOrDefaultAsync<ContractSummary>(command);
     }
 
-    private static DynamicParameters CreateParameters(ContractSearchCriteria criteria)
+    internal static DynamicParameters CreateParameters(ContractSearchCriteria criteria)
     {
         var parameters = new DynamicParameters();
         if (!string.IsNullOrWhiteSpace(criteria.ContractNumber))
@@ -189,6 +189,20 @@ public sealed class LegacyContractReadRepository(
         {
             parameters.Add("Rfc", criteria.Rfc.Trim(), DbType.String, size: 13);
         }
+        if (!string.IsNullOrWhiteSpace(criteria.PersonName))
+        {
+            parameters.Add("PersonNamePrefix", criteria.PersonName.Trim() + "%", DbType.String, size: 200);
+        }
+
+        if (!string.IsNullOrWhiteSpace(criteria.Vin))
+		{
+			parameters.Add(
+				"Vin",
+				criteria.Vin.Trim(),
+				DbType.String,
+				size: 20);
+		}
+
 
         if (!string.IsNullOrWhiteSpace(criteria.OperationType))
         {
@@ -203,7 +217,7 @@ public sealed class LegacyContractReadRepository(
         return parameters;
     }
 
-    private static List<string> CreatePredicates(ContractSearchCriteria criteria)
+    internal static List<string> CreatePredicates(ContractSearchCriteria criteria)
     {
         var predicates = new List<string>();
         if (!string.IsNullOrWhiteSpace(criteria.ContractNumber))
@@ -218,8 +232,32 @@ public sealed class LegacyContractReadRepository(
 
         if (!string.IsNullOrWhiteSpace(criteria.Rfc))
         {
-            predicates.Add("P.PNA_DS_RFC = @Rfc");
+            predicates.Add("P.PNA_CL_RFC = @Rfc");
         }
+        if (!string.IsNullOrWhiteSpace(criteria.PersonName))
+        {
+            predicates.Add("P.PNA_DS_NOMBRE LIKE @PersonNamePrefix");
+        }
+
+        if (!string.IsNullOrWhiteSpace(criteria.Vin))
+		{
+			predicates.Add(
+				"""
+				EXISTS
+				(
+					SELECT 1
+					FROM dbo.KPRODUCTO_FACTURA AS KPF
+					INNER JOIN dbo.KCARAC_PROD_FACT AS KCF
+						ON KCF.FAC_FL_CVE = KPF.FAC_FL_CVE
+					   AND KCF.PRD_FL_CVE = KPF.PRD_FL_CVE
+					   AND KCF.KPF_NO_CONSECUTIVO = KPF.KPF_NO_CONSECUTIVO
+					WHERE KPF.CTO_FL_CVE = C.CTO_FL_CVE
+					  AND KCF.CAR_FL_CVE = 1
+					  AND KCF.CFP_DS_CARACT = @Vin
+				)
+				""");
+		}
+
 
         if (!string.IsNullOrWhiteSpace(criteria.OperationType))
         {

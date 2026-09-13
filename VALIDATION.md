@@ -52,5 +52,32 @@ El build generado se usó sólo para validación y no forma parte del paquete fu
 - Metadatos registrados: SQL Server 2022 (16.0.1135.2), base `pr_t`, collation `SQL_Latin1_General_CP1_CI_AS`, compatibilidad 100 y 859,813 contratos.
 - La paginación usa `ROW_NUMBER()` con `CTO_FL_CVE` como desempate y el total usa una consulta independiente `COUNT_BIG`.
 - Se admiten coincidencias exactas para contrato, persona, RFC, tipo de operación y estatus.
-- Nombre, VIN y solicitud se rechazan hasta confirmar índices y semántica parcial.
+- Nombre usa prefijo parametrizado; VIN usa coincidencia exacta parametrizada con `EXISTS`; solicitud permanece desactivada.
 - No se agregaron cadenas de conexión ni se realizó conexión a SQL Server.
+### Reglas de filtros verificadas
+
+- RFC: `P.PNA_CL_RFC = @Rfc`.
+- Nombre: `P.PNA_DS_NOMBRE LIKE @PersonNamePrefix`, con `criteria.PersonName.Trim() + "%"`.
+- VIN: coincidencia exacta mediante `EXISTS` sobre `KPRODUCTO_FACTURA` y `KCARAC_PROD_FACT`, usando sólo las relaciones confirmadas y `CFP_DS_CARACT = @Vin`.
+- Solicitud permanece desactivada hasta identificar qué campo o segmento Legacy la representa.
+- Los valores de usuario permanecen fuera del texto SQL y se envían como parámetros Dapper.
+### Continuación: filtros RFC, nombre, VIN y solicitud
+
+- Se confirmó RFC con `P.PNA_CL_RFC = @Rfc`.
+- Nombre usa prefijo con `P.PNA_DS_NOMBRE LIKE @PersonNamePrefix` y `criteria.PersonName.Trim() + "%"`.
+- VIN usa coincidencia exacta y parametrizada con `EXISTS` sobre `KPRODUCTO_FACTURA` y `KCARAC_PROD_FACT`.
+- Solicitud permanece desactivada hasta identificar su campo o segmento Legacy.
+- La consulta principal no incorpora joins a esas tablas, evitando duplicar contratos.
+- Las pruebas unitarias cubren prefijo, coincidencias exactas, parámetros vacíos y ausencia de valores de usuario dentro del SQL.
+
+Resultado de las validaciones solicitadas en esta continuación:
+
+```text
+dotnet build uCredit.slnx: bloqueado por Access denied en artefactos obj preexistentes
+dotnet test uCredit.slnx: bloqueado por el mismo error de restauración/compilación
+git diff --check: aprobado
+```
+- VIN quedó confirmado mediante `dbo.CCARACTERISTICA`: `CAR_FL_CVE = 1`, descripción `VIN`, longitud 20, requerido, activo y repetible. `CPC_NO_CATALOGO`/`CPC_FL_CVE` de solicitud no se fijan; solicitud permanece desactivada.
+### Confirmación de VIN
+
+`dbo.CCARACTERISTICA` confirmó `CAR_FL_CVE = 1`, descripción `VIN`, longitud máxima 20, requerido, activo y repetible. La implementación usa `KCF.CFP_DS_CARACT = @Vin` y `KCF.CAR_FL_CVE = 1` dentro de `EXISTS`, evitando duplicados por características repetibles.

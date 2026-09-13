@@ -66,7 +66,7 @@ Devuelve el resumen inicial de sólo lectura.
 - Dinero como `decimal`.
 - Fechas ISO 8601 en API.
 - Búsqueda por contrato exacta.
-- Coincidencia parcial de VIN/solicitud pendiente de confirmación.
+- Coincidencia exacta de VIN y solicitud mediante `EXISTS`; los códigos de catálogo están pendientes de confirmación.
 - Filtros de empresa/cartera pendientes de confirmar.
 - No incluir alta o cancelación.
 
@@ -92,8 +92,8 @@ Devuelve el resumen inicial de sólo lectura.
 
 Metadatos de referencia: SQL Server 2022 (16.0.1135.2), base `pr_t`, collation `SQL_Latin1_General_CP1_CI_AS`, compatibilidad 100 y 859,813 contratos.
 
-`SearchAsync` implementa por ahora coincidencia exacta para número de contrato, clave de persona, RFC, tipo de operación y estatus. La consulta usa `ROW_NUMBER()` para paginación estable, con `CTO_FL_CVE` como desempate, y una consulta independiente `COUNT_BIG`.
+`SearchAsync` implementa por ahora coincidencia exacta para número de contrato, clave de persona, RFC, VIN, tipo de operación y estatus. La consulta usa `ROW_NUMBER()` para paginación estable, con `CTO_FL_CVE` como desempate, y una consulta independiente `COUNT_BIG`.
 
 El catálogo 33 se une por código (`PAR_CL_VALOR`) y no por descripción; por ello los códigos de estatus 7 y 10 permanecen separados aunque ambos describan `PERDIDA`. El ordenamiento se selecciona de una lista fija y todos los valores llegan como parámetros Dapper tipados.
 
-Nombre, VIN y solicitud se rechazan como filtros no implementados hasta revisar índices y confirmar la semántica de coincidencia parcial.
+Nombre se busca por prefijo (`LIKE @PersonNamePrefix`); VIN y solicitud se buscan por coincidencia exacta. Los códigos Legacy (`CAR_FL_CVE` para VIN y `CPC_NO_CATALOGO`/`CPC_FL_CVE` para solicitud) siguen pendientes de confirmación; ambos filtros deben permanecer desactivados en ambientes compartidos hasta confirmarlos.

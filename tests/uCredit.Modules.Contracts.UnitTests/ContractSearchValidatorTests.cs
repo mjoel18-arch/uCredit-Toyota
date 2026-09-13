@@ -7,52 +7,49 @@ public sealed class ContractSearchValidatorTests
     [Fact]
     public void ValidateWithoutPrimaryCriterionReturnsError()
     {
-        var criteria = new ContractSearchCriteria(null, null, null, null, null, null, null, null);
-
-        var errors = ContractSearchValidator.Validate(criteria);
-
+        var errors = ContractSearchValidator.Validate(new ContractSearchCriteria(null, null, null, null, null, null, null, null));
         Assert.Contains("criteria", errors.Keys);
     }
 
     [Fact]
     public void ValidateWithContractNumberIsValid()
     {
-        var criteria = new ContractSearchCriteria("CR2300054", null, null, null, null, null, null, null);
-
-        var errors = ContractSearchValidator.Validate(criteria);
-
+        var errors = ContractSearchValidator.Validate(new ContractSearchCriteria("CR2300054", null, null, null, null, null, null, null));
         Assert.Empty(errors);
     }
 
     [Fact]
-    public void ValidateWithSupportedExactFiltersIsValid()
+    public void ValidateWithPrefixAndVinFiltersIsValid()
     {
-        var criteria = new ContractSearchCriteria(null, 42, "RFC123", null, null, null, null, 7, PageSize: 10);
-
-        var errors = ContractSearchValidator.Validate(criteria);
-
+        var errors = ContractSearchValidator.Validate(new ContractSearchCriteria(null, null, null, "ACME", "VIN", null, null, null));
         Assert.Empty(errors);
     }
 
     [Fact]
-    public void ValidateWithUnsupportedPartialFiltersReturnsErrors()
+    public void ValidateWithApplicationNumberReturnsNotImplementedError()
     {
-        var criteria = new ContractSearchCriteria(null, null, null, "ACME", "VIN", "APP", null, null);
-
-        var errors = ContractSearchValidator.Validate(criteria);
-
-        Assert.Contains("personName", errors.Keys);
-        Assert.Contains("vin", errors.Keys);
+        var errors = ContractSearchValidator.Validate(new ContractSearchCriteria(null, null, null, null, null, "APP", null, null));
         Assert.Contains("applicationNumber", errors.Keys);
+    }
+
+    [Fact]
+    public void ValidateVinWithTwentyCharactersIsValid()
+    {
+        var errors = ContractSearchValidator.Validate(new ContractSearchCriteria(null, null, null, null, new string('V', 20), null, null, null));
+        Assert.DoesNotContain("vin", errors.Keys);
+    }
+
+    [Fact]
+    public void ValidateVinWithMoreThanTwentyCharactersReturnsError()
+    {
+        var errors = ContractSearchValidator.Validate(new ContractSearchCriteria(null, null, null, null, new string('V', 21), null, null, null));
+        Assert.Contains("vin", errors.Keys);
     }
 
     [Fact]
     public void ValidateWithPageSizeOutsideRangeReturnsError()
     {
-        var criteria = new ContractSearchCriteria("CR2300054", null, null, null, null, null, null, null, PageSize: 101);
-
-        var errors = ContractSearchValidator.Validate(criteria);
-
+        var errors = ContractSearchValidator.Validate(new ContractSearchCriteria("CR2300054", null, null, null, null, null, null, null, PageSize: 101));
         Assert.Contains("pageSize", errors.Keys);
     }
 }

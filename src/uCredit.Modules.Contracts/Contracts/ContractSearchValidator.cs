@@ -27,22 +27,12 @@ public static class ContractSearchValidator
         AddMaxLength(errors, "applicationNumber", criteria.ApplicationNumber, 15);
         AddMaxLength(errors, "operationType", criteria.OperationType, 4);
 
-        AddUnsupportedFilter(errors, "personName", criteria.PersonName);
-        AddUnsupportedFilter(errors, "vin", criteria.Vin);
-        AddUnsupportedFilter(errors, "applicationNumber", criteria.ApplicationNumber);
+        if (!string.IsNullOrWhiteSpace(criteria.ApplicationNumber))
+        {
+            errors["applicationNumber"] = ["Application number search is not implemented until its Legacy field or segment is confirmed."];
+        }
 
         return errors;
-    }
-
-    private static void AddUnsupportedFilter(
-        Dictionary<string, string[]> errors,
-        string field,
-        string? value)
-    {
-        if (!string.IsNullOrWhiteSpace(value))
-        {
-            errors[field] = ["This filter is not implemented until its Legacy indexes and matching semantics are confirmed."];
-        }
     }
 
     private static void AddMaxLength(
