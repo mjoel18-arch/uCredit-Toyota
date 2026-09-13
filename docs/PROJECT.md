@@ -28,7 +28,7 @@ ProLeaseNet utiliza VB.NET, ASP.NET WebForms y .NET Framework 4.5. El sistema co
 
 ## Primer producto mínimo
 
-Consulta de contratos de sólo lectura con búsquedas por contrato, persona, RFC, nombre, VIN y solicitud; filtros por operación/estatus; paginación; permisos; detalle inicial y equivalencia con el Legacy.
+Consulta de contratos de sólo lectura con búsquedas por contrato, persona, RFC, nombre y VIN; filtros por operación/estatus; paginación; permisos; detalle inicial y equivalencia con el Legacy.
 
 ## Principios
 

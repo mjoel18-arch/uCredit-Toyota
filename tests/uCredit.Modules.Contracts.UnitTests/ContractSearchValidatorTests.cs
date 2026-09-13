@@ -25,12 +25,6 @@ public sealed class ContractSearchValidatorTests
         Assert.Empty(errors);
     }
 
-    [Fact]
-    public void ValidateWithApplicationNumberReturnsNotImplementedError()
-    {
-        var errors = ContractSearchValidator.Validate(new ContractSearchCriteria(null, null, null, null, null, "APP", null, null));
-        Assert.Contains("applicationNumber", errors.Keys);
-    }
 
     [Fact]
     public void ValidateVinWithTwentyCharactersIsValid()

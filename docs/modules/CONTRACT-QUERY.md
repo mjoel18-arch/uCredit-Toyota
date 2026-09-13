@@ -33,7 +33,7 @@ Consultar contratos con resultados equivalentes a ProLeaseNet, eliminando SQL co
 GET /api/v1/contracts
 ```
 
-Parámetros: `contractNumber`, `personId`, `rfc`, `personName`, `vin`, `applicationNumber`, `operationType`, `status`, `page`, `pageSize` y `sort`.
+Parámetros: `contractNumber`, `personId`, `rfc`, `personName`, `vin`, `operationType`, `status`, `page`, `pageSize` y `sort`.
 
 Exigir al menos un criterio principal, salvo permiso especial. `pageSize` debe estar limitado.
 

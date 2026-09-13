@@ -10,6 +10,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/uCredit.Modules.Contracts/uCredit.Modules.Contracts.csproj" />
+    <ProjectReference Include="../../src/uCredit.Infrastructure.LegacySql/uCredit.Infrastructure.LegacySql.csproj" />
   </ItemGroup>
 </Project>
-

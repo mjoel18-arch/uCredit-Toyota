@@ -9,7 +9,6 @@ const searchOptions: Array<{ value: SearchField; label: string }> = [
   { value: 'rfc', label: 'RFC' },
   { value: 'personName', label: 'Nombre o razón social' },
   { value: 'vin', label: 'VIN' },
-  { value: 'applicationNumber', label: 'Solicitud' },
 ]
 
 export function App() {
