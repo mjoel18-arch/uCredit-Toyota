@@ -18,6 +18,8 @@ dotnet run --project src/uCredit.Api
 
 La cadena `LegacySql:ReadConnectionString` debe proporcionarse mediante Secret Manager o variable de ambiente. No editar `appsettings.json` con credenciales.
 
+La API requiere configurar `Authentication:Authority`, `Authentication:Audience` y `Authentication:ClientId` mediante configuración segura. Variables equivalentes: `Authentication__Authority`, `Authentication__Audience` y `Authentication__ClientId`. No guardar valores reales en Git.
+
 Ejemplo de clave de variable de ambiente:
 
 ```text
@@ -37,9 +39,9 @@ npm run dev
 
 El frontend pide `/api/v1/branding/current`. El esqueleto envía temporalmente `X-Tenant-Code: DEMO` para mostrar el cambio de tema. Esto debe reemplazarse con resolución segura de tenant antes de un despliegue compartido.
 
-## Autenticación de desarrollo
+## Autenticación
 
-Los endpoints de contratos exigen `contracts.read`. Sólo en ambiente Development existe un esquema temporal que acepta el encabezado `X-Dev-User`; nunca debe habilitarse en producción. En otros ambientes, las rutas de contratos responden 503 hasta configurar OIDC.
+Los endpoints de contratos exigen `contracts.read`. Fuera del entorno exclusivo de pruebas, la API usa JWT Bearer con Microsoft Entra External ID y requiere la configuración de autoridad, audiencia y client ID. El entorno de pruebas sustituye explícitamente la autenticación mediante `WebApplicationFactory`.
 
 ## Limitaciones actuales
 

@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
   <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
     <ProjectReference Include="../uCredit.Infrastructure.LegacySql/uCredit.Infrastructure.LegacySql.csproj" />
     <ProjectReference Include="../uCredit.Modules.Branding/uCredit.Modules.Branding.csproj" />
     <ProjectReference Include="../uCredit.Modules.Contracts/uCredit.Modules.Contracts.csproj" />

@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
 using System.Text.Json.Serialization;
 using UCredit.Api.Endpoints;
 using UCredit.Api.Middleware;
@@ -15,20 +17,49 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 
 builder.Services.AddProblemDetails();
 builder.Services.AddHealthChecks();
-builder.Services.AddAuthentication();
-if (builder.Environment.IsDevelopment())
+var isTesting = builder.Environment.IsEnvironment("Testing");
+if (!isTesting)
 {
-    builder.Services.AddAuthentication(DevelopmentAuthenticationHandler.SchemeName)
-        .AddScheme<AuthenticationSchemeOptions, DevelopmentAuthenticationHandler>(
-            DevelopmentAuthenticationHandler.SchemeName,
-            _ => { });
+    builder.Services.AddOptions<ExternalAuthenticationOptions>()
+        .BindConfiguration(ExternalAuthenticationOptions.SectionName)
+        .ValidateDataAnnotations()
+        .ValidateOnStart();
+
+    builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+        .AddJwtBearer(options =>
+        {
+            var authentication = builder.Configuration
+                .GetSection(ExternalAuthenticationOptions.SectionName)
+                .Get<ExternalAuthenticationOptions>()!;
+
+            options.Authority = authentication.Authority;
+            options.Audience = authentication.Audience;
+            options.RequireHttpsMetadata = true;
+            options.SaveToken = false;
+            options.MapInboundClaims = false;
+            options.TokenValidationParameters = new TokenValidationParameters
+            {
+                ValidateIssuer = true,
+                ValidateAudience = true,
+                ValidateLifetime = true,
+                ValidateIssuerSigningKey = true,
+                ClockSkew = TimeSpan.FromMinutes(1),
+            };
+        });
 }
+else
+{
+    builder.Services.AddAuthentication();
+}
+
+builder.Services.AddTransient<IClaimsTransformation, ExternalIdRoleClaimsTransformation>();
 
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("contracts.read", policy =>
         policy.RequireClaim("permission", "contracts.read"));
 });
+
 builder.Services.AddSingleton<IBrandThemeProvider, InMemoryBrandThemeProvider>();
 builder.Services.AddLegacySql(builder.Configuration);
 
@@ -48,7 +79,7 @@ app.MapGet("/", () => Results.Ok(new
 }));
 app.MapHealthChecks("/health");
 app.MapBrandingEndpoints();
-if (app.Environment.IsDevelopment())
+if (app.Environment.IsDevelopment() || app.Environment.IsEnvironment("Testing"))
 {
     app.MapContractEndpoints();
 }
