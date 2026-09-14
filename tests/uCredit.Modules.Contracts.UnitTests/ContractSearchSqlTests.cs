@@ -194,5 +194,5 @@ public sealed class ContractSearchSqlTests
         return (dbType, size);
     }
     private static ContractSearchCriteria CreateCriteria(string? vin = null, string? rfc = null, string? personName = null) => new(
-        null, null, rfc, personName, vin, null, null, null);
+        null, null, rfc, personName, vin, null, null);
 }

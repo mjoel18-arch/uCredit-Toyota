@@ -1,7 +1,7 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { useBranding } from './shared/branding/BrandingProvider'
 
-type SearchField = 'contractNumber' | 'personId' | 'rfc' | 'personName' | 'vin' | 'applicationNumber'
+type SearchField = 'contractNumber' | 'personId' | 'rfc' | 'personName' | 'vin'
 
 const searchOptions: Array<{ value: SearchField; label: string }> = [
   { value: 'contractNumber', label: 'Número de contrato' },

@@ -6,7 +6,6 @@ public sealed record ContractSearchCriteria(
     string? Rfc,
     string? PersonName,
     string? Vin,
-    string? ApplicationNumber,
     string? OperationType,
     int? Status,
     int Page = 1,
@@ -19,7 +18,7 @@ public sealed record ContractSearchCriteria(
         !string.IsNullOrWhiteSpace(Rfc) ||
         !string.IsNullOrWhiteSpace(PersonName) ||
         !string.IsNullOrWhiteSpace(Vin) ||
-        !string.IsNullOrWhiteSpace(ApplicationNumber);
+        !string.IsNullOrWhiteSpace(Vin);
 }
 
 public enum ContractSort

@@ -96,7 +96,7 @@ public sealed class LegacyContractReadRepositoryIntegrationTests
         string? vin = null,
         int page = 1,
         int pageSize = 20) =>
-        new(null, null, rfc, personName, vin, null, null, null, page, pageSize);
+        new(null, null, rfc, personName, vin, null, null, page, pageSize);
 
     private static bool HasValue(string variableName) =>
         !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(variableName));

@@ -24,13 +24,8 @@ public static class ContractSearchValidator
         AddMaxLength(errors, "contractNumber", criteria.ContractNumber, 15);
         AddMaxLength(errors, "rfc", criteria.Rfc, 13);
         AddMaxLength(errors, "vin", criteria.Vin, 20);
-        AddMaxLength(errors, "applicationNumber", criteria.ApplicationNumber, 15);
         AddMaxLength(errors, "operationType", criteria.OperationType, 4);
 
-        if (!string.IsNullOrWhiteSpace(criteria.ApplicationNumber))
-        {
-            errors["applicationNumber"] = ["Application number search is not implemented until its Legacy field or segment is confirmed."];
-        }
 
         return errors;
     }
