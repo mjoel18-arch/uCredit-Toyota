@@ -17,7 +17,6 @@ public sealed record ContractSearchCriteria(
         PersonId is > 0 ||
         !string.IsNullOrWhiteSpace(Rfc) ||
         !string.IsNullOrWhiteSpace(PersonName) ||
-        !string.IsNullOrWhiteSpace(Vin) ||
         !string.IsNullOrWhiteSpace(Vin);
 }
 
