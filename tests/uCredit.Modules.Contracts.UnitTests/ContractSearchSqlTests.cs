@@ -1,6 +1,11 @@
 using UCredit.Infrastructure.LegacySql.Contracts;
 using UCredit.Modules.Contracts.Contracts;
 
+using System.Collections;
+using System.Data;
+using System.Reflection;
+using Dapper;
+
 namespace UCredit.Modules.Contracts.UnitTests;
 
 public sealed class ContractSearchSqlTests
@@ -62,6 +67,132 @@ public sealed class ContractSearchSqlTests
         Assert.Equal(maliciousValue, parameters.Get<string>("Vin"));
     }
 
-    private static ContractSearchCriteria CreateCriteria(string? vin = null) => new(
-        null, null, null, null, vin, null, null, null);
+    [Fact]
+    public void LegacyRowMapsNullableColumnsAndLegacyDateTypes()
+    {
+        var modifiedAt = new DateTime(2026, 9, 13, 10, 30, 0, DateTimeKind.Unspecified);
+        var row = new LegacyContractSummaryRow
+        {
+            ContractNumber = "CONTRACT-1",
+            PersonId = 42,
+            PersonName = "Sample Person",
+            OperationTypeCode = "OP",
+            OperationTypeName = "Operation",
+            AddressId = null,
+            FinancedAmount = 123.45m,
+            OutstandingBalance = 67.89m,
+            DisbursementDate = new DateTime(2026, 1, 2),
+            FirstPaymentDate = null,
+            LastPaymentDate = new DateTime(2026, 3, 4),
+            StatusCode = 1,
+            StatusName = "Active",
+            ModifiedBy = null,
+            ModifiedAt = modifiedAt,
+        };
+
+        var result = LegacyContractReadRepository.MapRow(row);
+
+        Assert.Equal("CONTRACT-1", result.ContractNumber);
+        Assert.Equal(42, result.PersonId);
+        Assert.Null(result.AddressId);
+        Assert.Equal(123.45m, result.FinancedAmount);
+        Assert.Equal(67.89m, result.OutstandingBalance);
+        Assert.Equal(new DateOnly(2026, 1, 2), result.DisbursementDate);
+        Assert.Null(result.FirstPaymentDate);
+        Assert.Equal(new DateOnly(2026, 3, 4), result.LastPaymentDate);
+        Assert.Equal(1, result.StatusCode);
+        Assert.Null(result.ModifiedBy);
+        Assert.Equal(new DateTimeOffset(modifiedAt, TimeSpan.Zero), result.ModifiedAt);
+    }
+    [Fact]
+    public void LegacyRowDoesNotConvertNullRequiredColumnsToDefaults()
+    {
+        var row = new LegacyContractSummaryRow
+        {
+            PersonId = null,
+            ContractNumber = "CONTRACT-1",
+            PersonName = "Sample Person",
+            OperationTypeCode = "OP",
+            OperationTypeName = "Operation",
+            FinancedAmount = 1m,
+            OutstandingBalance = 0m,
+            StatusCode = 1,
+            StatusName = "Active",
+        };
+
+        var exception = Assert.Throws<InvalidOperationException>(() => LegacyContractReadRepository.MapRow(row));
+
+        Assert.Contains(nameof(LegacyContractSummaryRow.PersonId), exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RfcUsesAnsiStringAndLengthMatchingLegacyColumn()
+    {
+        var parameters = LegacyContractReadRepository.CreateParameters(CreateCriteria(rfc: "RFC-123"));
+
+        var metadata = GetParameterMetadata(parameters, "Rfc");
+
+        Assert.Equal(DbType.AnsiString, metadata.DbType);
+        Assert.Equal(13, metadata.Size);
+    }
+
+    [Fact]
+    public void PersonNamePrefixUsesAnsiStringAndLengthMatchingLegacyColumn()
+    {
+        var parameters = LegacyContractReadRepository.CreateParameters(CreateCriteria(personName: "Sample"));
+
+        var metadata = GetParameterMetadata(parameters, "PersonNamePrefix");
+
+        Assert.Equal(DbType.AnsiString, metadata.DbType);
+        Assert.Equal(200, metadata.Size);
+    }
+
+    [Fact]
+    public void CountSqlUsesOnlyContractAndPersonTablesAndParameterizedPredicates()
+    {
+        var sql = LegacyContractReadRepository.CreateCountSql(CreateCriteria(rfc: "RFC-123", personName: "Sample"));
+
+        Assert.Contains("SELECT COUNT_BIG(1)", sql);
+        Assert.Contains("FROM dbo.KCONTRATO AS C", sql);
+        Assert.Contains("INNER JOIN dbo.CPERSONA AS P", sql);
+        Assert.Contains("P.PNA_CL_RFC = @Rfc", sql);
+        Assert.Contains("P.PNA_DS_NOMBRE LIKE @PersonNamePrefix", sql);
+        Assert.DoesNotContain("KTOPERACION", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("CPARAMETRO", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("CUSUARIO", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("ROW_NUMBER", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("ORDER BY", sql, StringComparison.OrdinalIgnoreCase);
+    }
+    [Fact]
+    public void RfcAndPersonNamePredicatesDoNotApplyFunctionsToLegacyColumns()
+    {
+        var criteria = CreateCriteria(rfc: "RFC-123", personName: "Sample");
+        var predicates = LegacyContractReadRepository.CreatePredicates(criteria);
+
+        Assert.Contains("P.PNA_CL_RFC = @Rfc", predicates);
+        Assert.Contains("P.PNA_DS_NOMBRE LIKE @PersonNamePrefix", predicates);
+        Assert.DoesNotContain(predicates, predicate => predicate.Contains("CAST", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(predicates, predicate => predicate.Contains("CONVERT", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(predicates, predicate => predicate.Contains("UPPER", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(predicates, predicate => predicate.Contains("LOWER", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static object? GetMemberValue(Type type, object instance, string name)
+    {
+        var property = type.GetProperty(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        return property?.GetValue(instance)
+            ?? type.GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(instance);
+    }
+    private static (DbType? DbType, int? Size) GetParameterMetadata(DynamicParameters parameters, string name)
+    {
+        var field = typeof(DynamicParameters).GetField("parameters", BindingFlags.Instance | BindingFlags.NonPublic);
+        var values = (IDictionary)field!.GetValue(parameters)!;
+        var info = values[name]!;
+        var infoType = info.GetType();
+        var dbType = (DbType?)GetMemberValue(infoType, info, "DbType");
+        var size = (int?)GetMemberValue(infoType, info, "Size");
+        return (dbType, size);
+    }
+    private static ContractSearchCriteria CreateCriteria(string? vin = null, string? rfc = null, string? personName = null) => new(
+        null, null, rfc, personName, vin, null, null, null);
 }

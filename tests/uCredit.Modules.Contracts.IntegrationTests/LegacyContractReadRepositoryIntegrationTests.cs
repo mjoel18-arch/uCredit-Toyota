@@ -60,12 +60,12 @@ public sealed class LegacyContractReadRepositoryIntegrationTests
     public async Task SearchAsyncReturnsRequestedPage()
     {
         var result = await CreateRepository().SearchAsync(
-            CreateCriteria(personName: GetRequiredValue("UCREDIT_TEST_PERSON_NAME_PREFIX"), pageSize: 2),
+            CreateCriteria(personName: GetRequiredValue("UCREDIT_TEST_PERSON_NAME_PREFIX"), pageSize: 10),
             TestContext.Current.CancellationToken);
 
         Assert.Equal(1, result.Page);
-        Assert.Equal(2, result.PageSize);
-        Assert.InRange(result.Items.Count, 0, 2);
+        Assert.Equal(10, result.PageSize);
+        Assert.InRange(result.Items.Count, 0, 10);
         Assert.True(result.Total >= result.Items.Count);
     }
 

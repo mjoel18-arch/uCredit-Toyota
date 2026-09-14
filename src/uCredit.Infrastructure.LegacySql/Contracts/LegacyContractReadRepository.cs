@@ -6,13 +6,31 @@ using UCredit.Modules.Contracts.Contracts;
 
 namespace UCredit.Infrastructure.LegacySql.Contracts;
 
+internal sealed class LegacyContractSummaryRow
+{
+    public string? ContractNumber { get; set; }
+    public int? PersonId { get; set; }
+    public string? PersonName { get; set; }
+    public string? OperationTypeCode { get; set; }
+    public string? OperationTypeName { get; set; }
+    public int? AddressId { get; set; }
+    public decimal? FinancedAmount { get; set; }
+    public decimal? OutstandingBalance { get; set; }
+    public DateTime? DisbursementDate { get; set; }
+    public DateTime? FirstPaymentDate { get; set; }
+    public DateTime? LastPaymentDate { get; set; }
+    public int? StatusCode { get; set; }
+    public string? StatusName { get; set; }
+    public string? ModifiedBy { get; set; }
+    public DateTime? ModifiedAt { get; set; }
+}
 public sealed class LegacyContractReadRepository(
     IOptions<LegacySqlOptions> options) : IContractReadRepository
 {
     private static readonly Dictionary<ContractSort, string> SortExpressions =
         new Dictionary<ContractSort, string>
         {
-            [ContractSort.ContractNumberAsc] = "C.CTO_FL_CVE ASC, C.CTO_FL_CVE ASC",
+            [ContractSort.ContractNumberAsc] = "C.CTO_FL_CVE ASC",
             [ContractSort.ContractNumberDesc] = "C.CTO_FL_CVE DESC, C.CTO_FL_CVE ASC",
             [ContractSort.OutstandingBalanceAsc] = "C.CTO_NO_SALDO ASC, C.CTO_FL_CVE ASC",
             [ContractSort.OutstandingBalanceDesc] = "C.CTO_NO_SALDO DESC, C.CTO_FL_CVE ASC",
@@ -56,11 +74,7 @@ public sealed class LegacyContractReadRepository(
             """;
 
         var whereClause = $"WHERE {string.Join(" AND ", predicates)}";
-        var countSql = $"""
-            SELECT COUNT_BIG(1)
-            {fromClause}
-            {whereClause};
-            """;
+        var countSql = CreateCountSql(criteria);
         var pageSql = $"""
             WITH RankedContracts AS
             (
@@ -114,13 +128,13 @@ public sealed class LegacyContractReadRepository(
                 commandType: CommandType.Text,
                 cancellationToken: cancellationToken));
 
-        var items = (await connection.QueryAsync<ContractSummary>(
+        var items = (await connection.QueryAsync<LegacyContractSummaryRow>(
             new CommandDefinition(
                 pageSql,
                 parameters,
                 commandTimeout: _options.CommandTimeoutSeconds,
                 commandType: CommandType.Text,
-                cancellationToken: cancellationToken))).AsList();
+                cancellationToken: cancellationToken))).Select(MapRow).ToList();
 
         return new PagedResult<ContractSummary>(items, criteria.Page, criteria.PageSize, checked((int)total));
     }
@@ -169,9 +183,59 @@ public sealed class LegacyContractReadRepository(
             commandType: CommandType.Text,
             cancellationToken: cancellationToken);
 
-        return await connection.QuerySingleOrDefaultAsync<ContractSummary>(command);
+        var row = await connection.QuerySingleOrDefaultAsync<LegacyContractSummaryRow>(command);
+        return row is null ? null : MapRow(row);
     }
 
+    internal static string CreateCountSql(ContractSearchCriteria criteria)
+    {
+        var predicates = CreatePredicates(criteria);
+        var whereClause = $"WHERE {string.Join(" AND ", predicates)}";
+        const string countFromClause = """
+            FROM dbo.KCONTRATO AS C
+            INNER JOIN dbo.CPERSONA AS P
+                ON P.PNA_FL_PERSONA = C.PNA_FL_PERSONA
+            """;
+
+        return $"""
+            SELECT COUNT_BIG(1)
+            {countFromClause}
+            {whereClause};
+            """;
+    }
+    internal static ContractSummary MapRow(LegacyContractSummaryRow row)
+    {
+        return new ContractSummary(
+            Require(row.ContractNumber, nameof(row.ContractNumber)),
+            Require(row.PersonId, nameof(row.PersonId)),
+            Require(row.PersonName, nameof(row.PersonName)),
+            Require(row.OperationTypeCode, nameof(row.OperationTypeCode)),
+            Require(row.OperationTypeName, nameof(row.OperationTypeName)),
+            row.AddressId,
+            Require(row.FinancedAmount, nameof(row.FinancedAmount)),
+            Require(row.OutstandingBalance, nameof(row.OutstandingBalance)),
+            ToDateOnly(row.DisbursementDate),
+            ToDateOnly(row.FirstPaymentDate),
+            ToDateOnly(row.LastPaymentDate),
+            Require(row.StatusCode, nameof(row.StatusCode)),
+            Require(row.StatusName, nameof(row.StatusName)),
+            row.ModifiedBy,
+            ToDateTimeOffset(row.ModifiedAt));
+    }
+
+    private static DateOnly? ToDateOnly(DateTime? value) =>
+        value is null ? null : DateOnly.FromDateTime(value.Value);
+
+    // Legacy datetime has no offset; this adapter treats it as UTC at the boundary.
+    private static DateTimeOffset? ToDateTimeOffset(DateTime? value) =>
+        value is null ? null : new DateTimeOffset(DateTime.SpecifyKind(value.Value, DateTimeKind.Utc));
+
+    private static T Require<T>(T? value, string fieldName)
+        where T : struct =>
+        value ?? throw new InvalidOperationException($"Legacy contract row requires '{fieldName}'.");
+
+    private static string Require(string? value, string fieldName) =>
+        value ?? throw new InvalidOperationException($"Legacy contract row requires '{fieldName}'.");
     internal static DynamicParameters CreateParameters(ContractSearchCriteria criteria)
     {
         var parameters = new DynamicParameters();
@@ -187,11 +251,11 @@ public sealed class LegacyContractReadRepository(
 
         if (!string.IsNullOrWhiteSpace(criteria.Rfc))
         {
-            parameters.Add("Rfc", criteria.Rfc.Trim(), DbType.String, size: 13);
+            parameters.Add("Rfc", criteria.Rfc.Trim(), DbType.AnsiString, size: 13);
         }
         if (!string.IsNullOrWhiteSpace(criteria.PersonName))
         {
-            parameters.Add("PersonNamePrefix", criteria.PersonName.Trim() + "%", DbType.String, size: 200);
+            parameters.Add("PersonNamePrefix", criteria.PersonName.Trim() + "%", DbType.AnsiString, size: 200);
         }
 
         if (!string.IsNullOrWhiteSpace(criteria.Vin))
