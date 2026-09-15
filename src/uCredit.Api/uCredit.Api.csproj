@@ -5,5 +5,10 @@
     <ProjectReference Include="../uCredit.Modules.Branding/uCredit.Modules.Branding.csproj" />
     <ProjectReference Include="../uCredit.Modules.Contracts/uCredit.Modules.Contracts.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
 </Project>
-
