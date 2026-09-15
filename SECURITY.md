@@ -1,15 +1,37 @@
 # Seguridad e identidad
 
-## Microsoft Entra External ID
+## Autenticaci�n actual
 
-uCredit adopta un tenant externo central de Microsoft Entra External ID con autenticación browser-delegated. React será la SPA y ASP.NET Core .NET 10 será la API protegida; ambos se registrarán de forma independiente.
+La primera versi�n usa ASP.NET Core Identity con una base de seguridad independiente. La conexi�n se proporciona exclusivamente mediante `IdentitySql__ConnectionString`; nunca se reutiliza `LegacySql__ReadConnectionString` ni se aplica EF Core sobre la base Legacy.
 
-External ID autentica al usuario. La API valida la firma, issuer, audience y expiración del JWT mediante HTTPS metadata. Los tokens no se guardan ni se imprimen en logs.
+La sesi�n usa cookie:
 
-La API mantiene la política `contracts.read` y no acepta un header, query string o cookie como permiso. El app role `contracts.read` recibido en `roles` se transforma de forma aislada a `permission=contracts.read`; si el permiso ya existe, no se duplica.
+- HttpOnly;
+- Secure fuera del ambiente de pruebas;
+- SameSite=Lax;
+- expiraci�n controlada y renovaci�n deslizante;
+- sin tokens de acceso en localStorage ni tokens devueltos al navegador.
 
-Entra no decide qué base Legacy puede consultar un usuario. uCredit debe resolver y validar el cliente, membresías, permisos y branding. Nunca debe confiarse en un tenant enviado libremente por el navegador. uCredit no almacena contraseñas.
+No existe registro p�blico ni se crean usuarios autom�ticamente. No se ejecutan migraciones ni `EnsureCreated` al iniciar la aplicaci�n.
 
-La configuración se proporciona por `Authentication__Authority`, `Authentication__Audience` y `Authentication__ClientId` mediante secretos de usuario o configuración segura del ambiente. No se deben guardar valores reales en Git.
+## Protecci�n de solicitudes
 
-La integración está aislada para permitir otro proveedor OIDC futuro. Esta etapa no crea recursos en Azure, no implementa MSAL en React y no resuelve todavía el cliente.
+Login y logout requieren antiforgery mediante la cabecera `X-CSRF-TOKEN` y el token emitido por `GET /api/v1/auth/csrf`. La cookie antiforgery no contiene credenciales y no es HttpOnly para permitir que React env�e el token de solicitud en memoria.
+
+Login tiene rate limiting por direcci�n remota. Identity mantiene lockout despu�s de intentos fallidos. No se registran contrase�as, hashes, security stamps, cookies ni cadenas de conexi�n.
+
+## Autorizaci�n y tenants
+
+La API conserva la pol�tica `contracts.read` basada en `permission=contracts.read`. Los permisos no se agregan entre tenants. La resoluci�n de tenant mediante membres�a activa todav�a est� pendiente; no se conf�a en un tenant enviado libremente por el navegador ni se simula aislamiento de datos que a�n no existe.
+
+## Secretos y bases
+
+Est� prohibido guardar credenciales, tokens o cadenas de conexi�n reales en Git, `appsettings.json`, archivos `.env` versionados, fixtures, logs o documentaci�n. LegacySql conserva �nicamente acceso de lectura para el primer vertical.
+
+## Entra External ID
+
+Microsoft Entra External ID queda como alternativa OIDC postergada. Sus componentes de transformaci�n se conservan aislados como referencia hist�rica, pero no se registran como autenticaci�n productiva de esta versi�n.
+
+## Migraciones
+
+La primera migraci�n de Identity deber� ejecutarse mediante un procedimiento controlado sobre una base nueva y no productiva, con revisi�n del modelo, respaldo, aprobaci�n, evidencia de aplicaci�n y plan de reversa. Nunca se ejecutar� una migraci�n sobre la base Legacy.

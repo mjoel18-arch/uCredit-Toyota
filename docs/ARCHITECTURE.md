@@ -20,6 +20,7 @@ flowchart TB
 | Proyecto | Responsabilidad |
 |---|---|
 | `uCredit.Api` | Endpoints, autenticación, autorización y composición |
+| `uCredit.Infrastructure.Identity` | ASP.NET Core Identity, EF Core y modelo de seguridad independiente |
 | `uCredit.Modules.Contracts` | Casos de uso y contratos del módulo |
 | `uCredit.Infrastructure.LegacySql` | SQL parametrizado y mapeo Legacy |
 | `uCredit.Web` | Interfaz React/TypeScript |
@@ -62,7 +63,7 @@ Se agregan sólo cuando exista un caso de uso aprobado.
 
 ## Identidad
 
-OIDC/OAuth 2.0 con proveedor corporativo por definir. Los permisos de aplicación son semánticos y pueden mapear temporalmente controles Legacy.
+ASP.NET Core Identity con cookie segura y EF Core únicamente sobre una base nueva configurada mediante `IdentitySql__ConnectionString`. El modelo incluye usuarios, tenants, membresías y permisos; la resolución segura del tenant aún está pendiente y no se agregan permisos de todos los tenants a una misma identidad. Entra External ID queda como alternativa OIDC postergada, por lo que la composición conserva una frontera para retomarlo en el futuro.
 
 ## Observabilidad
 
