@@ -63,7 +63,7 @@ Se agregan sólo cuando exista un caso de uso aprobado.
 
 ## Identidad
 
-ASP.NET Core Identity con cookie segura y EF Core únicamente sobre una base nueva configurada mediante `IdentitySql__ConnectionString`. El modelo incluye usuarios, tenants, membresías y permisos; la resolución segura del tenant aún está pendiente y no se agregan permisos de todos los tenants a una misma identidad. Entra External ID queda como alternativa OIDC postergada, por lo que la composición conserva una frontera para retomarlo en el futuro.
+ASP.NET Core Identity con cookie segura y EF Core únicamente sobre una base nueva configurada mediante `IdentitySql__ConnectionString`. El usuario selecciona un tenant contra sus membresías activas y la cookie firmada contiene sólo los permisos de esa membresía. `X-Tenant-Code` no es autoridad. La selección aún no filtra contratos ni selecciona conexiones Legacy. Entra External ID queda como alternativa OIDC postergada.
 
 ## Observabilidad
 

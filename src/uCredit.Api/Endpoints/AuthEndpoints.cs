@@ -4,7 +4,10 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using UCredit.Api.Security;
 using UCredit.Infrastructure.Identity.Models;
+using UCredit.Infrastructure.Identity.Tenants;
+
 namespace UCredit.Api.Endpoints;
+
 public static class AuthEndpoints
 {
     public static IEndpointRouteBuilder MapAuthEndpoints(this IEndpointRouteBuilder endpoints)
@@ -24,9 +27,14 @@ public static class AuthEndpoints
             .RequireAuthorization()
             .AddEndpointFilter<AntiforgeryEndpointFilter>()
             .WithMetadata(new RequestSizeLimitAttribute(2 * 1024));
-        group.MapGet("/me", Me)
+        group.MapGet("/me", MeAsync)
             .RequireAuthorization()
             .WithMetadata(new RequestSizeLimitAttribute(2 * 1024));
+        group.MapPost("/select-tenant", SelectTenantAsync)
+            .RequireAuthorization()
+            .AddEndpointFilter<AntiforgeryEndpointFilter>()
+            .RequireRateLimiting("tenant-select")
+            .WithMetadata(new RequestSizeLimitAttribute(4 * 1024));
         return endpoints;
     }
 
@@ -65,11 +73,98 @@ public static class AuthEndpoints
         return Results.NoContent();
     }
 
-    private static IResult Me(ClaimsPrincipal principal) =>
-        Results.Ok(new
+    private static async Task<IResult> MeAsync(
+        ClaimsPrincipal principal,
+        [FromServices] ITenantMembershipStore membershipStore,
+        CancellationToken cancellationToken)
+    {
+        if (!Guid.TryParse(principal.FindFirstValue(ClaimTypes.NameIdentifier), out var userId))
         {
-            userName = principal.Identity?.Name,
-            permissions = principal.FindAll("permission").Select(c => c.Value).Distinct().Order().ToArray()
+            return Results.Unauthorized();
+        }
+
+        var user = await membershipStore.GetActiveUserAsync(userId, cancellationToken);
+        if (user is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        var memberships = await membershipStore.GetActiveMembershipsAsync(userId, cancellationToken);
+        return Results.Ok(new
+        {
+            userName = user.UserName ?? user.Email ?? principal.Identity?.Name,
+            tenant = ReadSelectedTenant(principal),
+            permissions = ReadPermissionCodes(principal),
+            memberships = memberships.Select(membership => new
+            {
+                tenantId = membership.TenantId,
+                tenantCode = membership.TenantCode,
+                tenantName = membership.TenantName,
+                permissions = membership.PermissionCodes
+            })
         });
+    }
+
+    private static async Task<IResult> SelectTenantAsync(
+        ClaimsPrincipal principal,
+        SelectTenantRequest request,
+        [FromServices] ITenantMembershipStore membershipStore,
+        [FromServices] ITenantCookieIssuer cookieIssuer,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.TenantCode) || request.TenantCode.Length > 64)
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["tenantCode"] = ["Tenant code is required and must not exceed 64 characters."]
+            });
+        }
+
+        if (!Guid.TryParse(principal.FindFirstValue(ClaimTypes.NameIdentifier), out var userId))
+        {
+            return Results.Unauthorized();
+        }
+
+        var user = await membershipStore.GetActiveUserAsync(userId, cancellationToken);
+        if (user is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        var membership = await membershipStore.FindActiveMembershipAsync(
+            userId,
+            request.TenantCode,
+            cancellationToken);
+        if (membership is null || !await cookieIssuer.IssueAsync(principal, membership, cancellationToken))
+        {
+            // Use one response for unknown, inactive, and foreign tenants to avoid tenant enumeration.
+            return Results.Forbid();
+        }
+
+        return Results.Ok(new
+        {
+            tenantId = membership.TenantId,
+            tenantCode = membership.TenantCode,
+            permissions = membership.PermissionCodes
+        });
+    }
+
+    private static object? ReadSelectedTenant(ClaimsPrincipal principal)
+    {
+        var tenantId = principal.FindFirstValue(TenantClaimTypes.Id);
+        var tenantCode = principal.FindFirstValue(TenantClaimTypes.Code);
+        return tenantId is null && tenantCode is null
+            ? null
+            : new { tenantId, tenantCode };
+    }
+
+    private static string[] ReadPermissionCodes(ClaimsPrincipal principal) =>
+        principal.FindAll("permission")
+            .Select(claim => claim.Value)
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
 }
+
 public sealed record LoginRequest(string UserName, string Password);
+public sealed record SelectTenantRequest(string TenantCode);

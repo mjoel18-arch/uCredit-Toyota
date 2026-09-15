@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using UCredit.Infrastructure.Identity.Models;
+using UCredit.Infrastructure.Identity.Tenants;
 namespace UCredit.Infrastructure.Identity;
 public static class DependencyInjection
 {
@@ -18,6 +19,9 @@ public static class DependencyInjection
             throw new InvalidOperationException("IdentitySql__ConnectionString must be configured.");
 
         services.AddDbContext<IdentityDbContext>(options => options.UseSqlServer(connectionString));
+        services.AddScoped<ITenantMembershipStore, EfTenantMembershipStore>();
+        services.AddScoped<ITenantCookieIssuer, IdentityTenantCookieIssuer>();
+        services.AddScoped<IdentityCookieEvents>();
         services.AddIdentityCore<ApplicationUser>(options =>
         {
             options.User.RequireUniqueEmail = true;
@@ -45,8 +49,10 @@ public static class DependencyInjection
                 options.Cookie.SameSite = SameSiteMode.Lax;
                 options.ExpireTimeSpan = TimeSpan.FromHours(8);
                 options.SlidingExpiration = true;
+                // ValidatePrincipal runs on every authenticated cookie request; do not rely only on SecurityStamp.
                 options.LoginPath = "/api/v1/auth/login";
                 options.AccessDeniedPath = "/api/v1/auth/forbidden";
+                options.EventsType = typeof(IdentityCookieEvents);
                 options.Events.OnRedirectToLogin = context =>
                 {
                     context.Response.StatusCode = StatusCodes.Status401Unauthorized;
