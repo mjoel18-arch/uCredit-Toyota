@@ -51,3 +51,31 @@ Los endpoints de contratos exigen `contracts.read`. La primera versión usa ASP.
 - La autenticación OIDC está postergada, pero la arquitectura conserva un punto de sustitución futuro.
 - No ejecutar `EnsureCreated` ni `Migrate` al iniciar; la primera migración de Identity requerirá revisión y ejecución controlada contra una base nueva.
 - No ejecutar contra producción.
+
+## Aprovisionamiento inicial de Identity
+
+`tools/uCredit.IdentityAdmin` es una herramienta controlada para una base nueva de desarrollo. No ejecuta migraciones: exige que `InitialIdentity` ya esté aplicada y rechaza cualquier base cuyo nombre no termine en `_Dev`.
+
+Antes de ejecutarla posteriormente, deben estar configurados `DOTNET_ENVIRONMENT=Development` e `IdentitySql__ConnectionString` mediante el entorno seguro. Los siguientes valores pueden proporcionarse por variables de entorno o User Secrets, nunca en Git:
+
+- `UCREDIT_BOOTSTRAP_TENANT_CODE`
+- `UCREDIT_BOOTSTRAP_TENANT_NAME`
+- `UCREDIT_BOOTSTRAP_ADMIN_EMAIL`
+- `UCREDIT_BOOTSTRAP_ADMIN_PASSWORD`
+
+Ejemplo de configuración local con User Secrets, usando valores locales no versionados:
+
+```bash
+dotnet user-secrets --project tools/uCredit.IdentityAdmin set "UCREDIT_BOOTSTRAP_TENANT_CODE" "<valor-local>"
+dotnet user-secrets --project tools/uCredit.IdentityAdmin set "UCREDIT_BOOTSTRAP_TENANT_NAME" "<valor-local>"
+dotnet user-secrets --project tools/uCredit.IdentityAdmin set "UCREDIT_BOOTSTRAP_ADMIN_EMAIL" "<valor-local>"
+dotnet user-secrets --project tools/uCredit.IdentityAdmin set "UCREDIT_BOOTSTRAP_ADMIN_PASSWORD" "<valor-local>"
+```
+
+La ejecución posterior debe ser explícita:
+
+```bash
+dotnet run --project tools/uCredit.IdentityAdmin -- --apply
+```
+
+La herramienta es idempotente: reutiliza tenant, permiso, usuario, membresía y asignación existentes. Nunca cambia silenciosamente la contraseña de un usuario existente y no imprime contraseñas, hashes, stamps, tokens ni cadenas de conexión.

@@ -43,3 +43,17 @@ Las pruebas rápidas usan `Microsoft.EntityFrameworkCore.InMemory` para verifica
 ## Revalidación de cookie
 
 Cada solicitud autenticada con cookie consulta Identity para verificar usuario, tenant, membresía y permisos actuales. Esto agrega una consulta y costo de latencia por solicitud protegida, priorizando seguridad durante esta fase. Más adelante podrá agregarse caché de corta duración con invalidación explícita ante cambios de identidad, membresías o permisos.
+## Aprovisionamiento inicial controlado
+
+El proyecto `tools/uCredit.IdentityAdmin` permite aprovisionar únicamente la base independiente de Identity en desarrollo. Exige `DOTNET_ENVIRONMENT=Development`, el argumento explícito `--apply`, `IdentitySql__ConnectionString` y un nombre de base terminado en `_Dev`. Rechaza producción, conexiones sin base, tenant o correo inválidos y contraseñas ausentes.
+
+La herramienta verifica que la migración `InitialIdentity` ya esté registrada y falla si la base no está preparada. No ejecuta `Migrate`, `EnsureCreated`, `database update` ni crea bases automáticamente. Usa `UserManager<ApplicationUser>` para crear el usuario y una transacción sobre Identity cuando la operación se ejecuta.
+
+La configuración de desarrollo se recibe por variables de entorno o User Secrets mediante:
+
+- `UCREDIT_BOOTSTRAP_TENANT_CODE`;
+- `UCREDIT_BOOTSTRAP_TENANT_NAME`;
+- `UCREDIT_BOOTSTRAP_ADMIN_EMAIL`;
+- `UCREDIT_BOOTSTRAP_ADMIN_PASSWORD`.
+
+La operación es idempotente y no cambia la contraseña de un usuario existente. La salida sólo muestra identificadores de objetos y si fueron creados o ya existían; nunca muestra contraseñas, hashes, security stamps, tokens o cadenas de conexión. No se deben agregar valores reales a Git ni ejecutar la herramienta contra Legacy.
