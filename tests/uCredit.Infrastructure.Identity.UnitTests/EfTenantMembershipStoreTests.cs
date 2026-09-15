@@ -97,6 +97,8 @@ public sealed class EfTenantMembershipStoreTests
         Assert.Equal(["UserId", "TenantId", "PermissionId"], membershipPermission.FindPrimaryKey()!.Properties.Select(property => property.Name));
         Assert.Equal(2, membership.GetForeignKeys().Count());
         Assert.Equal(2, membershipPermission.GetForeignKeys().Count());
+        Assert.All(membership.GetForeignKeys(), foreignKey => Assert.Equal(DeleteBehavior.Restrict, foreignKey.DeleteBehavior));
+        Assert.All(membershipPermission.GetForeignKeys(), foreignKey => Assert.Equal(DeleteBehavior.Restrict, foreignKey.DeleteBehavior));
     }
     private static async Task<IdentityDbContext> CreateContextAsync(CancellationToken cancellationToken)
     {

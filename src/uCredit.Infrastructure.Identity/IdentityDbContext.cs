@@ -14,6 +14,10 @@ public sealed class IdentityDbContext(DbContextOptions<IdentityDbContext> option
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
+        builder.Entity<ApplicationUser>(e =>
+        {
+            e.Property(x => x.DisplayName).HasMaxLength(200).IsRequired();
+        });
         builder.Entity<Tenant>(e =>
         {
             e.HasKey(x => x.Id);
@@ -24,8 +28,12 @@ public sealed class IdentityDbContext(DbContextOptions<IdentityDbContext> option
         builder.Entity<UserTenantMembership>(e =>
         {
             e.HasKey(x => new { x.UserId, x.TenantId });
-            e.HasOne(x => x.User).WithMany(x => x.Memberships).HasForeignKey(x => x.UserId);
-            e.HasOne(x => x.Tenant).WithMany(x => x.Memberships).HasForeignKey(x => x.TenantId);
+            e.HasOne(x => x.User).WithMany(x => x.Memberships)
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.Tenant).WithMany(x => x.Memberships)
+                .HasForeignKey(x => x.TenantId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
         builder.Entity<Permission>(e =>
         {
@@ -38,8 +46,11 @@ public sealed class IdentityDbContext(DbContextOptions<IdentityDbContext> option
         {
             e.HasKey(x => new { x.UserId, x.TenantId, x.PermissionId });
             e.HasOne(x => x.Membership).WithMany(x => x.Permissions)
-                .HasForeignKey(x => new { x.UserId, x.TenantId });
-            e.HasOne(x => x.Permission).WithMany(x => x.Memberships).HasForeignKey(x => x.PermissionId);
+                .HasForeignKey(x => new { x.UserId, x.TenantId })
+                .OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.Permission).WithMany(x => x.Memberships)
+                .HasForeignKey(x => x.PermissionId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

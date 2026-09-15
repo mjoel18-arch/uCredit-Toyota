@@ -13,3 +13,7 @@
 !.env.example
 appsettings.Development.local.json
 
+.artifacts-migration-review/
+.artifacts-migration/
+.artifacts-initial-identity-final/
+
