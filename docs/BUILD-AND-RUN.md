@@ -91,7 +91,7 @@ El flujo real de autenticación local puede verificarse con:
 pwsh -NoProfile -File .\scripts\Test-LocalIdentity.ps1
 ```
 
-El script solicita interactivamente la URL de la API, el correo y la contraseña mediante `Read-Host -AsSecureString`. Mantiene cookies únicamente en una `WebRequestSession` en memoria y no imprime cookies, tokens CSRF ni contraseñas.
+El script solicita interactivamente la URL de la API, el correo y la contraseña mediante `Read-Host -AsSecureString`. Mantiene cookies únicamente en una `WebRequestSession` en memoria y no imprime cookies, tokens CSRF ni contraseñas. Puede recibir opcionalmente `UCREDIT_TEST_CONTRACT`; si no está configurada, solicita el contrato y usa `454890CD` como valor sugerido. Después de seleccionar tenant verifica el detalle y la búsqueda exacta sin imprimir datos personales ni financieros.
 
 Antes de ejecutarlo posteriormente, la API debe estar disponible y el usuario de desarrollo debe tener una membresía activa en `ubimia-dev` con `contracts.read`. El script no consulta contratos ni SQL Server directamente. Falla ante cualquier estado HTTP inesperado y confirma que `/api/v1/auth/me` devuelve 401 después del logout.
 

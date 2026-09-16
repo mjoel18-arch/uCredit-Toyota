@@ -173,6 +173,52 @@ try {
     Write-Host 'OK GET /api/v1/auth/me after tenant selection (200)'
 
     $csrf = Get-CsrfToken
+    $contractNumber = [Environment]::GetEnvironmentVariable('UCREDIT_TEST_CONTRACT')
+    if ([string]::IsNullOrWhiteSpace($contractNumber)) {
+        $contractNumber = Read-Host 'Numero de contrato [454890CD]'
+        if ([string]::IsNullOrWhiteSpace($contractNumber)) {
+            $contractNumber = '454890CD'
+        }
+    }
+    $contractNumber = $contractNumber.Trim()
+    if ([string]::IsNullOrWhiteSpace($contractNumber) -or $contractNumber.Length > 15) {
+        throw 'The contract number is required and must not exceed 15 characters.'
+    }
+
+    $encodedContractNumber = [Uri]::EscapeDataString($contractNumber)
+    $contractDetail = Invoke-ApiRequest `
+        -Method 'GET' `
+        -Path "/api/v1/contracts/$encodedContractNumber"
+    if ($null -eq $contractDetail -or
+        [string]$contractDetail.contractNumber -cne $contractNumber) {
+        throw 'The contract detail did not return the requested contract number exactly.'
+    }
+    Write-Host 'OK GET /api/v1/contracts/{contractNumber} (200; exact contract confirmed)'
+
+    $contractSearch = Invoke-ApiRequest `
+        -Method 'GET' `
+        -Path "/api/v1/contracts?contractNumber=$encodedContractNumber&page=1&pageSize=10"
+    if ($null -eq $contractSearch -or $null -eq $contractSearch.items) {
+        throw 'The contract search response did not contain results.'
+    }
+
+    $contractItems = @($contractSearch.items)
+    if ($contractItems.Count -lt 1) {
+        throw 'The exact contract search returned no results.'
+    }
+
+    $seenContractNumbers = New-Object 'System.Collections.Generic.HashSet[string]'
+    foreach ($contractItem in $contractItems) {
+        $returnedContractNumber = [string]$contractItem.contractNumber
+        if ($returnedContractNumber -cne $contractNumber) {
+            throw 'The exact contract search returned a different contract number.'
+        }
+        if (-not $seenContractNumbers.Add($returnedContractNumber)) {
+            throw 'The exact contract search returned duplicate contract numbers.'
+        }
+    }
+    Write-Host 'OK GET /api/v1/contracts?contractNumber=... (200; exact results confirmed)'
+
     Write-Host 'OK GET /api/v1/auth/csrf before logout (200)'
 
     Invoke-ApiRequest `
@@ -203,4 +249,6 @@ finally {
     }
     $plainPassword = $null
     $loginBody = $null
+    $contractNumber = $null
+    $encodedContractNumber = $null
 }
