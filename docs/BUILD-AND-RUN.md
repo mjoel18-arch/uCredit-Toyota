@@ -98,3 +98,51 @@ Antes de ejecutarlo posteriormente, la API debe estar disponible y el usuario de
 ## Aislamiento Legacy por instalación
 
 Cada sitio requiere la variable segura `Deployment__TenantCode`, exactamente igual al código del tenant permitido. No se debe configurar una conexión Legacy por tenant ni enviar CompanyId desde el navegador. La única conexión Legacy continúa siendo `LegacySql__ReadConnectionString`; el alcance de empresas se administra en Identity.
+## Desarrollo local del frontend con HTTPS
+
+Vite exige un certificado local explícito para que las cookies Secure de Identity funcionen durante el desarrollo. La API debe ejecutarse con su perfil HTTPS y el frontend se sirve también por HTTPS; no se habilita HTTP como alternativa.
+
+Con mkcert instalado, PowerShell puede preparar certificados locales fuera del repositorio:
+
+    $certDir = Join-Path $env:LOCALAPPDATA 'uCredit\certs'
+    New-Item -ItemType Directory -Force -Path $certDir | Out-Null
+    mkcert -install
+    mkcert -cert-file (Join-Path $certDir 'localhost.pem') -key-file (Join-Path $certDir 'localhost-key.pem') localhost 127.0.0.1 ::1
+    $env:VITE_DEV_HTTPS_CERT = Join-Path $certDir 'localhost.pem'
+    $env:VITE_DEV_HTTPS_KEY = Join-Path $certDir 'localhost-key.pem'
+
+En otra terminal, inicia la API y después Vite:
+
+    dotnet run --project src/uCredit.Api --launch-profile https
+    cd src/uCredit.Web
+    npm install
+    npm run dev -- --host localhost
+
+Abre https://localhost:5173. El proxy de Vite reenvía /api y /health a https://localhost:7042; VITE_API_BASE_URL queda vacío por defecto para mantener las solicitudes same-origin. Si se configura un API base externo, el backend debe permitir únicamente ese origen HTTPS concreto mediante CORS explícito; nunca se deben usar wildcard ni credenciales con *.
+
+El cliente React usa credentials: include en todas las solicitudes, solicita un token antiforgery nuevo para cada mutación y mantiene el token sólo durante la llamada. No usa localStorage ni sessionStorage para contraseñas, cookies, tokens o respuestas de autenticación. Una respuesta 401 devuelve al login; una 403 muestra acceso no autorizado sin redirecciones.
+
+Pruebas y build del frontend:
+
+    cd src/uCredit.Web
+    npm run lint
+    npm run test
+    npm run build
+
+La variable opcional VITE_API_BASE_URL no contiene secretos. No se debe colocar una contraseña, token, cookie o cadena de conexión en variables VITE_*, porque Vite las expone al navegador.
+## Diagnóstico y smoke test del HTTPS efectivo de Vite
+
+El script scripts/Test-ViteHttps.ps1 inicia temporalmente npm run dev con --config vite.config.ts, espera la línea Local: y falla si el protocolo anunciado es HTTP, si Vite termina antes de iniciar o si falta el certificado. Usa una caché temporal fuera del repositorio y limpia el proceso y sus archivos al terminar.
+
+Con las variables de entorno de certificados ya configuradas, el comando exacto en Windows PowerShell es:
+
+    .\scripts\Test-ViteHttps.ps1
+
+El resultado esperado es:
+
+    Local: https://localhost:5173/
+    Vite HTTPS smoke test passed: https://localhost:5173/
+
+vite.config.ts recibe command=serve durante npm run dev y command=build durante npm run build. Como el repositorio conserva un vite.config.js generado que puede ser elegido por Vite al usar el comando sin --config, los scripts dev y build fijan explícitamente --config vite.config.ts. No se imprime ninguna ruta de certificado ni contenido de la llave privada.
+
+loadEnv(mode, process.cwd(), '') carga las variables VITE_DEV_HTTPS_CERT y VITE_DEV_HTTPS_KEY para la configuración. Durante serve, la ausencia de cualquiera de las variables, un archivo inexistente, un PEM inválido o un par certificado/llave que no coincida detiene Vite antes de abrir el puerto. server.strictPort también impide cambiar silenciosamente de 5173.
