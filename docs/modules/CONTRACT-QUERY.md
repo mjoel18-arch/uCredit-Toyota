@@ -97,3 +97,7 @@ Metadatos de referencia: SQL Server 2022 (16.0.1135.2), base `pr_t`, collation `
 El catálogo 33 se une por código (`PAR_CL_VALOR`) y no por descripción; por ello los códigos de estatus 7 y 10 permanecen separados aunque ambos describan `PERDIDA`. El ordenamiento se selecciona de una lista fija y todos los valores llegan como parámetros Dapper tipados.
 
 Nombre se busca por prefijo (`LIKE @PersonNamePrefix`); VIN y solicitud se buscan por coincidencia exacta. Los códigos Legacy (`CAR_FL_CVE` para VIN y `CPC_NO_CATALOGO`/`CPC_FL_CVE` para solicitud) siguen pendientes de confirmación; ambos filtros deben permanecer desactivados en ambientes compartidos hasta confirmarlos.
+
+## Alcance por instalación
+
+El alcance de empresas dejó de ser un pendiente de consulta: el servidor obtiene los CompanyId activos desde Identity y filtra `KCONTRATO.EMP_FL_CVE` en búsqueda y detalle mediante `@AllowedCompanyIds`. Si no existe alcance, la operación falla cerrada antes de abrir Legacy.

@@ -5,6 +5,9 @@ using System.Collections;
 using System.Data;
 using System.Reflection;
 using Dapper;
+using Microsoft.Extensions.Options;
+using UCredit.Application.Execution;
+using UCredit.Infrastructure.LegacySql;
 
 namespace UCredit.Modules.Contracts.UnitTests;
 
@@ -14,8 +17,8 @@ public sealed class ContractSearchSqlTests
     public void VinUsesExactMatchWithConfirmedCharacteristic()
     {
         var criteria = CreateCriteria(vin: "  VIN-123  ");
-        var parameters = LegacyContractReadRepository.CreateParameters(criteria);
-        var vinPredicate = LegacyContractReadRepository.CreatePredicates(criteria).Single(predicate => predicate.Contains("KPRODUCTO_FACTURA", StringComparison.Ordinal));
+        var parameters = LegacyContractReadRepository.CreateParameters(criteria, [101, 202]);
+        var vinPredicate = LegacyContractReadRepository.CreatePredicates(criteria, [101, 202]).Single(predicate => predicate.Contains("KPRODUCTO_FACTURA", StringComparison.Ordinal));
 
         Assert.Equal("VIN-123", parameters.Get<string>("Vin"));
         Assert.Contains("KCF.CFP_DS_CARACT = @Vin", vinPredicate);
@@ -28,7 +31,7 @@ public sealed class ContractSearchSqlTests
     [Fact]
     public void VinUsesExistsToAvoidDuplicateContracts()
     {
-        var vinPredicate = LegacyContractReadRepository.CreatePredicates(CreateCriteria(vin: "VIN-123"))
+        var vinPredicate = LegacyContractReadRepository.CreatePredicates(CreateCriteria(vin: "VIN-123"), [101, 202])
             .Single(predicate => predicate.Contains("KPRODUCTO_FACTURA", StringComparison.Ordinal));
 
         Assert.StartsWith("EXISTS", vinPredicate, StringComparison.Ordinal);
@@ -38,8 +41,8 @@ public sealed class ContractSearchSqlTests
     [Fact]
     public void VinParameterIsTrimmedAndNotConcatenatedIntoSql()
     {
-        var parameters = LegacyContractReadRepository.CreateParameters(CreateCriteria(vin: "  VIN-123  "));
-        var vinPredicate = LegacyContractReadRepository.CreatePredicates(CreateCriteria(vin: "VIN-123"))
+        var parameters = LegacyContractReadRepository.CreateParameters(CreateCriteria(vin: "  VIN-123  "), [101, 202]);
+        var vinPredicate = LegacyContractReadRepository.CreatePredicates(CreateCriteria(vin: "VIN-123"), [101, 202])
             .Single(predicate => predicate.Contains("KPRODUCTO_FACTURA", StringComparison.Ordinal));
 
         Assert.Equal("VIN-123", parameters.Get<string>("Vin"));
@@ -51,8 +54,8 @@ public sealed class ContractSearchSqlTests
     {
         var criteria = CreateCriteria(vin: "   ");
 
-        Assert.DoesNotContain("Vin", LegacyContractReadRepository.CreateParameters(criteria).ParameterNames);
-        Assert.DoesNotContain(LegacyContractReadRepository.CreatePredicates(criteria), predicate => predicate.Contains("KPRODUCTO_FACTURA", StringComparison.Ordinal));
+        Assert.DoesNotContain("Vin", LegacyContractReadRepository.CreateParameters(criteria, [101, 202]).ParameterNames);
+        Assert.DoesNotContain(LegacyContractReadRepository.CreatePredicates(criteria, [101, 202]), predicate => predicate.Contains("KPRODUCTO_FACTURA", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -60,8 +63,8 @@ public sealed class ContractSearchSqlTests
     {
         const string maliciousValue = "VIN' OR 1=1 --";
         var criteria = CreateCriteria(vin: maliciousValue);
-        var parameters = LegacyContractReadRepository.CreateParameters(criteria);
-        var sql = string.Join(" ", LegacyContractReadRepository.CreatePredicates(criteria));
+        var parameters = LegacyContractReadRepository.CreateParameters(criteria, [101, 202]);
+        var sql = string.Join(" ", LegacyContractReadRepository.CreatePredicates(criteria, [101, 202]));
 
         Assert.DoesNotContain(maliciousValue, sql);
         Assert.Equal(maliciousValue, parameters.Get<string>("Vin"));
@@ -128,7 +131,7 @@ public sealed class ContractSearchSqlTests
     [Fact]
     public void RfcUsesAnsiStringAndLengthMatchingLegacyColumn()
     {
-        var parameters = LegacyContractReadRepository.CreateParameters(CreateCriteria(rfc: "RFC-123"));
+        var parameters = LegacyContractReadRepository.CreateParameters(CreateCriteria(rfc: "RFC-123"), [101, 202]);
 
         var metadata = GetParameterMetadata(parameters, "Rfc");
 
@@ -139,7 +142,7 @@ public sealed class ContractSearchSqlTests
     [Fact]
     public void PersonNamePrefixUsesAnsiStringAndLengthMatchingLegacyColumn()
     {
-        var parameters = LegacyContractReadRepository.CreateParameters(CreateCriteria(personName: "Sample"));
+        var parameters = LegacyContractReadRepository.CreateParameters(CreateCriteria(personName: "Sample"), [101, 202]);
 
         var metadata = GetParameterMetadata(parameters, "PersonNamePrefix");
 
@@ -150,7 +153,7 @@ public sealed class ContractSearchSqlTests
     [Fact]
     public void CountSqlUsesOnlyContractAndPersonTablesAndParameterizedPredicates()
     {
-        var sql = LegacyContractReadRepository.CreateCountSql(CreateCriteria(rfc: "RFC-123", personName: "Sample"));
+        var sql = LegacyContractReadRepository.CreateCountSql(CreateCriteria(rfc: "RFC-123", personName: "Sample"), [101, 202]);
 
         Assert.Contains("SELECT COUNT_BIG(1)", sql);
         Assert.Contains("FROM dbo.KCONTRATO AS C", sql);
@@ -167,7 +170,7 @@ public sealed class ContractSearchSqlTests
     public void RfcAndPersonNamePredicatesDoNotApplyFunctionsToLegacyColumns()
     {
         var criteria = CreateCriteria(rfc: "RFC-123", personName: "Sample");
-        var predicates = LegacyContractReadRepository.CreatePredicates(criteria);
+        var predicates = LegacyContractReadRepository.CreatePredicates(criteria, [101, 202]);
 
         Assert.Contains("P.PNA_CL_RFC = @Rfc", predicates);
         Assert.Contains("P.PNA_DS_NOMBRE LIKE @PersonNamePrefix", predicates);
@@ -177,6 +180,44 @@ public sealed class ContractSearchSqlTests
         Assert.DoesNotContain(predicates, predicate => predicate.Contains("LOWER", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Fact]
+    public void GetByNumberSqlUsesTheSameParameterizedCompanyScope()
+    {
+        var sql = LegacyContractReadRepository.CreateGetByNumberSql();
+
+        Assert.Contains("C.EMP_FL_CVE IN @AllowedCompanyIds", sql);
+        Assert.Contains("C.CTO_FL_CVE = @ContractNumber", sql);
+        Assert.DoesNotContain("101", sql);
+        Assert.DoesNotContain("202", sql);
+    }
+    [Fact]
+    public void CompanyScopeIsParameterizedAndAppliedToSearchAndCountSql()
+    {
+        var companyIds = new[] { 101, 202 };
+        var criteria = CreateCriteria(contractNumber: "CONTRACT-1");
+        var parameters = LegacyContractReadRepository.CreateParameters(criteria, companyIds);
+        var predicates = LegacyContractReadRepository.CreatePredicates(criteria, companyIds);
+        var countSql = LegacyContractReadRepository.CreateCountSql(criteria, companyIds);
+
+        Assert.Contains("C.EMP_FL_CVE IN @AllowedCompanyIds", predicates);
+        Assert.Contains("C.EMP_FL_CVE IN @AllowedCompanyIds", countSql);
+        Assert.DoesNotContain("101", string.Join(" ", predicates));
+        Assert.DoesNotContain("202", string.Join(" ", predicates));
+        Assert.Equal(companyIds, parameters.Get<int[]>("AllowedCompanyIds"));
+    }
+
+    [Fact]
+    public async Task MissingExecutionScopeFailsClosedBeforeOpeningLegacyConnection()
+    {
+        var repository = new LegacyContractReadRepository(
+            Options.Create(new LegacySqlOptions { ReadConnectionString = "Server=unreachable;Database=NeverOpen;" }),
+            new FixedExecutionTenantContext(null));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            repository.SearchAsync(CreateCriteria(contractNumber: "CONTRACT-1"), TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            repository.GetByNumberAsync("CONTRACT-1", TestContext.Current.CancellationToken));
+    }
     private static object? GetMemberValue(Type type, object instance, string name)
     {
         var property = type.GetProperty(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
@@ -193,6 +234,15 @@ public sealed class ContractSearchSqlTests
         var size = (int?)GetMemberValue(infoType, info, "Size");
         return (dbType, size);
     }
-    private static ContractSearchCriteria CreateCriteria(string? vin = null, string? rfc = null, string? personName = null) => new(
-        null, null, rfc, personName, vin, null, null);
+    private static ContractSearchCriteria CreateCriteria(string? contractNumber = null, string? vin = null, string? rfc = null, string? personName = null) => new(
+        contractNumber, null, rfc, personName, vin, null, null);
+
+    private sealed class FixedExecutionTenantContext(ExecutionTenant? executionTenant) : IExecutionTenantContext
+    {
+        public Task<ExecutionTenant?> GetAsync(CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(executionTenant);
+        }
+    }
 }

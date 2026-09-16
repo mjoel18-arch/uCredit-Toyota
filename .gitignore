@@ -13,3 +13,11 @@
 !.env.example
 appsettings.Development.local.json
 
+.artifacts-migration-review/
+.artifacts-migration/
+.artifacts-initial-identity-final/
+# TypeScript/Vite transpilation artifacts for the React config
+/src/uCredit.Web/vite.config.js
+/src/uCredit.Web/vite.config.d.ts
+/src/uCredit.Web/vite.config.js.map
+/src/uCredit.Web/vite.config.d.ts.map

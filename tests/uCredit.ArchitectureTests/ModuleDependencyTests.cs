@@ -1,3 +1,5 @@
+using UCredit.Application.Execution;
+using UCredit.Infrastructure.Identity;
 using UCredit.Infrastructure.LegacySql.Contracts;
 using UCredit.Modules.Contracts.Contracts;
 using UCredit.Modules.Branding;
@@ -59,5 +61,31 @@ public sealed class ModuleDependencyTests
     public void LegacySqlCanImplementContractsInterfaces()
     {
         Assert.True(typeof(IContractReadRepository).IsAssignableFrom(typeof(LegacyContractReadRepository)));
+    }
+
+    [Fact]
+    public void IdentityInfrastructureDoesNotReferenceLegacySql()
+    {
+        var references = typeof(IdentityDbContext).Assembly.GetReferencedAssemblies();
+
+        Assert.DoesNotContain("uCredit.Infrastructure.LegacySql", references.Select(reference => reference.Name));
+    }
+
+    [Fact]
+    public void LegacySqlDoesNotReferenceIdentityInfrastructure()
+    {
+        var references = typeof(LegacyContractReadRepository).Assembly.GetReferencedAssemblies();
+
+        Assert.DoesNotContain("uCredit.Infrastructure.Identity", references.Select(reference => reference.Name));
+    }
+
+    [Fact]
+    public void ExecutionContextAbstractionDoesNotReferenceInfrastructure()
+    {
+        var references = typeof(IExecutionTenantContext).Assembly.GetReferencedAssemblies();
+
+        Assert.DoesNotContain(
+            references,
+            reference => reference.Name is "uCredit.Infrastructure.Identity" or "uCredit.Infrastructure.LegacySql");
     }
 }

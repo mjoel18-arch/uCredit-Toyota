@@ -1,3 +1,4 @@
+using UCredit.Infrastructure.Identity.Tenants;
 using UCredit.Modules.Branding;
 
 namespace UCredit.Api.Endpoints;
@@ -11,8 +12,8 @@ public static class BrandingEndpoints
             IBrandThemeProvider provider,
             CancellationToken cancellationToken) =>
         {
-            // Tenant resolution is intentionally isolated for future OIDC claims/host mapping.
-            var tenantCode = context.Request.Headers["X-Tenant-Code"].FirstOrDefault();
+            // The signed Identity cookie is the only tenant authority. Browser headers are ignored.
+            var tenantCode = context.User.FindFirst(TenantClaimTypes.Code)?.Value;
             var theme = await provider.GetCurrentAsync(tenantCode, cancellationToken);
             return Results.Ok(theme);
         })
