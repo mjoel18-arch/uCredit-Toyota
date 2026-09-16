@@ -21,3 +21,5 @@ appsettings.Development.local.json
 /src/uCredit.Web/vite.config.d.ts
 /src/uCredit.Web/vite.config.js.map
 /src/uCredit.Web/vite.config.d.ts.map
+# TypeScript incremental build metadata
+*.tsbuildinfo
