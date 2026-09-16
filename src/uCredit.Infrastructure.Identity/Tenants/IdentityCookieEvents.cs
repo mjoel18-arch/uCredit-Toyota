@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 
 namespace UCredit.Infrastructure.Identity.Tenants;
@@ -71,6 +72,26 @@ public sealed class IdentityCookieEvents(ITenantMembershipStore membershipStore)
             context.ReplacePrincipal(new ClaimsPrincipal(replacement));
             context.ShouldRenew = true;
         }
+    }
+
+    public override Task RedirectToLogin(RedirectContext<CookieAuthenticationOptions> context)
+    {
+        SetApiStatus(context, StatusCodes.Status401Unauthorized);
+        return Task.CompletedTask;
+    }
+
+    public override Task RedirectToAccessDenied(RedirectContext<CookieAuthenticationOptions> context)
+    {
+        SetApiStatus(context, StatusCodes.Status403Forbidden);
+        return Task.CompletedTask;
+    }
+
+    private static void SetApiStatus(
+        RedirectContext<CookieAuthenticationOptions> context,
+        int statusCode)
+    {
+        context.Response.Headers.Remove("Location");
+        context.Response.StatusCode = statusCode;
     }
 
     private static ClaimsIdentity CloneWithoutTenantSelection(ClaimsPrincipal principal)

@@ -13,6 +13,7 @@ public sealed class ContractEndpointsIntegrationTests(TestApiFactory factory)
     {
         var response = await factory.CreateClient().GetAsync("/api/v1/contracts/?contractNumber=CONTRACT-1", TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Null(response.Headers.Location);
     }
 
     [Fact]
@@ -20,6 +21,7 @@ public sealed class ContractEndpointsIntegrationTests(TestApiFactory factory)
     {
         var response = await CreateClient("without-permission").GetAsync("/api/v1/contracts/?contractNumber=CONTRACT-1", TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Null(response.Headers.Location);
     }
 
     [Fact]
@@ -34,6 +36,7 @@ public sealed class ContractEndpointsIntegrationTests(TestApiFactory factory)
     {
         var response = await factory.CreateClient().GetAsync("/api/v1/contracts/CONTRACT-1", TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Null(response.Headers.Location);
     }
 
     [Fact]

@@ -53,16 +53,6 @@ public static class DependencyInjection
                 options.LoginPath = "/api/v1/auth/login";
                 options.AccessDeniedPath = "/api/v1/auth/forbidden";
                 options.EventsType = typeof(IdentityCookieEvents);
-                options.Events.OnRedirectToLogin = context =>
-                {
-                    context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                    return Task.CompletedTask;
-                };
-                options.Events.OnRedirectToAccessDenied = context =>
-                {
-                    context.Response.StatusCode = StatusCodes.Status403Forbidden;
-                    return Task.CompletedTask;
-                };
             });
         return services;
     }

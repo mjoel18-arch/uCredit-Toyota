@@ -79,3 +79,15 @@ dotnet run --project tools/uCredit.IdentityAdmin -- --apply
 ```
 
 La herramienta es idempotente: reutiliza tenant, permiso, usuario, membresía y asignación existentes. Nunca cambia silenciosamente la contraseña de un usuario existente y no imprime contraseñas, hashes, stamps, tokens ni cadenas de conexión.
+
+## Smoke test de Identity local
+
+El flujo real de autenticación local puede verificarse con:
+
+```powershell
+pwsh -NoProfile -File .\scripts\Test-LocalIdentity.ps1
+```
+
+El script solicita interactivamente la URL de la API, el correo y la contraseña mediante `Read-Host -AsSecureString`. Mantiene cookies únicamente en una `WebRequestSession` en memoria y no imprime cookies, tokens CSRF ni contraseñas.
+
+Antes de ejecutarlo posteriormente, la API debe estar disponible y el usuario de desarrollo debe tener una membresía activa en `ubimia-dev` con `contracts.read`. El script no consulta contratos ni SQL Server directamente. Falla ante cualquier estado HTTP inesperado y confirma que `/api/v1/auth/me` devuelve 401 después del logout.
