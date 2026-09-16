@@ -41,7 +41,8 @@ public sealed class DeploymentTenantPolicy : IDeploymentTenantPolicy
 
     public bool IsAllowed(string tenantCode) =>
         TenantCode is not null &&
-        string.Equals(TenantCode, tenantCode, StringComparison.Ordinal);
+        !string.IsNullOrWhiteSpace(tenantCode) &&
+        string.Equals(TenantCode, tenantCode.Trim(), StringComparison.OrdinalIgnoreCase);
 }
 
 public interface ITenantMembershipStore

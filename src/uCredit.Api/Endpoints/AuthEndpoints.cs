@@ -104,7 +104,8 @@ public static class AuthEndpoints
                 tenantId = membership.TenantId,
                 tenantCode = membership.TenantCode,
                 tenantName = membership.TenantName,
-                permissions = membership.PermissionCodes
+                permissions = membership.PermissionCodes,
+                allowedCompanyIds = membership.AllowedCompanyIds
             })
         });
     }

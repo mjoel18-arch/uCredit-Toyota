@@ -9,6 +9,15 @@ namespace UCredit.Infrastructure.Identity.UnitTests;
 public sealed class IdentityExecutionTenantContextTests
 {
     [Fact]
+    public void DeploymentTenantCodeIsTrimmedAndComparedOrdinalCaseInsensitive()
+    {
+        var policy = new DeploymentTenantPolicy(" ubimia-dev ");
+
+        Assert.True(policy.IsAllowed("UBIMIA-DEV"));
+        Assert.True(policy.IsAllowed(" ubimia-dev "));
+        Assert.False(policy.IsAllowed("other-tenant"));
+    }
+    [Fact]
     public async Task ReturnsOnlyActiveServerScopeForDeploymentTenant()
     {
         var membership = ActiveMembership("TENANT-A", [101, 202]);

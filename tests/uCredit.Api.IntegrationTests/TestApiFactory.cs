@@ -113,6 +113,9 @@ internal sealed class FakeContractReadRepository : IContractReadRepository
 internal static class TestIdentityData
 {
     public static readonly Guid SingleMembershipUserId = Guid.Parse("00000000-0000-0000-0000-000000000001");
+    public static readonly Guid DeploymentTenantId = Guid.Parse("20000000-0000-0000-0000-000000000001");
+    public static readonly Guid OtherTenantId = Guid.Parse("20000000-0000-0000-0000-000000000002");
+    public static readonly Guid DeploymentPermissionId = Guid.Parse("30000000-0000-0000-0000-000000000001");
     public static readonly Guid MultipleMembershipUserId = Guid.Parse("00000000-0000-0000-0000-000000000002");
     public static readonly Guid InactiveMembershipUserId = Guid.Parse("00000000-0000-0000-0000-000000000003");
     public static readonly Guid InactiveTenantUserId = Guid.Parse("00000000-0000-0000-0000-000000000004");
