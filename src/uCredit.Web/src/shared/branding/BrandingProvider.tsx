@@ -11,6 +11,36 @@ const BrandingContext = createContext<BrandingContextValue>({
   loading: true,
 })
 
+export async function loadBranding(
+  fetcher: typeof fetch = fetch,
+  signal?: AbortSignal,
+): Promise<BrandTheme> {
+  const response = await fetcher('/api/v1/branding/current', {
+    signal,
+    credentials: 'include',
+  })
+
+  if (!response.ok) throw new Error('Branding is unavailable')
+
+  return normalizeTheme((await response.json()) as Partial<BrandTheme>)
+}
+
+export async function loadAndApplyBranding(
+  fetcher: typeof fetch = fetch,
+  signal?: AbortSignal,
+): Promise<BrandTheme> {
+  try {
+    const loaded = await loadBranding(fetcher, signal)
+    applyTheme(loaded)
+    return loaded
+  } catch (error) {
+    if ((error as Error).name === 'AbortError') throw error
+
+    applyTheme(defaultTheme)
+    return defaultTheme
+  }
+}
+
 export function BrandingProvider({ children }: PropsWithChildren) {
   const [theme, setTheme] = useState(defaultTheme)
   const [loading, setLoading] = useState(true)
@@ -18,21 +48,12 @@ export function BrandingProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     const controller = new AbortController()
 
-    async function loadBranding() {
+    async function refreshBranding() {
       try {
-        const response = await fetch('/api/v1/branding/current', {
-          signal: controller.signal,
-          headers: { 'X-Tenant-Code': 'DEMO' },
-        })
-
-        if (!response.ok) throw new Error('Branding is unavailable')
-
-        const loaded = normalizeTheme((await response.json()) as Partial<BrandTheme>)
-        applyTheme(loaded)
+        const loaded = await loadAndApplyBranding(fetch, controller.signal)
         setTheme(loaded)
       } catch (error) {
         if ((error as Error).name !== 'AbortError') {
-          applyTheme(defaultTheme)
           setTheme(defaultTheme)
         }
       } finally {
@@ -40,7 +61,7 @@ export function BrandingProvider({ children }: PropsWithChildren) {
       }
     }
 
-    void loadBranding()
+    void refreshBranding()
     return () => controller.abort()
   }, [])
 
