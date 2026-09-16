@@ -6,7 +6,8 @@ namespace UCredit.Infrastructure.Identity.Tenants;
 
 public sealed class IdentityTenantCookieIssuer(
     UserManager<ApplicationUser> userManager,
-    SignInManager<ApplicationUser> signInManager) : ITenantCookieIssuer
+    SignInManager<ApplicationUser> signInManager,
+    IDeploymentTenantPolicy deploymentTenantPolicy) : ITenantCookieIssuer
 {
     public async Task<bool> IssueAsync(
         ClaimsPrincipal principal,
@@ -16,7 +17,7 @@ public sealed class IdentityTenantCookieIssuer(
         cancellationToken.ThrowIfCancellationRequested();
 
         var user = await userManager.GetUserAsync(principal);
-        if (user is null || !user.IsActive)
+        if (user is null || !user.IsActive || !deploymentTenantPolicy.IsAllowed(membership.TenantCode))
         {
             return false;
         }

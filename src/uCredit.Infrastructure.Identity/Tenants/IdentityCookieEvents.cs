@@ -6,7 +6,9 @@ using Microsoft.AspNetCore.Identity;
 
 namespace UCredit.Infrastructure.Identity.Tenants;
 
-public sealed class IdentityCookieEvents(ITenantMembershipStore membershipStore) : CookieAuthenticationEvents
+public sealed class IdentityCookieEvents(
+    ITenantMembershipStore membershipStore,
+    IDeploymentTenantPolicy deploymentTenantPolicy) : CookieAuthenticationEvents
 {
     public override async Task ValidatePrincipal(CookieValidatePrincipalContext context)
     {
@@ -48,7 +50,8 @@ public sealed class IdentityCookieEvents(ITenantMembershipStore membershipStore)
             tenantCodeClaims.Length != 1 ||
             !Guid.TryParse(tenantIdClaims[0].Value, out var tenantId) ||
             string.IsNullOrWhiteSpace(tenantCodeClaims[0].Value) ||
-            permissionClaims.Any(claim => string.IsNullOrWhiteSpace(claim.Value)))
+            permissionClaims.Any(claim => string.IsNullOrWhiteSpace(claim.Value)) ||
+            !deploymentTenantPolicy.IsAllowed(tenantCodeClaims[0].Value))
         {
             await RejectAsync(context);
             return;
@@ -59,7 +62,7 @@ public sealed class IdentityCookieEvents(ITenantMembershipStore membershipStore)
             tenantId,
             tenantCodeClaims[0].Value,
             cancellationToken);
-        if (membership is null)
+        if (membership is null || !deploymentTenantPolicy.IsAllowed(membership.TenantCode))
         {
             await RejectAsync(context);
             return;

@@ -10,6 +10,7 @@ public sealed class IdentityDbContext(DbContextOptions<IdentityDbContext> option
     public DbSet<UserTenantMembership> UserTenantMemberships => Set<UserTenantMembership>();
     public DbSet<Permission> Permissions => Set<Permission>();
     public DbSet<MembershipPermission> MembershipPermissions => Set<MembershipPermission>();
+    public DbSet<TenantLegacyCompanyScope> TenantLegacyCompanyScopes => Set<TenantLegacyCompanyScope>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -24,6 +25,16 @@ public sealed class IdentityDbContext(DbContextOptions<IdentityDbContext> option
             e.Property(x => x.Code).HasMaxLength(64).IsRequired();
             e.Property(x => x.Name).HasMaxLength(200).IsRequired();
             e.HasIndex(x => x.Code).IsUnique();
+        });
+        builder.Entity<TenantLegacyCompanyScope>(e =>
+        {
+            e.HasKey(x => new { x.TenantId, x.CompanyId });
+            e.Property(x => x.CompanyId).HasColumnType("int");
+            e.Property(x => x.DisplayName).HasMaxLength(200);
+            e.Property(x => x.IsActive).IsRequired();
+            e.HasOne(x => x.Tenant).WithMany(x => x.LegacyCompanyScopes)
+                .HasForeignKey(x => x.TenantId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
         builder.Entity<UserTenantMembership>(e =>
         {

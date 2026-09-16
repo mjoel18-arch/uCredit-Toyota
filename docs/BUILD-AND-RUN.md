@@ -62,6 +62,7 @@ Antes de ejecutarla posteriormente, deben estar configurados `DOTNET_ENVIRONMENT
 - `UCREDIT_BOOTSTRAP_TENANT_NAME`
 - `UCREDIT_BOOTSTRAP_ADMIN_EMAIL`
 - `UCREDIT_BOOTSTRAP_ADMIN_PASSWORD`
+- `UCREDIT_BOOTSTRAP_COMPANY_IDS` (por ejemplo, `1`; lista separada por comas, sin duplicados, rango 0-255)
 
 Ejemplo de configuración local con User Secrets, usando valores locales no versionados:
 
@@ -70,6 +71,7 @@ dotnet user-secrets --project tools/uCredit.IdentityAdmin set "UCREDIT_BOOTSTRAP
 dotnet user-secrets --project tools/uCredit.IdentityAdmin set "UCREDIT_BOOTSTRAP_TENANT_NAME" "<valor-local>"
 dotnet user-secrets --project tools/uCredit.IdentityAdmin set "UCREDIT_BOOTSTRAP_ADMIN_EMAIL" "<valor-local>"
 dotnet user-secrets --project tools/uCredit.IdentityAdmin set "UCREDIT_BOOTSTRAP_ADMIN_PASSWORD" "<valor-local>"
+dotnet user-secrets --project tools/uCredit.IdentityAdmin set "UCREDIT_BOOTSTRAP_COMPANY_IDS" "<company-ids>"
 ```
 
 La ejecución posterior debe ser explícita:
@@ -79,6 +81,7 @@ dotnet run --project tools/uCredit.IdentityAdmin -- --apply
 ```
 
 La herramienta es idempotente: reutiliza tenant, permiso, usuario, membresía y asignación existentes. Nunca cambia silenciosamente la contraseña de un usuario existente y no imprime contraseñas, hashes, stamps, tokens ni cadenas de conexión.
+También exige que `AddTenantLegacyCompanyScope` ya esté aplicada. Para cada CompanyId indicado crea o reactiva el scope del tenant; no elimina ni desactiva scopes omitidos. No consulta Legacy ni ejecuta migraciones.
 
 ## Smoke test de Identity local
 
@@ -91,3 +94,7 @@ pwsh -NoProfile -File .\scripts\Test-LocalIdentity.ps1
 El script solicita interactivamente la URL de la API, el correo y la contraseña mediante `Read-Host -AsSecureString`. Mantiene cookies únicamente en una `WebRequestSession` en memoria y no imprime cookies, tokens CSRF ni contraseñas.
 
 Antes de ejecutarlo posteriormente, la API debe estar disponible y el usuario de desarrollo debe tener una membresía activa en `ubimia-dev` con `contracts.read`. El script no consulta contratos ni SQL Server directamente. Falla ante cualquier estado HTTP inesperado y confirma que `/api/v1/auth/me` devuelve 401 después del logout.
+
+## Aislamiento Legacy por instalación
+
+Cada sitio requiere la variable segura `Deployment__TenantCode`, exactamente igual al código del tenant permitido. No se debe configurar una conexión Legacy por tenant ni enviar CompanyId desde el navegador. La única conexión Legacy continúa siendo `LegacySql__ReadConnectionString`; el alcance de empresas se administra en Identity.

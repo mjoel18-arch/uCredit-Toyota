@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using UCredit.Application.Execution;
 using UCredit.Infrastructure.Identity.Models;
 using UCredit.Infrastructure.Identity.Tenants;
 namespace UCredit.Infrastructure.Identity;
@@ -19,8 +20,11 @@ public static class DependencyInjection
             throw new InvalidOperationException("IdentitySql__ConnectionString must be configured.");
 
         services.AddDbContext<IdentityDbContext>(options => options.UseSqlServer(connectionString));
+        services.AddHttpContextAccessor();
+        services.AddSingleton<IDeploymentTenantPolicy>(new DeploymentTenantPolicy(configuration));
         services.AddScoped<ITenantMembershipStore, EfTenantMembershipStore>();
         services.AddScoped<ITenantCookieIssuer, IdentityTenantCookieIssuer>();
+        services.AddScoped<IExecutionTenantContext, IdentityExecutionTenantContext>();
         services.AddScoped<IdentityCookieEvents>();
         services.AddIdentityCore<ApplicationUser>(options =>
         {

@@ -9,7 +9,7 @@ namespace UCredit.Infrastructure.Identity.UnitTests;
 public sealed class EfTenantMembershipStoreTests
 {
     [Fact]
-    public async Task ActiveMembershipsReturnOnlyPermissionsFromEachMatchingMembership()
+    public async Task ActiveMembershipsReturnOnlyPermissionsAndActiveCompanyScopesFromEachMembership()
     {
         await using var context = await CreateContextAsync(TestContext.Current.CancellationToken);
         var store = new EfTenantMembershipStore(context);
@@ -17,8 +17,12 @@ public sealed class EfTenantMembershipStoreTests
         var memberships = await store.GetActiveMembershipsAsync(TestData.UserId, TestContext.Current.CancellationToken);
 
         Assert.Equal(2, memberships.Count);
-        Assert.Equal(["contracts.read"], memberships.Single(membership => membership.TenantCode == "TENANT-A").PermissionCodes);
-        Assert.Equal(["contracts.write"], memberships.Single(membership => membership.TenantCode == "TENANT-B").PermissionCodes);
+        var tenantA = memberships.Single(membership => membership.TenantCode == "TENANT-A");
+        var tenantB = memberships.Single(membership => membership.TenantCode == "TENANT-B");
+        Assert.Equal(["contracts.read"], tenantA.PermissionCodes);
+        Assert.Equal([101, 102], tenantA.AllowedCompanyIds);
+        Assert.Equal(["contracts.write"], tenantB.PermissionCodes);
+        Assert.Equal([201], tenantB.AllowedCompanyIds);
     }
 
     [Fact]
@@ -32,6 +36,18 @@ public sealed class EfTenantMembershipStoreTests
 
         Assert.Null(inactiveTenant);
         Assert.Null(inactiveMembership);
+    }
+
+    [Fact]
+    public async Task InactiveCompanyScopeIsExcluded()
+    {
+        await using var context = await CreateContextAsync(TestContext.Current.CancellationToken);
+        var store = new EfTenantMembershipStore(context);
+
+        var membership = await store.FindActiveMembershipAsync(TestData.UserId, "TENANT-A", TestContext.Current.CancellationToken);
+
+        Assert.NotNull(membership);
+        Assert.Equal([101, 102], membership.AllowedCompanyIds);
     }
 
     [Fact]
@@ -68,7 +84,8 @@ public sealed class EfTenantMembershipStoreTests
             Guid.NewGuid(),
             "TENANT-B",
             "Tenant B",
-            ["contracts.write"]);
+            ["contracts.write"],
+            [201]);
 
         var claims = TenantSelectionClaims.Build(membership);
 
@@ -76,8 +93,9 @@ public sealed class EfTenantMembershipStoreTests
         Assert.Contains(claims, claim => claim.Type == "permission" && claim.Value == "contracts.write");
         Assert.DoesNotContain(claims, claim => claim.Type == "permission" && claim.Value == "contracts.read");
     }
+
     [Fact]
-    public void ModelDefinesUniqueCodesCompositeKeysAndForeignKeys()
+    public void ModelDefinesUniqueCodesCompositeKeysForeignKeysAndCompanyScope()
     {
         var options = new DbContextOptionsBuilder<IdentityDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
@@ -88,6 +106,7 @@ public sealed class EfTenantMembershipStoreTests
         var permission = context.Model.FindEntityType(typeof(Permission))!;
         var membership = context.Model.FindEntityType(typeof(UserTenantMembership))!;
         var membershipPermission = context.Model.FindEntityType(typeof(MembershipPermission))!;
+        var companyScope = context.Model.FindEntityType(typeof(TenantLegacyCompanyScope))!;
 
         var tenantCodeIndex = tenant.GetIndexes().Single(index => index.Properties.Select(property => property.Name).SequenceEqual([nameof(Tenant.Code)]));
         var permissionCodeIndex = permission.GetIndexes().Single(index => index.Properties.Select(property => property.Name).SequenceEqual([nameof(Permission.Code)]));
@@ -95,11 +114,15 @@ public sealed class EfTenantMembershipStoreTests
         Assert.True(permissionCodeIndex.IsUnique);
         Assert.Equal(["UserId", "TenantId"], membership.FindPrimaryKey()!.Properties.Select(property => property.Name));
         Assert.Equal(["UserId", "TenantId", "PermissionId"], membershipPermission.FindPrimaryKey()!.Properties.Select(property => property.Name));
+        Assert.Equal(["TenantId", "CompanyId"], companyScope.FindPrimaryKey()!.Properties.Select(property => property.Name));
+        Assert.Single(companyScope.GetForeignKeys());
+        Assert.Equal(DeleteBehavior.Restrict, companyScope.GetForeignKeys().Single().DeleteBehavior);
         Assert.Equal(2, membership.GetForeignKeys().Count());
         Assert.Equal(2, membershipPermission.GetForeignKeys().Count());
         Assert.All(membership.GetForeignKeys(), foreignKey => Assert.Equal(DeleteBehavior.Restrict, foreignKey.DeleteBehavior));
         Assert.All(membershipPermission.GetForeignKeys(), foreignKey => Assert.Equal(DeleteBehavior.Restrict, foreignKey.DeleteBehavior));
     }
+
     private static async Task<IdentityDbContext> CreateContextAsync(CancellationToken cancellationToken)
     {
         var options = new DbContextOptionsBuilder<IdentityDbContext>()
@@ -118,6 +141,11 @@ public sealed class EfTenantMembershipStoreTests
         var inactiveUser = new ApplicationUser { Id = TestData.InactiveUserId, UserName = "inactive-user", IsActive = false };
 
         context.AddRange(user, otherUser, inactiveUser, tenantA, tenantB, inactiveTenant, inactiveMembershipTenant, read, write);
+        context.AddRange(
+            new TenantLegacyCompanyScope { TenantId = tenantA.Id, Tenant = tenantA, CompanyId = 101, DisplayName = "Company 101", IsActive = true },
+            new TenantLegacyCompanyScope { TenantId = tenantA.Id, Tenant = tenantA, CompanyId = 102, DisplayName = "Company 102", IsActive = true },
+            new TenantLegacyCompanyScope { TenantId = tenantA.Id, Tenant = tenantA, CompanyId = 103, DisplayName = "Inactive company", IsActive = false },
+            new TenantLegacyCompanyScope { TenantId = tenantB.Id, Tenant = tenantB, CompanyId = 201, DisplayName = "Company 201", IsActive = true });
         context.AddRange(
             new UserTenantMembership { UserId = user.Id, User = user, TenantId = tenantA.Id, Tenant = tenantA, IsActive = true },
             new UserTenantMembership { UserId = user.Id, User = user, TenantId = tenantB.Id, Tenant = tenantB, IsActive = true },

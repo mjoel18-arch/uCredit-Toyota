@@ -23,6 +23,7 @@ public static class BootstrapConfiguration
             configuration["UCREDIT_BOOTSTRAP_TENANT_NAME"],
             configuration["UCREDIT_BOOTSTRAP_ADMIN_EMAIL"],
             configuration["UCREDIT_BOOTSTRAP_ADMIN_PASSWORD"],
-            unknownArguments);
+            unknownArguments,
+            configuration["UCREDIT_BOOTSTRAP_COMPANY_IDS"]);
     }
 }

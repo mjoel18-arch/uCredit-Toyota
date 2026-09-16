@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
 using UCredit.Infrastructure.Identity;
 using UCredit.Infrastructure.Identity.Models;
 
@@ -10,7 +9,11 @@ public sealed record BootstrapAction(
     string ObjectType,
     Guid PrimaryId,
     Guid? SecondaryId,
-    bool Created);
+    bool Created)
+{
+    public int? NumericIdentifier { get; init; }
+    public bool Reactivated { get; init; }
+}
 
 public sealed class BootstrapResult
 {
@@ -165,6 +168,46 @@ public sealed class IdentityBootstrapper(IIdentityMigrationReadiness migrationRe
                 actions.Add(new BootstrapAction("MembershipPermission", user.Id, tenant.Id, false));
             }
 
+            foreach (var companyId in options.CompanyIds)
+            {
+                var scope = await context.TenantLegacyCompanyScopes
+                    .SingleOrDefaultAsync(
+                        candidate => candidate.TenantId == tenant.Id && candidate.CompanyId == companyId,
+                        cancellationToken);
+
+                if (scope is null)
+                {
+                    context.TenantLegacyCompanyScopes.Add(new TenantLegacyCompanyScope
+                    {
+                        TenantId = tenant.Id,
+                        Tenant = tenant,
+                        CompanyId = companyId,
+                        DisplayName = null,
+                        IsActive = true
+                    });
+                    actions.Add(new BootstrapAction("TenantLegacyCompanyScope", tenant.Id, null, true)
+                    {
+                        NumericIdentifier = companyId
+                    });
+                }
+                else if (!scope.IsActive)
+                {
+                    scope.IsActive = true;
+                    actions.Add(new BootstrapAction("TenantLegacyCompanyScope", tenant.Id, null, false)
+                    {
+                        NumericIdentifier = companyId,
+                        Reactivated = true
+                    });
+                }
+                else
+                {
+                    actions.Add(new BootstrapAction("TenantLegacyCompanyScope", tenant.Id, null, false)
+                    {
+                        NumericIdentifier = companyId
+                    });
+                }
+            }
+
             await context.SaveChangesAsync(cancellationToken);
             if (transaction is not null)
                 await transaction.CommitAsync(cancellationToken);
@@ -204,10 +247,16 @@ public static class BootstrapOutput
 {
     public static string Format(BootstrapAction action)
     {
-        var identifier = action.SecondaryId is null
-            ? action.PrimaryId.ToString("D")
-            : $"{action.PrimaryId:D}/{action.SecondaryId.Value:D}";
-        var state = action.Created ? "created" : "already existed";
+        var identifier = action.NumericIdentifier is not null
+            ? $"{action.PrimaryId:D}/{action.NumericIdentifier.Value}"
+            : action.SecondaryId is null
+                ? action.PrimaryId.ToString("D")
+                : $"{action.PrimaryId:D}/{action.SecondaryId.Value:D}";
+        var state = action.Reactivated
+            ? "reactivated"
+            : action.Created
+                ? "created"
+                : "already existed";
         return $"{action.ObjectType} {identifier}: {state}";
     }
 }

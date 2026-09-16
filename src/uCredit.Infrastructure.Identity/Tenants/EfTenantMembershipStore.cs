@@ -58,10 +58,12 @@ public sealed class EfTenantMembershipStore(IdentityDbContext dbContext) : ITena
             ? ToResult(membership)
             : null;
     }
+
     private IQueryable<UserTenantMembership> ActiveMembershipQuery(Guid userId) =>
         dbContext.UserTenantMemberships
             .AsNoTracking()
             .Include(membership => membership.Tenant)
+                .ThenInclude(tenant => tenant.LegacyCompanyScopes)
             .Include(membership => membership.Permissions)
                 .ThenInclude(membershipPermission => membershipPermission.Permission)
             .Where(membership =>
@@ -79,5 +81,11 @@ public sealed class EfTenantMembershipStore(IdentityDbContext dbContext) : ITena
                 .Select(membershipPermission => membershipPermission.Permission.Code)
                 .Distinct(StringComparer.Ordinal)
                 .Order(StringComparer.Ordinal)
+                .ToArray(),
+            membership.Tenant.LegacyCompanyScopes
+                .Where(scope => scope.IsActive)
+                .Select(scope => scope.CompanyId)
+                .Distinct()
+                .Order()
                 .ToArray());
 }

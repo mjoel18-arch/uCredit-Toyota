@@ -7,12 +7,15 @@ Monolito modular con frontend separado y una capa anticorrupción para SQL Serve
 ```mermaid
 flowchart TB
     User["Usuario"] --> Web["uCredit Web"]
-    Web --> Api["ASP.NET Core API"]
+    Web --> Api["uCredit API"]
+    Api --> Identity["Identity"]
     Api --> Modules["Módulos uCredit"]
-    Adapter["LegacySql"] --> Modules
-    Api --> Adapter
-    Adapter --> Db[("SQL Server Legacy")]
-    Legacy["ProLeaseNet"] --> Db
+    Identity --> Scope["ExecutionTenantContext"]
+    Scope --> IdentityDb[("Identity SQL")]
+    Modules --> Adapter["LegacySql"]
+    Adapter --> LegacyDb[("SQL Server Legacy")]
+    Scope --> Adapter
+    Legacy["ProLeaseNet"] --> LegacyDb
 ```
 
 ## Proyectos del primer vertical
@@ -20,7 +23,8 @@ flowchart TB
 | Proyecto | Responsabilidad |
 |---|---|
 | `uCredit.Api` | Endpoints, autenticación, autorización y composición |
-| `uCredit.Infrastructure.Identity` | ASP.NET Core Identity, EF Core y modelo de seguridad independiente |
+| `uCredit.Application` | Abstracciones neutrales de ejecución |
+| `uCredit.Infrastructure.Identity` | ASP.NET Core Identity, EF Core, tenant permitido y scopes de seguridad |
 | `uCredit.Modules.Contracts` | Casos de uso y contratos del módulo |
 | `uCredit.Infrastructure.LegacySql` | SQL parametrizado y mapeo Legacy |
 | `uCredit.Web` | Interfaz React/TypeScript |
@@ -32,42 +36,24 @@ flowchart TB
 
 - API conoce módulos e infraestructura durante composición.
 - Módulos no conocen API, Web ni infraestructura.
-- Infraestructura implementa interfaces definidas por módulos.
+- `uCredit.Application` no conoce Identity ni LegacySql.
+- Identity implementa `IExecutionTenantContext`; LegacySql lo consume.
+- Contracts no conoce Identity ni LegacySql.
+- Identity y LegacySql no se referencian entre sí.
 - Web sólo consume contratos HTTP.
 - Modelos SQL no salen de `LegacySql`.
-
-## Módulos previstos
-
-IdentityAccess, Contracts, People, Products, Amortization, Movements, Payments, Collections, Billing, Insurance, Terminations, Accounting, Integrations y Reporting.
-
-Se agregan sólo cuando exista un caso de uso aprobado.
-
-## API
-
-- prefijo `/api/v1`;
-- JSON camelCase;
-- fechas ISO 8601;
-- `decimal` para importes/tasas;
-- `ProblemDetails` para errores;
-- paginación del lado servidor;
-- OpenAPI como contrato verificable;
-- autorización por políticas.
 
 ## Persistencia
 
 - Dapper y `Microsoft.Data.SqlClient` para Legacy.
 - parámetros tipados y cancelación asíncrona;
-- conexiones de lectura/escritura separadas;
+- `C.EMP_FL_CVE IN @AllowedCompanyIds` obligatorio en contratos;
 - EF Core únicamente para estructuras nuevas justificadas;
 - sin migraciones automáticas sobre Legacy.
 
 ## Identidad
 
-ASP.NET Core Identity con cookie segura y EF Core únicamente sobre una base nueva configurada mediante `IdentitySql__ConnectionString`. El usuario selecciona un tenant contra sus membresías activas y la cookie firmada contiene sólo los permisos de esa membresía. `X-Tenant-Code` no es autoridad. La selección aún no filtra contratos ni selecciona conexiones Legacy. Entra External ID queda como alternativa OIDC postergada.
-
-## Observabilidad
-
-Logging estructurado, correlación, métricas y trazas mediante OpenTelemetry. Evitar datos personales y secretos.
+ASP.NET Core Identity con cookie segura y EF Core únicamente sobre una base nueva configurada mediante `IdentitySql__ConnectionString`. `Deployment__TenantCode` limita la instalación a un tenant. `TenantLegacyCompanyScopes` mantiene los CompanyId activos sin guardar conexiones Legacy. La selección aún usa la cookie firmada como autoridad y no acepta listas desde el navegador. Entra External ID queda como alternativa OIDC postergada.
 
 ## Despliegue
 

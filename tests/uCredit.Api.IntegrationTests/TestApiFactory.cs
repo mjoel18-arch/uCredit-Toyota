@@ -31,8 +31,10 @@ public sealed class TestApiFactory : WebApplicationFactory<Program>
             services.RemoveAll<IContractReadRepository>();
             services.AddSingleton<IContractReadRepository, FakeContractReadRepository>();
             services.AddSingleton<ITenantMembershipStore, FakeTenantMembershipStore>();
+            services.AddSingleton<IDeploymentTenantPolicy>(new DeploymentTenantPolicy("TENANT-A"));
             services.AddSingleton<FakeTenantCookieIssuer>();
-            services.AddSingleton<ITenantCookieIssuer>(serviceProvider => serviceProvider.GetRequiredService<FakeTenantCookieIssuer>());
+            services.AddSingleton<ITenantCookieIssuer>(
+                serviceProvider => serviceProvider.GetRequiredService<FakeTenantCookieIssuer>());
         });
     }
 }
@@ -107,6 +109,7 @@ internal sealed class FakeContractReadRepository : IContractReadRepository
                 ? KnownContract
                 : null);
 }
+
 internal static class TestIdentityData
 {
     public static readonly Guid SingleMembershipUserId = Guid.Parse("00000000-0000-0000-0000-000000000001");
@@ -133,13 +136,15 @@ internal sealed class FakeTenantMembershipStore : ITenantMembershipStore
         Guid.Parse("10000000-0000-0000-0000-000000000001"),
         "TENANT-A",
         "Tenant A",
-        ["contracts.read"]);
+        ["contracts.read"],
+        [101]);
 
     private static readonly ActiveTenantMembership TenantB = new(
         Guid.Parse("10000000-0000-0000-0000-000000000002"),
         "TENANT-B",
         "Tenant B",
-        ["contracts.write"]);
+        ["contracts.write"],
+        [202, 203]);
 
     private static readonly Dictionary<Guid, (bool IsActive, IReadOnlyList<ActiveTenantMembership> Active)> Users = new()
     {
@@ -151,7 +156,9 @@ internal sealed class FakeTenantMembershipStore : ITenantMembershipStore
         [TestIdentityData.ChangeTenantUserId] = (true, [TenantA, TenantB])
     };
 
-    public Task<ApplicationUser?> GetActiveUserAsync(Guid userId, CancellationToken cancellationToken = default)
+    public Task<ApplicationUser?> GetActiveUserAsync(
+        Guid userId,
+        CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         return Task.FromResult<ApplicationUser?>(
@@ -160,7 +167,9 @@ internal sealed class FakeTenantMembershipStore : ITenantMembershipStore
                 : null);
     }
 
-    public Task<IReadOnlyList<ActiveTenantMembership>> GetActiveMembershipsAsync(Guid userId, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<ActiveTenantMembership>> GetActiveMembershipsAsync(
+        Guid userId,
+        CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         return Task.FromResult(Users.TryGetValue(userId, out var data) && data.IsActive
@@ -168,16 +177,24 @@ internal sealed class FakeTenantMembershipStore : ITenantMembershipStore
             : (IReadOnlyList<ActiveTenantMembership>)Array.Empty<ActiveTenantMembership>());
     }
 
-    public Task<ActiveTenantMembership?> FindActiveMembershipAsync(Guid userId, string tenantCode, CancellationToken cancellationToken = default)
+    public Task<ActiveTenantMembership?> FindActiveMembershipAsync(
+        Guid userId,
+        string tenantCode,
+        CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var membership = Users.TryGetValue(userId, out var data) && data.IsActive
-            ? data.Active.SingleOrDefault(candidate => string.Equals(candidate.TenantCode, tenantCode.Trim(), StringComparison.OrdinalIgnoreCase))
+            ? data.Active.SingleOrDefault(candidate =>
+                string.Equals(candidate.TenantCode, tenantCode.Trim(), StringComparison.OrdinalIgnoreCase))
             : null;
         return Task.FromResult(membership);
     }
 
-    public Task<ActiveTenantMembership?> FindActiveMembershipAsync(Guid userId, Guid tenantId, string tenantCode, CancellationToken cancellationToken = default)
+    public Task<ActiveTenantMembership?> FindActiveMembershipAsync(
+        Guid userId,
+        Guid tenantId,
+        string tenantCode,
+        CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var membership = Users.TryGetValue(userId, out var data) && data.IsActive
@@ -186,19 +203,24 @@ internal sealed class FakeTenantMembershipStore : ITenantMembershipStore
                 string.Equals(candidate.TenantCode, tenantCode.Trim(), StringComparison.OrdinalIgnoreCase))
             : null;
         return Task.FromResult(membership);
-    }}
+    }
+}
 
 internal sealed class FakeTenantCookieIssuer : ITenantCookieIssuer
 {
     private readonly Dictionary<Guid, IReadOnlyList<Claim>> issuedClaims = [];
 
-    public Task<bool> IssueAsync(ClaimsPrincipal principal, ActiveTenantMembership membership, CancellationToken cancellationToken = default)
+    public Task<bool> IssueAsync(
+        ClaimsPrincipal principal,
+        ActiveTenantMembership membership,
+        CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (!Guid.TryParse(principal.FindFirstValue(ClaimTypes.NameIdentifier), out var userId))
         {
             return Task.FromResult(false);
         }
+
         issuedClaims[userId] = TenantSelectionClaims.Build(membership);
         return Task.FromResult(true);
     }

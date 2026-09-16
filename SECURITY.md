@@ -54,6 +54,17 @@ La configuración de desarrollo se recibe por variables de entorno o User Secret
 - `UCREDIT_BOOTSTRAP_TENANT_CODE`;
 - `UCREDIT_BOOTSTRAP_TENANT_NAME`;
 - `UCREDIT_BOOTSTRAP_ADMIN_EMAIL`;
-- `UCREDIT_BOOTSTRAP_ADMIN_PASSWORD`.
+- `UCREDIT_BOOTSTRAP_ADMIN_PASSWORD`;
+- `UCREDIT_BOOTSTRAP_COMPANY_IDS` (lista separada por comas de enteros 0 a 255).
 
 La operación es idempotente y no cambia la contraseña de un usuario existente. La salida sólo muestra identificadores de objetos y si fueron creados o ya existían; nunca muestra contraseñas, hashes, security stamps, tokens o cadenas de conexión. No se deben agregar valores reales a Git ni ejecutar la herramienta contra Legacy.
+
+Antes de ejecutar el aprovisionamiento, la migracion `AddTenantLegacyCompanyScope` debe estar aplicada en la base Identity. La herramienta nunca ejecuta `Migrate`, `EnsureCreated` ni `database update`. `UCREDIT_BOOTSTRAP_COMPANY_IDS` solo agrega o reactiva scopes para el tenant indicado; no desactiva scopes ausentes de la lista. `DisplayName` queda nulo y no se consulta `CEMPRESA` ni ninguna base Legacy.
+
+## Aislamiento Legacy por instalación
+
+Cada instalación tiene una única base Legacy y una única base Identity. `LegacySql__ReadConnectionString` es la única conexión de lectura Legacy y nunca se guarda en Identity. `Deployment__TenantCode` debe identificar exactamente el tenant permitido por el sitio; si falta, la selección y las consultas Legacy fallan cerradas.
+
+Identity almacena únicamente el alcance lógico de empresas mediante `TenantLegacyCompanyScopes`: `TenantId`, `CompanyId` (el valor de `KCONTRATO.EMP_FL_CVE`), nombre opcional y estado activo. El servidor obtiene los CompanyId activos desde Identity. El frontend no puede enviar una lista, query string, cabecera o conexión para ampliar el alcance.
+
+`SearchAsync` y `GetByNumberAsync` agregan `C.EMP_FL_CVE IN @AllowedCompanyIds` con parámetros Dapper. La consulta no crea una conexión Legacy si no existe tenant seleccionado, el tenant no corresponde a `Deployment__TenantCode` o no hay empresas activas.

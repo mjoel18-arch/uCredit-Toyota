@@ -25,6 +25,7 @@ public sealed class LocalIdentityApiFactory : WebApplicationFactory<Program>
             services.AddDbContext<IdentityDbContext>(options =>
                 options.UseInMemoryDatabase(databaseName));
             services.AddSingleton<ITenantMembershipStore, FakeTenantMembershipStore>();
+            services.AddSingleton<IDeploymentTenantPolicy>(new DeploymentTenantPolicy("ubimia-dev"));
             services.AddScoped<IdentityCookieEvents>();
             services.AddIdentityCore<ApplicationUser>(options =>
             {

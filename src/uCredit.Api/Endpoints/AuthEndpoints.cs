@@ -76,6 +76,7 @@ public static class AuthEndpoints
     private static async Task<IResult> MeAsync(
         ClaimsPrincipal principal,
         [FromServices] ITenantMembershipStore membershipStore,
+        [FromServices] IDeploymentTenantPolicy deploymentTenantPolicy,
         CancellationToken cancellationToken)
     {
         if (!Guid.TryParse(principal.FindFirstValue(ClaimTypes.NameIdentifier), out var userId))
@@ -89,12 +90,15 @@ public static class AuthEndpoints
             return Results.Unauthorized();
         }
 
-        var memberships = await membershipStore.GetActiveMembershipsAsync(userId, cancellationToken);
+        var memberships = (await membershipStore.GetActiveMembershipsAsync(userId, cancellationToken))
+            .Where(membership => deploymentTenantPolicy.IsAllowed(membership.TenantCode))
+            .ToArray();
+        var selectedTenant = ReadSelectedTenant(principal, deploymentTenantPolicy);
         return Results.Ok(new
         {
             userName = user.UserName ?? user.Email ?? principal.Identity?.Name,
-            tenant = ReadSelectedTenant(principal),
-            permissions = ReadPermissionCodes(principal),
+            tenant = selectedTenant,
+            permissions = selectedTenant is null ? Array.Empty<string>() : ReadPermissionCodes(principal),
             memberships = memberships.Select(membership => new
             {
                 tenantId = membership.TenantId,
@@ -110,6 +114,7 @@ public static class AuthEndpoints
         SelectTenantRequest request,
         [FromServices] ITenantMembershipStore membershipStore,
         [FromServices] ITenantCookieIssuer cookieIssuer,
+        [FromServices] IDeploymentTenantPolicy deploymentTenantPolicy,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.TenantCode) || request.TenantCode.Length > 64)
@@ -135,9 +140,11 @@ public static class AuthEndpoints
             userId,
             request.TenantCode,
             cancellationToken);
-        if (membership is null || !await cookieIssuer.IssueAsync(principal, membership, cancellationToken))
+        if (membership is null ||
+            !deploymentTenantPolicy.IsAllowed(membership.TenantCode) ||
+            !await cookieIssuer.IssueAsync(principal, membership, cancellationToken))
         {
-            // Use one response for unknown, inactive, and foreign tenants to avoid tenant enumeration.
+            // Use one response for unknown, inactive, foreign, and non-deployed tenants to avoid enumeration.
             return Results.Forbid();
         }
 
@@ -149,13 +156,17 @@ public static class AuthEndpoints
         });
     }
 
-    private static object? ReadSelectedTenant(ClaimsPrincipal principal)
+    private static object? ReadSelectedTenant(
+        ClaimsPrincipal principal,
+        IDeploymentTenantPolicy deploymentTenantPolicy)
     {
         var tenantId = principal.FindFirstValue(TenantClaimTypes.Id);
         var tenantCode = principal.FindFirstValue(TenantClaimTypes.Code);
-        return tenantId is null && tenantCode is null
-            ? null
-            : new { tenantId, tenantCode };
+        return tenantId is not null &&
+            tenantCode is not null &&
+            deploymentTenantPolicy.IsAllowed(tenantCode)
+            ? new { tenantId, tenantCode }
+            : null;
     }
 
     private static string[] ReadPermissionCodes(ClaimsPrincipal principal) =>

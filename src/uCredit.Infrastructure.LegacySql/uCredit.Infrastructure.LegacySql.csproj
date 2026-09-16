@@ -7,6 +7,7 @@
     <PackageReference Include="Microsoft.Data.SqlClient" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="../uCredit.Application/uCredit.Application.csproj" />
     <ProjectReference Include="../uCredit.Modules.Contracts/uCredit.Modules.Contracts.csproj" />
   </ItemGroup>
 </Project>

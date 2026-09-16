@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.Mail;
 using Microsoft.Data.SqlClient;
 
@@ -13,7 +14,8 @@ public sealed class BootstrapInput
         string? tenantName,
         string? adminEmail,
         string? adminPassword,
-        IReadOnlyList<string>? unknownArguments = null)
+        IReadOnlyList<string>? unknownArguments = null,
+        string? companyIds = null)
     {
         EnvironmentName = environmentName;
         Apply = apply;
@@ -22,6 +24,7 @@ public sealed class BootstrapInput
         TenantName = tenantName;
         AdminEmail = adminEmail;
         AdminPassword = adminPassword;
+        CompanyIds = companyIds;
         UnknownArguments = unknownArguments ?? [];
     }
 
@@ -32,6 +35,7 @@ public sealed class BootstrapInput
     public string? TenantName { get; }
     public string? AdminEmail { get; }
     public string? AdminPassword { get; }
+    public string? CompanyIds { get; }
     public IReadOnlyList<string> UnknownArguments { get; }
 }
 
@@ -42,6 +46,7 @@ public sealed class BootstrapOptions
     public required string TenantName { get; init; }
     public required string AdminEmail { get; init; }
     public required string AdminPassword { get; init; }
+    public required IReadOnlyList<int> CompanyIds { get; init; }
     public bool Apply { get; init; }
 }
 
@@ -113,6 +118,8 @@ public static class BootstrapValidator
         if (string.IsNullOrEmpty(input.AdminPassword))
             errors.Add("UCREDIT_BOOTSTRAP_ADMIN_PASSWORD is required.");
 
+        var companyIds = ParseCompanyIds(input.CompanyIds, errors);
+
         if (errors.Count > 0)
             return new BootstrapValidationResult(null, errors);
 
@@ -124,9 +131,54 @@ public static class BootstrapValidator
                 TenantName = tenantName!,
                 AdminEmail = adminEmail!,
                 AdminPassword = input.AdminPassword!,
+                CompanyIds = companyIds!,
                 Apply = true
             },
             errors);
+    }
+
+    private static List<int>? ParseCompanyIds(string? rawValue, List<string> errors)
+    {
+        if (string.IsNullOrWhiteSpace(rawValue))
+        {
+            errors.Add("UCREDIT_BOOTSTRAP_COMPANY_IDS must contain at least one CompanyId.");
+            return null;
+        }
+
+        var values = rawValue.Split(',', StringSplitOptions.None);
+        var companyIds = new List<int>(values.Length);
+        var seen = new HashSet<int>();
+        foreach (var value in values)
+        {
+            var segment = value.Trim();
+            if (segment.Length == 0)
+            {
+                errors.Add("UCREDIT_BOOTSTRAP_COMPANY_IDS contains an empty segment.");
+                continue;
+            }
+
+            if (!int.TryParse(segment, NumberStyles.Integer, CultureInfo.InvariantCulture, out var companyId))
+            {
+                errors.Add("UCREDIT_BOOTSTRAP_COMPANY_IDS contains an invalid CompanyId.");
+                continue;
+            }
+
+            if (companyId is < byte.MinValue or > byte.MaxValue)
+            {
+                errors.Add("UCREDIT_BOOTSTRAP_COMPANY_IDS values must be between 0 and 255.");
+                continue;
+            }
+
+            if (!seen.Add(companyId))
+            {
+                errors.Add("UCREDIT_BOOTSTRAP_COMPANY_IDS must not contain duplicate CompanyIds.");
+                continue;
+            }
+
+            companyIds.Add(companyId);
+        }
+
+        return errors.Count == 0 ? companyIds : null;
     }
 
     private static bool IsValidEmail(string? email)

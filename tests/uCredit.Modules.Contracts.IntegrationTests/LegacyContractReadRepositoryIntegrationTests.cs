@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Options;
+using UCredit.Application.Execution;
 using UCredit.Infrastructure.LegacySql;
 using UCredit.Infrastructure.LegacySql.Contracts;
 
@@ -7,16 +8,14 @@ namespace UCredit.Modules.Contracts.IntegrationTests;
 public sealed class LegacyContractReadRepositoryIntegrationTests
 {
     public static bool HasReadConnection => HasValue("LegacySql__ReadConnectionString");
+    public static bool HasCompanyScope => HasValue("UCREDIT_TEST_COMPANY_IDS");
 
-    public static bool HasContractTestData => HasReadConnection && HasValue("UCREDIT_TEST_CONTRACT");
+    public static bool HasContractTestData => HasReadConnection && HasCompanyScope && HasValue("UCREDIT_TEST_CONTRACT");
+    public static bool HasRfcTestData => HasReadConnection && HasCompanyScope && HasValue("UCREDIT_TEST_RFC");
+    public static bool HasPersonNamePrefixTestData => HasReadConnection && HasCompanyScope && HasValue("UCREDIT_TEST_PERSON_NAME_PREFIX");
+    public static bool HasVinTestData => HasReadConnection && HasCompanyScope && HasValue("UCREDIT_TEST_VIN");
 
-    public static bool HasRfcTestData => HasReadConnection && HasValue("UCREDIT_TEST_RFC");
-
-    public static bool HasPersonNamePrefixTestData => HasReadConnection && HasValue("UCREDIT_TEST_PERSON_NAME_PREFIX");
-
-    public static bool HasVinTestData => HasReadConnection && HasValue("UCREDIT_TEST_VIN");
-
-    [Fact(SkipUnless = nameof(HasContractTestData), Skip = "Set LegacySql__ReadConnectionString and UCREDIT_TEST_CONTRACT from secure test configuration.")]
+    [Fact(SkipUnless = nameof(HasContractTestData), Skip = "Set LegacySql__ReadConnectionString, UCREDIT_TEST_COMPANY_IDS and UCREDIT_TEST_CONTRACT from secure test configuration.")]
     public async Task GetByNumberAsyncReturnsExactConfiguredContract()
     {
         var contractNumber = GetRequiredValue("UCREDIT_TEST_CONTRACT");
@@ -26,7 +25,7 @@ public sealed class LegacyContractReadRepositoryIntegrationTests
         Assert.Equal(contractNumber, result.ContractNumber);
     }
 
-    [Fact(SkipUnless = nameof(HasRfcTestData), Skip = "Set LegacySql__ReadConnectionString and UCREDIT_TEST_RFC from secure test configuration.")]
+    [Fact(SkipUnless = nameof(HasRfcTestData), Skip = "Set LegacySql__ReadConnectionString, UCREDIT_TEST_COMPANY_IDS and UCREDIT_TEST_RFC from secure test configuration.")]
     public async Task SearchAsyncFindsContractsByExactRfc()
     {
         var result = await CreateRepository().SearchAsync(
@@ -36,7 +35,7 @@ public sealed class LegacyContractReadRepositoryIntegrationTests
         Assert.NotEmpty(result.Items);
     }
 
-    [Fact(SkipUnless = nameof(HasPersonNamePrefixTestData), Skip = "Set LegacySql__ReadConnectionString and UCREDIT_TEST_PERSON_NAME_PREFIX from secure test configuration.")]
+    [Fact(SkipUnless = nameof(HasPersonNamePrefixTestData), Skip = "Set LegacySql__ReadConnectionString, UCREDIT_TEST_COMPANY_IDS and UCREDIT_TEST_PERSON_NAME_PREFIX from secure test configuration.")]
     public async Task SearchAsyncFindsContractsByPersonNamePrefix()
     {
         var prefix = GetRequiredValue("UCREDIT_TEST_PERSON_NAME_PREFIX");
@@ -46,7 +45,7 @@ public sealed class LegacyContractReadRepositoryIntegrationTests
         Assert.All(result.Items, item => Assert.StartsWith(prefix, item.PersonName, StringComparison.OrdinalIgnoreCase));
     }
 
-    [Fact(SkipUnless = nameof(HasVinTestData), Skip = "Set LegacySql__ReadConnectionString and UCREDIT_TEST_VIN from secure test configuration.")]
+    [Fact(SkipUnless = nameof(HasVinTestData), Skip = "Set LegacySql__ReadConnectionString, UCREDIT_TEST_COMPANY_IDS and UCREDIT_TEST_VIN from secure test configuration.")]
     public async Task SearchAsyncFindsContractsByExactVin()
     {
         var result = await CreateRepository().SearchAsync(
@@ -56,7 +55,7 @@ public sealed class LegacyContractReadRepositoryIntegrationTests
         Assert.NotEmpty(result.Items);
     }
 
-    [Fact(SkipUnless = nameof(HasPersonNamePrefixTestData), Skip = "Set LegacySql__ReadConnectionString and UCREDIT_TEST_PERSON_NAME_PREFIX from secure test configuration.")]
+    [Fact(SkipUnless = nameof(HasPersonNamePrefixTestData), Skip = "Set LegacySql__ReadConnectionString, UCREDIT_TEST_COMPANY_IDS and UCREDIT_TEST_PERSON_NAME_PREFIX from secure test configuration.")]
     public async Task SearchAsyncReturnsRequestedPage()
     {
         var result = await CreateRepository().SearchAsync(
@@ -69,7 +68,7 @@ public sealed class LegacyContractReadRepositoryIntegrationTests
         Assert.True(result.Total >= result.Items.Count);
     }
 
-    [Fact(SkipUnless = nameof(HasVinTestData), Skip = "Set LegacySql__ReadConnectionString and UCREDIT_TEST_VIN from secure test configuration.")]
+    [Fact(SkipUnless = nameof(HasVinTestData), Skip = "Set LegacySql__ReadConnectionString, UCREDIT_TEST_COMPANY_IDS and UCREDIT_TEST_VIN from secure test configuration.")]
     public async Task SearchAsyncDoesNotReturnDuplicateContractsForVin()
     {
         var result = await CreateRepository().SearchAsync(
@@ -87,8 +86,17 @@ public sealed class LegacyContractReadRepositoryIntegrationTests
             ReadConnectionString = GetRequiredValue("LegacySql__ReadConnectionString"),
         });
 
-        return new LegacyContractReadRepository(options);
+        return new LegacyContractReadRepository(
+            options,
+            new ConfiguredExecutionTenantContext(ParseCompanyIds()));
     }
+
+    private static int[] ParseCompanyIds() =>
+        GetRequiredValue("UCREDIT_TEST_COMPANY_IDS")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(value => int.Parse(value, System.Globalization.CultureInfo.InvariantCulture))
+            .Distinct()
+            .ToArray();
 
     private static UCredit.Modules.Contracts.Contracts.ContractSearchCriteria CreateCriteria(
         string? rfc = null,
@@ -104,4 +112,14 @@ public sealed class LegacyContractReadRepositoryIntegrationTests
     private static string GetRequiredValue(string variableName) =>
         Environment.GetEnvironmentVariable(variableName)
         ?? throw new InvalidOperationException($"Required test variable '{variableName}' is not configured.");
+
+    private sealed class ConfiguredExecutionTenantContext(IReadOnlyList<int> companyIds) : IExecutionTenantContext
+    {
+        public Task<ExecutionTenant?> GetAsync(CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult<ExecutionTenant?>(
+                new ExecutionTenant(Guid.Empty, "integration-test", companyIds));
+        }
+    }
 }

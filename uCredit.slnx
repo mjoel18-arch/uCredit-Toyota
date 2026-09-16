@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/uCredit.Api/uCredit.Api.csproj" />
+    <Project Path="src/uCredit.Application/uCredit.Application.csproj" />
     <Project Path="src/uCredit.Infrastructure.LegacySql/uCredit.Infrastructure.LegacySql.csproj" />
     <Project Path="src/uCredit.Infrastructure.Identity/uCredit.Infrastructure.Identity.csproj" />
     <Project Path="src/uCredit.Modules.Branding/uCredit.Modules.Branding.csproj" />

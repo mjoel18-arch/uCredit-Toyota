@@ -15,6 +15,7 @@ public interface IIdentityMigrationReadiness
 public sealed class EfIdentityMigrationReadiness : IIdentityMigrationReadiness
 {
     public const string InitialIdentityMigrationName = "InitialIdentity";
+    public const string AddTenantLegacyCompanyScopeMigrationName = "AddTenantLegacyCompanyScope";
 
     public async Task EnsureInitialIdentityAppliedAsync(
         IdentityDbContext context,
@@ -38,8 +39,17 @@ public sealed class EfIdentityMigrationReadiness : IIdentityMigrationReadiness
 
         if (!appliedMigrations.Any(IsInitialIdentityMigration))
             throw new BootstrapException("InitialIdentity must already be applied to the Identity database.");
+
+        if (!appliedMigrations.Any(IsTenantLegacyCompanyScopeMigration))
+        {
+            throw new BootstrapException(
+                "AddTenantLegacyCompanyScope must already be applied to the Identity database.");
+        }
     }
 
     private static bool IsInitialIdentityMigration(string migrationId) =>
         migrationId.EndsWith($"_{InitialIdentityMigrationName}", StringComparison.Ordinal);
+
+    private static bool IsTenantLegacyCompanyScopeMigration(string migrationId) =>
+        migrationId.EndsWith($"_{AddTenantLegacyCompanyScopeMigrationName}", StringComparison.Ordinal);
 }

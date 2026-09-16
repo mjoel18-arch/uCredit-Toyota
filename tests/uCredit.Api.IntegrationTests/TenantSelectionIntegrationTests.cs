@@ -22,7 +22,7 @@ public sealed class TenantSelectionIntegrationTests(TestApiFactory factory)
     }
 
     [Fact]
-    public async Task MeReturnsAllActiveMembershipsWithoutInternalIdentityFields()
+    public async Task MeReturnsOnlyTheDeploymentTenantMembership()
     {
         using var client = CreateClient("multiple-memberships");
         var response = await client.GetAsync("/api/v1/auth/me", TestContext.Current.CancellationToken);
@@ -30,7 +30,7 @@ public sealed class TenantSelectionIntegrationTests(TestApiFactory factory)
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains("TENANT-A", json, StringComparison.Ordinal);
-        Assert.Contains("TENANT-B", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("TENANT-B", json, StringComparison.Ordinal);
         Assert.DoesNotContain("passwordHash", json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("securityStamp", json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("connectionString", json, StringComparison.OrdinalIgnoreCase);
@@ -38,16 +38,16 @@ public sealed class TenantSelectionIntegrationTests(TestApiFactory factory)
     }
 
     [Fact]
-    public async Task SelectTenantWithMultipleMembershipsUsesOnlySelectedTenantPermissions()
+    public async Task SelectTenantWithMultipleMembershipsUsesOnlyDeploymentTenantPermissions()
     {
-        var response = await SelectTenantAsync("multiple-memberships", "TENANT-B");
+        var response = await SelectTenantAsync("multiple-memberships", "TENANT-A");
         var body = await response.Content.ReadFromJsonAsync<TenantSelectionResponse>(TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.NotNull(body);
-        Assert.Equal("TENANT-B", body.TenantCode);
-        Assert.Equal(["contracts.write"], body.Permissions);
-        Assert.DoesNotContain("contracts.read", body.Permissions);
+        Assert.Equal("TENANT-A", body.TenantCode);
+        Assert.Equal(["contracts.read"], body.Permissions);
+        Assert.DoesNotContain("contracts.write", body.Permissions);
     }
 
     [Fact]
@@ -83,17 +83,17 @@ public sealed class TenantSelectionIntegrationTests(TestApiFactory factory)
     }
 
     [Fact]
-    public async Task ChangingTenantReplacesPreviousPermissions()
+    public async Task ChangingTenantToAnotherTenantIsRejectedByDeployment()
     {
         await SelectTenantAsync("change-tenant", "TENANT-A");
         var response = await SelectTenantAsync("change-tenant", "TENANT-B");
         var issuer = factory.Services.GetRequiredService<FakeTenantCookieIssuer>();
         var claims = issuer.GetIssuedClaims(TestIdentityData.ChangeTenantUserId);
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Contains(claims, claim => claim.Type == TenantClaimTypes.Code && claim.Value == "TENANT-B");
-        Assert.Contains(claims, claim => claim.Type == "permission" && claim.Value == "contracts.write");
-        Assert.DoesNotContain(claims, claim => claim.Type == "permission" && claim.Value == "contracts.read");
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Contains(claims, claim => claim.Type == TenantClaimTypes.Code && claim.Value == "TENANT-A");
+        Assert.Contains(claims, claim => claim.Type == "permission" && claim.Value == "contracts.read");
+        Assert.DoesNotContain(claims, claim => claim.Type == "permission" && claim.Value == "contracts.write");
     }
 
     [Fact]

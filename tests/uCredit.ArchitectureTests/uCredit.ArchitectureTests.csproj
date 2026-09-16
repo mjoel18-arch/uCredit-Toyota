@@ -9,6 +9,7 @@
     <PackageReference Include="xunit.runner.visualstudio" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="../../src/uCredit.Application/uCredit.Application.csproj" />
     <ProjectReference Include="../../src/uCredit.Infrastructure.Identity/uCredit.Infrastructure.Identity.csproj" />
     <ProjectReference Include="../../src/uCredit.Modules.Contracts/uCredit.Modules.Contracts.csproj" />
     <ProjectReference Include="../../src/uCredit.Infrastructure.LegacySql/uCredit.Infrastructure.LegacySql.csproj" />

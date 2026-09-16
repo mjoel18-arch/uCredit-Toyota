@@ -6,4 +6,5 @@ public sealed class Tenant
     public string Name { get; set; } = string.Empty;
     public bool IsActive { get; set; } = true;
     public ICollection<UserTenantMembership> Memberships { get; } = new List<UserTenantMembership>();
+    public ICollection<TenantLegacyCompanyScope> LegacyCompanyScopes { get; } = new List<TenantLegacyCompanyScope>();
 }

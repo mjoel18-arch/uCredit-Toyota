@@ -2,6 +2,7 @@ using System.Data;
 using Dapper;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Options;
+using UCredit.Application.Execution;
 using UCredit.Modules.Contracts.Contracts;
 
 namespace UCredit.Infrastructure.LegacySql.Contracts;
@@ -24,8 +25,10 @@ internal sealed class LegacyContractSummaryRow
     public string? ModifiedBy { get; set; }
     public DateTime? ModifiedAt { get; set; }
 }
+
 public sealed class LegacyContractReadRepository(
-    IOptions<LegacySqlOptions> options) : IContractReadRepository
+    IOptions<LegacySqlOptions> options,
+    IExecutionTenantContext executionTenantContext) : IContractReadRepository
 {
     private static readonly Dictionary<ContractSort, string> SortExpressions =
         new Dictionary<ContractSort, string>
@@ -37,6 +40,7 @@ public sealed class LegacyContractReadRepository(
         };
 
     private readonly LegacySqlOptions _options = options.Value;
+    private readonly IExecutionTenantContext _executionTenantContext = executionTenantContext;
 
     public async Task<PagedResult<ContractSummary>> SearchAsync(
         ContractSearchCriteria criteria,
@@ -50,10 +54,11 @@ public sealed class LegacyContractReadRepository(
                 nameof(criteria));
         }
 
+        var executionTenant = await GetExecutionTenantAsync(cancellationToken);
         EnsureConfigured();
 
-        var parameters = CreateParameters(criteria);
-        var predicates = CreatePredicates(criteria);
+        var parameters = CreateParameters(criteria, executionTenant.AllowedCompanyIds);
+        var predicates = CreatePredicates(criteria, executionTenant.AllowedCompanyIds);
         var sortExpression = SortExpressions[criteria.Sort];
         var firstRow = ((long)criteria.Page - 1) * criteria.PageSize + 1;
         var lastRow = (long)criteria.Page * criteria.PageSize;
@@ -74,7 +79,7 @@ public sealed class LegacyContractReadRepository(
             """;
 
         var whereClause = $"WHERE {string.Join(" AND ", predicates)}";
-        var countSql = CreateCountSql(criteria);
+        var countSql = CreateCountSql(criteria, executionTenant.AllowedCompanyIds);
         var pageSql = $"""
             WITH RankedContracts AS
             (
@@ -143,42 +148,15 @@ public sealed class LegacyContractReadRepository(
         string contractNumber,
         CancellationToken cancellationToken = default)
     {
-        const string sql = """
-            SELECT TOP (1)
-                C.CTO_FL_CVE AS ContractNumber,
-                C.PNA_FL_PERSONA AS PersonId,
-                P.PNA_DS_NOMBRE AS PersonName,
-                C.TOP_CL_CVE AS OperationTypeCode,
-                O.TOP_DS_DESCRIPCION AS OperationTypeName,
-                C.DMO_FL_CVE AS AddressId,
-                C.CTO_NO_MTO_FINANCIAR AS FinancedAmount,
-                C.CTO_NO_SALDO AS OutstandingBalance,
-                C.CTO_FE_SOL_DESEMBOLSO AS DisbursementDate,
-                C.CTO_FE_PRIMER_PAGO AS FirstPaymentDate,
-                C.CTO_FE_ULTPAGO AS LastPaymentDate,
-                CONVERT(INT, C.CTO_FG_STATUS) AS StatusCode,
-                S.PAR_DS_DESCRIPCION AS StatusName,
-                U.USR_DS_NOMBRE AS ModifiedBy,
-                C.CTO_FE_ULTMOD AS ModifiedAt
-            FROM dbo.KCONTRATO AS C
-            INNER JOIN dbo.CPERSONA AS P
-                ON P.PNA_FL_PERSONA = C.PNA_FL_PERSONA
-            INNER JOIN dbo.KTOPERACION AS O
-                ON O.TOP_CL_CVE = C.TOP_CL_CVE
-            INNER JOIN dbo.CPARAMETRO AS S
-                ON S.PAR_FL_CVE = 33
-                AND S.PAR_CL_VALOR = C.CTO_FG_STATUS
-            LEFT JOIN dbo.CUSUARIO AS U
-                ON U.USR_CL_CVE = C.USR_CL_CVE
-            WHERE C.CTO_FL_CVE = @ContractNumber;
-            """;
-
+        var executionTenant = await GetExecutionTenantAsync(cancellationToken);
         EnsureConfigured();
+
+        var sql = CreateGetByNumberSql();
 
         await using var connection = new SqlConnection(_options.ReadConnectionString);
         var command = new CommandDefinition(
             sql,
-            new { ContractNumber = contractNumber.Trim() },
+            CreateContractParameters(contractNumber, executionTenant.AllowedCompanyIds),
             commandTimeout: _options.CommandTimeoutSeconds,
             commandType: CommandType.Text,
             cancellationToken: cancellationToken);
@@ -187,9 +165,42 @@ public sealed class LegacyContractReadRepository(
         return row is null ? null : MapRow(row);
     }
 
-    internal static string CreateCountSql(ContractSearchCriteria criteria)
+    internal static string CreateGetByNumberSql() => """
+        SELECT TOP (1)
+            C.CTO_FL_CVE AS ContractNumber,
+            C.PNA_FL_PERSONA AS PersonId,
+            P.PNA_DS_NOMBRE AS PersonName,
+            C.TOP_CL_CVE AS OperationTypeCode,
+            O.TOP_DS_DESCRIPCION AS OperationTypeName,
+            C.DMO_FL_CVE AS AddressId,
+            C.CTO_NO_MTO_FINANCIAR AS FinancedAmount,
+            C.CTO_NO_SALDO AS OutstandingBalance,
+            C.CTO_FE_SOL_DESEMBOLSO AS DisbursementDate,
+            C.CTO_FE_PRIMER_PAGO AS FirstPaymentDate,
+            C.CTO_FE_ULTPAGO AS LastPaymentDate,
+            CONVERT(INT, C.CTO_FG_STATUS) AS StatusCode,
+            S.PAR_DS_DESCRIPCION AS StatusName,
+            U.USR_DS_NOMBRE AS ModifiedBy,
+            C.CTO_FE_ULTMOD AS ModifiedAt
+        FROM dbo.KCONTRATO AS C
+        INNER JOIN dbo.CPERSONA AS P
+            ON P.PNA_FL_PERSONA = C.PNA_FL_PERSONA
+        INNER JOIN dbo.KTOPERACION AS O
+            ON O.TOP_CL_CVE = C.TOP_CL_CVE
+        INNER JOIN dbo.CPARAMETRO AS S
+            ON S.PAR_FL_CVE = 33
+            AND S.PAR_CL_VALOR = C.CTO_FG_STATUS
+        LEFT JOIN dbo.CUSUARIO AS U
+            ON U.USR_CL_CVE = C.USR_CL_CVE
+        WHERE C.CTO_FL_CVE = @ContractNumber
+          AND C.EMP_FL_CVE IN @AllowedCompanyIds;
+        """;
+
+    internal static string CreateCountSql(
+        ContractSearchCriteria criteria,
+        IReadOnlyCollection<int> allowedCompanyIds)
     {
-        var predicates = CreatePredicates(criteria);
+        var predicates = CreatePredicates(criteria, allowedCompanyIds);
         var whereClause = $"WHERE {string.Join(" AND ", predicates)}";
         const string countFromClause = """
             FROM dbo.KCONTRATO AS C
@@ -203,6 +214,7 @@ public sealed class LegacyContractReadRepository(
             {whereClause};
             """;
     }
+
     internal static ContractSummary MapRow(LegacyContractSummaryRow row)
     {
         return new ContractSummary(
@@ -226,7 +238,6 @@ public sealed class LegacyContractReadRepository(
     private static DateOnly? ToDateOnly(DateTime? value) =>
         value is null ? null : DateOnly.FromDateTime(value.Value);
 
-    // Legacy datetime has no offset; this adapter treats it as UTC at the boundary.
     private static DateTimeOffset? ToDateTimeOffset(DateTime? value) =>
         value is null ? null : new DateTimeOffset(DateTime.SpecifyKind(value.Value, DateTimeKind.Utc));
 
@@ -236,9 +247,14 @@ public sealed class LegacyContractReadRepository(
 
     private static string Require(string? value, string fieldName) =>
         value ?? throw new InvalidOperationException($"Legacy contract row requires '{fieldName}'.");
-    internal static DynamicParameters CreateParameters(ContractSearchCriteria criteria)
+
+    internal static DynamicParameters CreateParameters(
+        ContractSearchCriteria criteria,
+        IReadOnlyCollection<int> allowedCompanyIds)
     {
         var parameters = new DynamicParameters();
+        parameters.Add("AllowedCompanyIds", allowedCompanyIds.Distinct().ToArray());
+
         if (!string.IsNullOrWhiteSpace(criteria.ContractNumber))
         {
             parameters.Add("ContractNumber", criteria.ContractNumber.Trim(), DbType.String, size: 15);
@@ -253,20 +269,16 @@ public sealed class LegacyContractReadRepository(
         {
             parameters.Add("Rfc", criteria.Rfc.Trim(), DbType.AnsiString, size: 13);
         }
+
         if (!string.IsNullOrWhiteSpace(criteria.PersonName))
         {
             parameters.Add("PersonNamePrefix", criteria.PersonName.Trim() + "%", DbType.AnsiString, size: 200);
         }
 
         if (!string.IsNullOrWhiteSpace(criteria.Vin))
-		{
-			parameters.Add(
-				"Vin",
-				criteria.Vin.Trim(),
-				DbType.String,
-				size: 20);
-		}
-
+        {
+            parameters.Add("Vin", criteria.Vin.Trim(), DbType.String, size: 20);
+        }
 
         if (!string.IsNullOrWhiteSpace(criteria.OperationType))
         {
@@ -281,9 +293,12 @@ public sealed class LegacyContractReadRepository(
         return parameters;
     }
 
-    internal static List<string> CreatePredicates(ContractSearchCriteria criteria)
+    internal static List<string> CreatePredicates(
+        ContractSearchCriteria criteria,
+        IReadOnlyCollection<int> allowedCompanyIds)
     {
-        var predicates = new List<string>();
+        var predicates = new List<string> { "C.EMP_FL_CVE IN @AllowedCompanyIds" };
+
         if (!string.IsNullOrWhiteSpace(criteria.ContractNumber))
         {
             predicates.Add("C.CTO_FL_CVE = @ContractNumber");
@@ -298,30 +313,30 @@ public sealed class LegacyContractReadRepository(
         {
             predicates.Add("P.PNA_CL_RFC = @Rfc");
         }
+
         if (!string.IsNullOrWhiteSpace(criteria.PersonName))
         {
             predicates.Add("P.PNA_DS_NOMBRE LIKE @PersonNamePrefix");
         }
 
         if (!string.IsNullOrWhiteSpace(criteria.Vin))
-		{
-			predicates.Add(
-				"""
-				EXISTS
-				(
-					SELECT 1
-					FROM dbo.KPRODUCTO_FACTURA AS KPF
-					INNER JOIN dbo.KCARAC_PROD_FACT AS KCF
-						ON KCF.FAC_FL_CVE = KPF.FAC_FL_CVE
-					   AND KCF.PRD_FL_CVE = KPF.PRD_FL_CVE
-					   AND KCF.KPF_NO_CONSECUTIVO = KPF.KPF_NO_CONSECUTIVO
-					WHERE KPF.CTO_FL_CVE = C.CTO_FL_CVE
-					  AND KCF.CAR_FL_CVE = 1
-					  AND KCF.CFP_DS_CARACT = @Vin
-				)
-				""");
-		}
-
+        {
+            predicates.Add(
+                """
+                EXISTS
+                (
+                    SELECT 1
+                    FROM dbo.KPRODUCTO_FACTURA AS KPF
+                    INNER JOIN dbo.KCARAC_PROD_FACT AS KCF
+                        ON KCF.FAC_FL_CVE = KPF.FAC_FL_CVE
+                       AND KCF.PRD_FL_CVE = KPF.PRD_FL_CVE
+                       AND KCF.KPF_NO_CONSECUTIVO = KPF.KPF_NO_CONSECUTIVO
+                    WHERE KPF.CTO_FL_CVE = C.CTO_FL_CVE
+                      AND KCF.CAR_FL_CVE = 1
+                      AND KCF.CFP_DS_CARACT = @Vin
+                )
+                """);
+        }
 
         if (!string.IsNullOrWhiteSpace(criteria.OperationType))
         {
@@ -334,6 +349,27 @@ public sealed class LegacyContractReadRepository(
         }
 
         return predicates;
+    }
+
+    private async Task<ExecutionTenant> GetExecutionTenantAsync(CancellationToken cancellationToken)
+    {
+        var executionTenant = await _executionTenantContext.GetAsync(cancellationToken);
+        if (executionTenant is null || executionTenant.AllowedCompanyIds.Count == 0)
+        {
+            throw new InvalidOperationException("No active tenant company scope is available for the Legacy query.");
+        }
+
+        return executionTenant;
+    }
+
+    private static DynamicParameters CreateContractParameters(
+        string contractNumber,
+        IReadOnlyCollection<int> allowedCompanyIds)
+    {
+        var parameters = new DynamicParameters();
+        parameters.Add("ContractNumber", contractNumber.Trim(), DbType.String, size: 15);
+        parameters.Add("AllowedCompanyIds", allowedCompanyIds.Distinct().ToArray());
+        return parameters;
     }
 
     private void EnsureConfigured()

@@ -64,6 +64,36 @@ public sealed class BootstrapValidatorTests
     }
 
     [Fact]
+    public void AcceptsOneAndMultipleCompanyIds()
+    {
+        var one = BootstrapValidator.Validate(CreateInput(companyIds: "1"));
+        var several = BootstrapValidator.Validate(CreateInput(companyIds: "1, 2,255"));
+
+        Assert.True(one.IsValid);
+        Assert.Equal([1], one.Options!.CompanyIds);
+        Assert.True(several.IsValid);
+        Assert.Equal([1, 2, 255], several.Options!.CompanyIds);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData(",1")]
+    [InlineData("1,")]
+    [InlineData("1,,2")]
+    [InlineData("one")]
+    [InlineData("-1")]
+    [InlineData("256")]
+    [InlineData("1,1")]
+    public void RejectsInvalidCompanyIds(string? companyIds)
+    {
+        var result = BootstrapValidator.Validate(CreateInput(companyIds: companyIds));
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, error => error.Contains("COMPANY_IDS", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void ValidationAndOutputDoNotExposeSecrets()
     {
         const string password = "OnlyTest-Password-123!";
@@ -94,8 +124,7 @@ public sealed class BootstrapValidatorTests
         string tenantCode = "DEV",
         string tenantName = "Development tenant",
         string adminEmail = "admin@example.test",
-        string adminPassword = "OnlyTest-Password-123!") =>
-        new(environmentName, apply, connectionString, tenantCode, tenantName, adminEmail, adminPassword);
+        string adminPassword = "OnlyTest-Password-123!",
+        string? companyIds = "1") =>
+        new(environmentName, apply, connectionString, tenantCode, tenantName, adminEmail, adminPassword, companyIds: companyIds);
 }
-
-

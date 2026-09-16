@@ -11,7 +11,7 @@ namespace UCredit.IdentityAdmin.UnitTests;
 public sealed class IdentityBootstrapperTests
 {
     [Fact]
-    public async Task ProvisioningIsIdempotent()
+    public async Task ProvisioningIsIdempotentAndCreatesOneCompanyScope()
     {
         using var provider = CreateProvider();
         using var scope = provider.CreateScope();
@@ -23,15 +23,73 @@ public sealed class IdentityBootstrapperTests
         var first = await bootstrapper.ExecuteAsync(options, context, userManager, TestContext.Current.CancellationToken);
         var second = await bootstrapper.ExecuteAsync(options, context, userManager, TestContext.Current.CancellationToken);
 
-        Assert.Equal(5, first.Actions.Count);
+        Assert.Equal(6, first.Actions.Count);
         Assert.All(first.Actions, action => Assert.True(action.Created));
-        Assert.Equal(5, second.Actions.Count);
+        Assert.Equal(6, second.Actions.Count);
         Assert.All(second.Actions, action => Assert.False(action.Created));
         Assert.Single(await context.Tenants.ToListAsync(TestContext.Current.CancellationToken));
         Assert.Single(await context.Permissions.ToListAsync(TestContext.Current.CancellationToken));
         Assert.Single(await context.Users.ToListAsync(TestContext.Current.CancellationToken));
         Assert.Single(await context.UserTenantMemberships.ToListAsync(TestContext.Current.CancellationToken));
         Assert.Single(await context.MembershipPermissions.ToListAsync(TestContext.Current.CancellationToken));
+        var companyScope = Assert.Single(await context.TenantLegacyCompanyScopes.ToListAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(1, companyScope.CompanyId);
+        Assert.True(companyScope.IsActive);
+    }
+
+    [Fact]
+    public async Task ProvisioningCreatesSeveralCompanyScopesWithoutRemovingUnlistedScopes()
+    {
+        using var provider = CreateProvider();
+        using var scope = provider.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var bootstrapper = new IdentityBootstrapper(new AlwaysReadyMigration());
+
+        await bootstrapper.ExecuteAsync(CreateOptions(companyIds: [1]), context, userManager, TestContext.Current.CancellationToken);
+        var tenant = await context.Tenants.SingleAsync(TestContext.Current.CancellationToken);
+        context.TenantLegacyCompanyScopes.Add(new TenantLegacyCompanyScope
+        {
+            TenantId = tenant.Id,
+            Tenant = tenant,
+            CompanyId = 9,
+            IsActive = true
+        });
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var result = await bootstrapper.ExecuteAsync(
+            CreateOptions(companyIds: [1, 2, 3]),
+            context,
+            userManager,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(4, await context.TenantLegacyCompanyScopes.CountAsync(TestContext.Current.CancellationToken));
+        Assert.Contains(result.Actions, action => action.ObjectType == "TenantLegacyCompanyScope" && action.NumericIdentifier == 2 && action.Created);
+        Assert.Contains(result.Actions, action => action.ObjectType == "TenantLegacyCompanyScope" && action.NumericIdentifier == 3 && action.Created);
+        Assert.Contains(await context.TenantLegacyCompanyScopes.Select(item => item.CompanyId).ToListAsync(TestContext.Current.CancellationToken), companyId => companyId == 9);
+    }
+
+    [Fact]
+    public async Task ProvisioningReactivatesAnExistingInactiveScope()
+    {
+        using var provider = CreateProvider();
+        using var scope = provider.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var bootstrapper = new IdentityBootstrapper(new AlwaysReadyMigration());
+
+        await bootstrapper.ExecuteAsync(CreateOptions(), context, userManager, TestContext.Current.CancellationToken);
+        var companyScope = Assert.Single(await context.TenantLegacyCompanyScopes.ToListAsync(TestContext.Current.CancellationToken));
+        companyScope.IsActive = false;
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var result = await bootstrapper.ExecuteAsync(CreateOptions(), context, userManager, TestContext.Current.CancellationToken);
+
+        var action = Assert.Single(result.Actions, item => item.ObjectType == "TenantLegacyCompanyScope");
+        Assert.False(action.Created);
+        Assert.True(action.Reactivated);
+        Assert.True((await context.TenantLegacyCompanyScopes.SingleAsync(TestContext.Current.CancellationToken)).IsActive);
+        Assert.Contains("reactivated", BootstrapOutput.Format(action), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -48,7 +106,7 @@ public sealed class IdentityBootstrapperTests
         var originalHash = existingUser!.PasswordHash;
 
         await bootstrapper.ExecuteAsync(
-            CreateOptions("A-Different-Test-Password-123!"),
+            CreateOptions(password: "A-Different-Test-Password-123!"),
             context,
             userManager,
             TestContext.Current.CancellationToken);
@@ -64,10 +122,26 @@ public sealed class IdentityBootstrapperTests
         using var scope = provider.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
         var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
-        var bootstrapper = new IdentityBootstrapper(new MigrationNotReady());
+        var bootstrapper = new IdentityBootstrapper(new MigrationNotReady("InitialIdentity"));
 
         await Assert.ThrowsAsync<BootstrapException>(() =>
             bootstrapper.ExecuteAsync(CreateOptions(), context, userManager, TestContext.Current.CancellationToken));
+        Assert.Empty(await context.Tenants.ToListAsync(TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task RefusesToProvisionWhenCompanyScopeMigrationIsNotApplied()
+    {
+        using var provider = CreateProvider();
+        using var scope = provider.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var bootstrapper = new IdentityBootstrapper(new MigrationNotReady("AddTenantLegacyCompanyScope"));
+
+        var exception = await Assert.ThrowsAsync<BootstrapException>(() =>
+            bootstrapper.ExecuteAsync(CreateOptions(), context, userManager, TestContext.Current.CancellationToken));
+
+        Assert.Contains("AddTenantLegacyCompanyScope", exception.Message, StringComparison.Ordinal);
         Assert.Empty(await context.Tenants.ToListAsync(TestContext.Current.CancellationToken));
     }
 
@@ -87,14 +161,17 @@ public sealed class IdentityBootstrapperTests
         return services.BuildServiceProvider();
     }
 
-    private static BootstrapOptions CreateOptions(string password = "OnlyTest-Password-123!") => new()
+    private static BootstrapOptions CreateOptions(
+        string password = "OnlyTest-Password-123!",
+        IReadOnlyList<int>? companyIds = null) => new()
     {
         Apply = true,
         IdentityConnectionString = "Server=(local);Database=uCreditIdentity_Dev;Trusted_Connection=True;",
         TenantCode = "DEV",
         TenantName = "Development tenant",
         AdminEmail = "admin@example.test",
-        AdminPassword = password
+        AdminPassword = password,
+        CompanyIds = companyIds ?? [1]
     };
 
     private sealed class AlwaysReadyMigration : IIdentityMigrationReadiness
@@ -104,13 +181,11 @@ public sealed class IdentityBootstrapperTests
             CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
-    private sealed class MigrationNotReady : IIdentityMigrationReadiness
+    private sealed class MigrationNotReady(string migrationName) : IIdentityMigrationReadiness
     {
         public Task EnsureInitialIdentityAppliedAsync(
             IdentityDbContext context,
             CancellationToken cancellationToken = default) =>
-            throw new BootstrapException("InitialIdentity must already be applied to the Identity database.");
+            throw new BootstrapException($"{migrationName} must already be applied to the Identity database.");
     }
 }
-
-

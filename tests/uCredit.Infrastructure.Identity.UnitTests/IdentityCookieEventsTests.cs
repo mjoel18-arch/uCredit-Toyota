@@ -18,7 +18,7 @@ public sealed class IdentityCookieEventsTests
         var store = new MutableTenantMembershipStore { MembershipActive = false };
         var (context, authentication) = CreateContext(SelectedPrincipal(store));
 
-        await new IdentityCookieEvents(store).ValidatePrincipal(context);
+        await new IdentityCookieEvents(store, new DeploymentTenantPolicy("TENANT-A")).ValidatePrincipal(context);
 
         Assert.Null(context.Principal);
         Assert.True(authentication.SignedOut);
@@ -30,7 +30,7 @@ public sealed class IdentityCookieEventsTests
         var store = new MutableTenantMembershipStore { TenantActive = false };
         var (context, authentication) = CreateContext(SelectedPrincipal(store));
 
-        await new IdentityCookieEvents(store).ValidatePrincipal(context);
+        await new IdentityCookieEvents(store, new DeploymentTenantPolicy("TENANT-A")).ValidatePrincipal(context);
 
         Assert.Null(context.Principal);
         Assert.True(authentication.SignedOut);
@@ -42,7 +42,7 @@ public sealed class IdentityCookieEventsTests
         var store = new MutableTenantMembershipStore { UserActive = false };
         var (context, authentication) = CreateContext(SelectedPrincipal(store));
 
-        await new IdentityCookieEvents(store).ValidatePrincipal(context);
+        await new IdentityCookieEvents(store, new DeploymentTenantPolicy("TENANT-A")).ValidatePrincipal(context);
 
         Assert.Null(context.Principal);
         Assert.True(authentication.SignedOut);
@@ -54,7 +54,7 @@ public sealed class IdentityCookieEventsTests
         var store = new MutableTenantMembershipStore { PermissionCodes = [] };
         var (context, _) = CreateContext(SelectedPrincipal(store, "contracts.read"));
 
-        await new IdentityCookieEvents(store).ValidatePrincipal(context);
+        await new IdentityCookieEvents(store, new DeploymentTenantPolicy("TENANT-A")).ValidatePrincipal(context);
 
         Assert.NotNull(context.Principal);
         Assert.True(context.ShouldRenew);
@@ -67,7 +67,7 @@ public sealed class IdentityCookieEventsTests
         var store = new MutableTenantMembershipStore { PermissionCodes = ["contracts.read"] };
         var (context, _) = CreateContext(SelectedPrincipal(store));
 
-        await new IdentityCookieEvents(store).ValidatePrincipal(context);
+        await new IdentityCookieEvents(store, new DeploymentTenantPolicy("TENANT-A")).ValidatePrincipal(context);
 
         Assert.NotNull(context.Principal);
         Assert.True(context.ShouldRenew);
@@ -80,7 +80,7 @@ public sealed class IdentityCookieEventsTests
         var store = new MutableTenantMembershipStore();
         var (context, _) = CreateContext(UserPrincipal(store.UserId));
 
-        await new IdentityCookieEvents(store).ValidatePrincipal(context);
+        await new IdentityCookieEvents(store, new DeploymentTenantPolicy("TENANT-A")).ValidatePrincipal(context);
 
         Assert.NotNull(context.Principal);
         Assert.DoesNotContain(CurrentPrincipal(context).Claims, claim => claim.Type == "permission");
@@ -93,7 +93,7 @@ public sealed class IdentityCookieEventsTests
         var principal = UserPrincipal(store.UserId, new Claim(TenantClaimTypes.Code, store.TenantCode));
         var (context, authentication) = CreateContext(principal);
 
-        await new IdentityCookieEvents(store).ValidatePrincipal(context);
+        await new IdentityCookieEvents(store, new DeploymentTenantPolicy("TENANT-A")).ValidatePrincipal(context);
 
         Assert.Null(context.Principal);
         Assert.True(authentication.SignedOut);
@@ -109,7 +109,7 @@ public sealed class IdentityCookieEventsTests
             new Claim(TenantClaimTypes.Code, store.TenantCode));
         var (context, authentication) = CreateContext(principal);
 
-        await new IdentityCookieEvents(store).ValidatePrincipal(context);
+        await new IdentityCookieEvents(store, new DeploymentTenantPolicy("TENANT-A")).ValidatePrincipal(context);
 
         Assert.Null(context.Principal);
         Assert.True(authentication.SignedOut);
@@ -122,7 +122,7 @@ public sealed class IdentityCookieEventsTests
         var principal = SelectedPrincipal(store, "contracts.read");
         var (context, _) = CreateContext(principal);
 
-        await new IdentityCookieEvents(store).ValidatePrincipal(context);
+        await new IdentityCookieEvents(store, new DeploymentTenantPolicy("TENANT-A")).ValidatePrincipal(context);
 
         Assert.True(context.ShouldRenew);
         Assert.Contains(CurrentPrincipal(context).Claims, claim => claim.Type == "permission" && claim.Value == "contracts.write");
