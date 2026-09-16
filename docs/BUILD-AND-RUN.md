@@ -146,3 +146,6 @@ El resultado esperado es:
 vite.config.ts recibe command=serve durante npm run dev y command=build durante npm run build. Como el repositorio conserva un vite.config.js generado que puede ser elegido por Vite al usar el comando sin --config, los scripts dev y build fijan explícitamente --config vite.config.ts. No se imprime ninguna ruta de certificado ni contenido de la llave privada.
 
 loadEnv(mode, process.cwd(), '') carga las variables VITE_DEV_HTTPS_CERT y VITE_DEV_HTTPS_KEY para la configuración. Durante serve, la ausencia de cualquiera de las variables, un archivo inexistente, un PEM inválido o un par certificado/llave que no coincida detiene Vite antes de abrir el puerto. server.strictPort también impide cambiar silenciosamente de 5173.
+## Integración continua
+
+`.github/workflows/ci.yml` valida cada Pull Request hacia `main` y cada push a `main` o `feature/**`. Ejecuta en jobs separados el restore, build y test de toda la solución .NET, además de `npm ci`, lint, pruebas y build del frontend con Node.js 22. El workflow sólo usa `contents: read`, cancela ejecuciones obsoletas por referencia y no configura cadenas de conexión, secretos, SQL Server, migraciones, IdentityAdmin ni smoke tests que requieran servicios activos. Las pruebas de integración Legacy se omiten automáticamente mientras no existan variables seguras de prueba.
