@@ -1,7 +1,14 @@
 import { useState, type FormEvent } from 'react'
 import { apiErrorMessage, ApiError } from '../../shared/api/apiClient'
-import { getContractByNumber, searchContracts, type ContractDetail } from '../auth/authApi'
-import { formatAmount, formatCurrency, formatDate, formatText } from './contractFormatting'
+import {
+  getContractAmortization,
+  getContractByNumber,
+  searchContracts,
+  type ContractAmortization,
+  type ContractAmortizationPayment,
+  type ContractDetail,
+} from '../auth/authApi'
+import { formatAmount, formatCurrency, formatDate, formatShortDate, formatText } from './contractFormatting'
 
 type ContractsViewProps = {
   productName: string
@@ -12,6 +19,8 @@ type ContractsViewProps = {
 export function ContractsView({ productName, customerName, onUnauthorized }: ContractsViewProps) {
   const [contractNumber, setContractNumber] = useState('')
   const [detail, setDetail] = useState<ContractDetail | null>(null)
+  const [amortization, setAmortization] = useState<ContractAmortization | null>(null)
+  const [amortizationNotFound, setAmortizationNotFound] = useState(false)
   const [searchCount, setSearchCount] = useState<number | null>(null)
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
@@ -27,6 +36,8 @@ export function ContractsView({ productName, customerName, onUnauthorized }: Con
     setBusy(true)
     setMessage('')
     setDetail(null)
+    setAmortization(null)
+    setAmortizationNotFound(false)
     setSearchCount(null)
 
     try {
@@ -44,7 +55,21 @@ export function ContractsView({ productName, customerName, onUnauthorized }: Con
         return
       }
 
+      let schedule: ContractAmortization | null = null
+      let scheduleNotFound = false
+      try {
+        schedule = await getContractAmortization(requestedNumber)
+      } catch (scheduleError) {
+        if (scheduleError instanceof ApiError && scheduleError.status === 404) {
+          scheduleNotFound = true
+        } else {
+          throw scheduleError
+        }
+      }
+
       setDetail(contract)
+      setAmortization(schedule)
+      setAmortizationNotFound(scheduleNotFound)
       setSearchCount(matchingItems.length)
     } catch (requestError) {
       if (requestError instanceof ApiError && requestError.status === 401) {
@@ -88,6 +113,10 @@ export function ContractsView({ productName, customerName, onUnauthorized }: Con
 
       {message && <div className="notice notice-error" role="alert">{message}</div>}
       {detail && <ContractDetailCard detail={detail} productName={productName} customerName={customerName} searchCount={searchCount} />}
+      {amortization && detail && <AmortizationScheduleCard detail={detail} schedule={amortization} />}
+      {detail && amortizationNotFound && (
+        <div className="notice" role="status">No hay una tabla de amortización tipo 1 disponible para este contrato.</div>
+      )}
     </section>
   )
 }
@@ -138,6 +167,86 @@ function ContractDetailCard({ detail, productName, customerName, searchCount }: 
       </section>
     </article>
   )
+}
+
+function AmortizationScheduleCard({
+  detail,
+  schedule,
+}: {
+  detail: ContractDetail
+  schedule: ContractAmortization
+}) {
+  return (
+    <article className="amortization-card" aria-labelledby="amortization-title">
+      <header className="contract-detail-header">
+        <div>
+          <span className="eyebrow">Consulta de sólo lectura</span>
+          <h3 id="amortization-title">Tabla de amortización</h3>
+        </div>
+        <span className="detail-match">Versión vigente: {schedule.version}</span>
+      </header>
+
+      {schedule.downPayment && (
+        <section className="amortization-down-payment" aria-labelledby="down-payment-title">
+          <h4 id="down-payment-title">Enganche</h4>
+          <dl className="detail-grid">
+            <DetailField label="Pago" value={schedule.downPayment.paymentNumber} />
+            <DetailField label="Monto total" value={formatAmount(schedule.downPayment.totalPayment, detail.currencyCode)} />
+            <DetailField label="Pago con IVA" value={formatAmount(schedule.downPayment.paymentWithIva, detail.currencyCode)} />
+            <DetailField label="Estado" value={translatePaymentStatus(schedule.downPayment.status)} />
+          </dl>
+        </section>
+      )}
+
+      <div className="amortization-table-wrapper">
+        <table className="amortization-table">
+          <caption>Rentas ordinarias del financiamiento</caption>
+          <thead>
+            <tr>
+              <th scope="col">Pago</th>
+              <th scope="col">Periodo</th>
+              <th scope="col">Fecha de exigibilidad</th>
+              <th scope="col">Saldo inicial/base</th>
+              <th scope="col">Saldo insoluto</th>
+              <th scope="col">Amortización</th>
+              <th scope="col">Interés</th>
+              <th scope="col">IVA</th>
+              <th scope="col">Pago sin IVA</th>
+              <th scope="col">Pago con IVA/total</th>
+              <th scope="col">Estado</th>
+            </tr>
+          </thead>
+          <tbody>
+            {schedule.payments.map((payment) => (
+              <AmortizationRow key={payment.paymentNumber} detail={detail} payment={payment} />
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </article>
+  )
+}
+
+function AmortizationRow({ detail, payment }: { detail: ContractDetail; payment: ContractAmortizationPayment }) {
+  return (
+    <tr>
+      <th scope="row">{payment.paymentNumber}</th>
+      <td>{formatShortDate(payment.startDate)} – {formatShortDate(payment.endDate)}</td>
+      <td>{formatShortDate(payment.dueDate)}</td>
+      <td>{formatAmount(payment.calculationBase, detail.currencyCode)}</td>
+      <td>{formatAmount(payment.outstandingBalance, detail.currencyCode)}</td>
+      <td>{formatAmount(payment.amortization, detail.currencyCode)}</td>
+      <td>{formatAmount(payment.interest, detail.currencyCode)}</td>
+      <td>{formatAmount(payment.iva, detail.currencyCode)}</td>
+      <td>{formatAmount(payment.payment, detail.currencyCode)}</td>
+      <td>{formatAmount(payment.totalPayment, detail.currencyCode)}</td>
+      <td>{translatePaymentStatus(payment.status)}</td>
+    </tr>
+  )
+}
+
+function translatePaymentStatus(status: ContractAmortizationPayment['status']): string {
+  return status === 'Generated' ? 'Generada' : 'Pendiente'
 }
 
 function DetailField({ label, value }: { label: string; value: string | number | null | undefined }) {

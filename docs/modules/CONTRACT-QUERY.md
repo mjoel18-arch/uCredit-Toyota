@@ -123,3 +123,25 @@ La consulta usa `LEFT JOIN dbo.CMONEDA AS M ON M.MON_FL_CVE = C.CTO_CL_MONEDA`, 
 - `KCONTRATO.CTO_FE_INICIO` y `CTO_FE_ACTIVACION` se publican como `startDate` y `activationDate`.
 - Los campos `CTO_NO_PLAZO`, `CTO_FE_INICIO` y `CTO_FE_ACTIVACION` aplican fail-fast si Dapper materializa `null`; `originalTerm` y la información de `CMONEDA` permanecen nullable.
 - El `LEFT JOIN` a `CMONEDA` no agrega filas porque `MON_FL_CVE` es PK; el detalle mantiene `TOP (1)` y la búsqueda conserva una fila por contrato.
+
+## Tabla de amortización del financiamiento
+
+### Endpoint
+
+```http
+GET /api/v1/contracts/{contractNumber}/amortization-schedule
+```
+
+El endpoint conserva `.RequireAuthorization("contracts.read")`. Devuelve 404 si el contrato no existe dentro de `AllowedCompanyIds` o si no existe una tabla de amortización tipo 1.
+
+### Regla Legacy y mapeo
+
+La única fuente es `dbo.KTPAGO_CONTRATO`, con validación y alcance mediante `dbo.KCONTRATO`. El adaptador aplica `CTP_CL_TTABLA = 1`, selecciona `MAX(CTP_NO_VERSION)` por contrato y tipo, ordena por `CTP_NO_PAGO ASC` y no agrega filtro por `CTP_FG_GENERADO`.
+
+`CTP_FG_GENERADO` se traduce a `Generated` cuando vale 1 y `Pending` cuando vale 0. `CTP_FE_EXIGIBILIDAD` es la fecha de exigibilidad y las fechas `datetime` se publican como `DateOnly`. La fila `CTP_NO_PAGO = 0` es el enganche opcional; las rentas ordinarias sólo incluyen números mayores que cero. Los importes públicos son `decimal` y se proyectan desde base, saldo posterior, amortización, interés, IVA, pago sin IVA, pago con IVA y total. Los campos `_ORIGINAL` quedan fuera de esta versión.
+
+Las columnas requeridas fallan rápido si Dapper materializa `NULL`, evitando respuestas parciales. El DTO HTTP es explícito y no incluye el identificador Legacy del pago. El frontend muestra versión, enganche condicional y tabla responsive usando la moneda del detalle.
+
+### Cobertura
+
+Las pruebas cubren autorización 401/403/200, 404, versión máxima, tabla tipo 1, ausencia del filtro de generado, parametrización, separación del enganche, pagos positivos, estados, fechas y fail-fast. Las pruebas que requieren una base Legacy de prueba segura quedan omitidas mientras no exista esa conexión; no se usa una base productiva.

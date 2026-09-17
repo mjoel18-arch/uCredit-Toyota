@@ -30,6 +30,7 @@ public sealed class TestApiFactory : WebApplicationFactory<Program>
 
             services.RemoveAll<IContractReadRepository>();
             services.AddSingleton<IContractReadRepository, FakeContractReadRepository>();
+            services.AddSingleton<IContractAmortizationReadRepository, FakeContractAmortizationReadRepository>();
             services.AddSingleton<ITenantMembershipStore, FakeTenantMembershipStore>();
             services.AddSingleton<IDeploymentTenantPolicy>(new DeploymentTenantPolicy("TENANT-A"));
             services.AddSingleton<FakeTenantCookieIssuer>();
@@ -121,6 +122,78 @@ internal sealed class FakeContractReadRepository : IContractReadRepository
                 : null);
 }
 
+internal sealed class FakeContractAmortizationReadRepository : IContractAmortizationReadRepository
+{
+    private static readonly ContractAmortizationSchedule KnownSchedule = new(
+        "CONTRACT-1",
+        1,
+        4,
+        new ContractAmortizationPayment(
+            100,
+            0,
+            4,
+            ContractAmortizationPaymentStatus.Generated,
+            new DateOnly(2025, 1, 1),
+            new DateOnly(2025, 1, 31),
+            new DateOnly(2025, 1, 1),
+            1000m,
+            1000m,
+            1000m,
+            0m,
+            160m,
+            1000m,
+            1160m,
+            1160m),
+        [
+            new ContractAmortizationPayment(
+                101,
+                1,
+                4,
+                ContractAmortizationPaymentStatus.Generated,
+                new DateOnly(2025, 2, 1),
+                new DateOnly(2025, 2, 28),
+                new DateOnly(2025, 2, 1),
+                10000m,
+                9000m,
+                1000m,
+                500m,
+                80m,
+                1500m,
+                1580m,
+                1580m),
+            new ContractAmortizationPayment(
+                102,
+                2,
+                4,
+                ContractAmortizationPaymentStatus.Pending,
+                new DateOnly(2025, 3, 1),
+                new DateOnly(2025, 3, 31),
+                new DateOnly(2025, 3, 1),
+                9000m,
+                8000m,
+                1000m,
+                400m,
+                64m,
+                1400m,
+                1464m,
+                1464m)
+        ]);
+
+    public Task<ContractAmortizationSchedule?> GetScheduleByNumberAsync(
+        string contractNumber,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<ContractAmortizationSchedule?>(
+            contractNumber switch
+            {
+                "CONTRACT-1" => KnownSchedule,
+                "NODOWNPAY-001" => KnownSchedule with
+                {
+                    DownPayment = null,
+                },
+                "NOAMORT-001" => null,
+                _ => null,
+            });
+}
 internal static class TestIdentityData
 {
     public static readonly Guid SingleMembershipUserId = Guid.Parse("00000000-0000-0000-0000-000000000001");

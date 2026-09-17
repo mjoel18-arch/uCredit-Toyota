@@ -17,6 +17,7 @@ public static class DependencyInjection
                 "Command timeout must be between 1 and 300 seconds.");
 
         services.AddScoped<IContractReadRepository, LegacyContractReadRepository>();
+        services.AddScoped<IContractAmortizationReadRepository, LegacyContractAmortizationReadRepository>();
         return services;
     }
 }
