@@ -84,6 +84,12 @@ public sealed class ContractSearchSqlTests
             AddressId = null,
             FinancedAmount = 123.45m,
             OutstandingBalance = 67.89m,
+            CurrencyCode = "MXN",
+            CurrencyName = "PESO MEXICANO",
+            CurrentTerm = 48,
+            OriginalTerm = 60,
+            StartDate = new DateTime(2025, 12, 15),
+            ActivationDate = new DateTime(2025, 12, 20),
             DisbursementDate = new DateTime(2026, 1, 2),
             FirstPaymentDate = null,
             LastPaymentDate = new DateTime(2026, 3, 4),
@@ -100,6 +106,12 @@ public sealed class ContractSearchSqlTests
         Assert.Null(result.AddressId);
         Assert.Equal(123.45m, result.FinancedAmount);
         Assert.Equal(67.89m, result.OutstandingBalance);
+        Assert.Equal("MXN", result.CurrencyCode);
+        Assert.Equal("PESO MEXICANO", result.CurrencyName);
+        Assert.Equal(48, result.CurrentTerm);
+        Assert.Equal(60, result.OriginalTerm);
+        Assert.Equal(new DateOnly(2025, 12, 15), result.StartDate);
+        Assert.Equal(new DateOnly(2025, 12, 20), result.ActivationDate);
         Assert.Equal(new DateOnly(2026, 1, 2), result.DisbursementDate);
         Assert.Null(result.FirstPaymentDate);
         Assert.Equal(new DateOnly(2026, 3, 4), result.LastPaymentDate);
@@ -119,6 +131,9 @@ public sealed class ContractSearchSqlTests
             OperationTypeName = "Operation",
             FinancedAmount = 1m,
             OutstandingBalance = 0m,
+            CurrentTerm = 1,
+            StartDate = new DateTime(2026, 1, 1),
+            ActivationDate = new DateTime(2026, 1, 1),
             StatusCode = 1,
             StatusName = "Active",
         };
@@ -128,6 +143,56 @@ public sealed class ContractSearchSqlTests
         Assert.Contains(nameof(LegacyContractSummaryRow.PersonId), exception.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void LegacyRowPreservesNullableDetailValues()
+    {
+        var row = new LegacyContractSummaryRow
+        {
+            ContractNumber = "CONTRACT-1",
+            PersonId = 42,
+            PersonName = null,
+            OperationTypeCode = null,
+            OperationTypeName = null,
+            FinancedAmount = null,
+            OutstandingBalance = null,
+            CurrentTerm = 1,
+            StartDate = new DateTime(2026, 1, 1),
+            ActivationDate = new DateTime(2026, 1, 1),
+            StatusCode = null,
+            StatusName = null,
+        };
+
+        var result = LegacyContractReadRepository.MapRow(row);
+
+        Assert.Null(result.PersonName);
+        Assert.Null(result.OperationTypeCode);
+        Assert.Null(result.OperationTypeName);
+        Assert.Null(result.FinancedAmount);
+        Assert.Null(result.OutstandingBalance);
+        Assert.Null(result.CurrencyCode);
+        Assert.Null(result.CurrencyName);
+        Assert.Null(result.OriginalTerm);
+        Assert.Null(result.StatusCode);
+        Assert.Null(result.StatusName);
+    }
+    [Fact]
+    public void LegacyRowFailsFastWhenConfirmedRequiredValuesAreNull()
+    {
+        var missingCurrentTerm = CreateValidLegacyRow();
+        missingCurrentTerm.CurrentTerm = null;
+        var currentTermException = Assert.Throws<InvalidOperationException>(() => LegacyContractReadRepository.MapRow(missingCurrentTerm));
+        Assert.Contains(nameof(LegacyContractSummaryRow.CurrentTerm), currentTermException.Message, StringComparison.Ordinal);
+
+        var missingStartDate = CreateValidLegacyRow();
+        missingStartDate.StartDate = null;
+        var startDateException = Assert.Throws<InvalidOperationException>(() => LegacyContractReadRepository.MapRow(missingStartDate));
+        Assert.Contains(nameof(LegacyContractSummaryRow.StartDate), startDateException.Message, StringComparison.Ordinal);
+
+        var missingActivationDate = CreateValidLegacyRow();
+        missingActivationDate.ActivationDate = null;
+        var activationDateException = Assert.Throws<InvalidOperationException>(() => LegacyContractReadRepository.MapRow(missingActivationDate));
+        Assert.Contains(nameof(LegacyContractSummaryRow.ActivationDate), activationDateException.Message, StringComparison.Ordinal);
+    }
     [Fact]
     public void RfcUsesAnsiStringAndLengthMatchingLegacyColumn()
     {
@@ -181,12 +246,38 @@ public sealed class ContractSearchSqlTests
     }
 
     [Fact]
+    public void SearchSqlUsesOptionalCurrencyJoinAndConfirmedDetailColumns()
+    {
+        const string maliciousContractNumber = "CONTRACT' OR 1=1 --";
+        var sql = LegacyContractReadRepository.CreateSearchSql(
+            CreateCriteria(contractNumber: maliciousContractNumber),
+            [1, 2],
+            firstRow: 1,
+            lastRow: 10);
+
+        Assert.Contains("LEFT JOIN dbo.CMONEDA AS M", sql, StringComparison.Ordinal);
+        Assert.Contains("M.MON_FL_CVE = C.CTO_CL_MONEDA", sql, StringComparison.Ordinal);
+        Assert.Contains("M.MON_CL_CLAVE AS CurrencyCode", sql, StringComparison.Ordinal);
+        Assert.Contains("M.MON_DS_DESCRIPCION AS CurrencyName", sql, StringComparison.Ordinal);
+        Assert.Contains("C.CTO_NO_PLAZO AS CurrentTerm", sql, StringComparison.Ordinal);
+        Assert.Contains("C.CTO_NO_PLAZOORIGINAL AS OriginalTerm", sql, StringComparison.Ordinal);
+        Assert.Contains("C.CTO_FE_INICIO AS StartDate", sql, StringComparison.Ordinal);
+        Assert.Contains("C.CTO_FE_ACTIVACION AS ActivationDate", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("MON_FG_STATUS", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(maliciousContractNumber, sql, StringComparison.Ordinal);
+        Assert.Contains("@FirstRow", sql, StringComparison.Ordinal);
+        Assert.Contains("@LastRow", sql, StringComparison.Ordinal);
+    }
+    [Fact]
     public void GetByNumberSqlUsesTheSameParameterizedCompanyScope()
     {
         var sql = LegacyContractReadRepository.CreateGetByNumberSql();
 
         Assert.Contains("C.EMP_FL_CVE IN @AllowedCompanyIds", sql);
         Assert.Contains("C.CTO_FL_CVE = @ContractNumber", sql);
+        Assert.Contains("LEFT JOIN dbo.CMONEDA AS M", sql, StringComparison.Ordinal);
+        Assert.Contains("TOP (1)", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("MON_FG_STATUS", sql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("101", sql);
         Assert.DoesNotContain("202", sql);
     }
@@ -218,6 +309,21 @@ public sealed class ContractSearchSqlTests
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             repository.GetByNumberAsync("CONTRACT-1", TestContext.Current.CancellationToken));
     }
+    private static LegacyContractSummaryRow CreateValidLegacyRow() => new()
+    {
+        ContractNumber = "CONTRACT-1",
+        PersonId = 42,
+        PersonName = "Sample Person",
+        OperationTypeCode = "OP",
+        OperationTypeName = "Operation",
+        FinancedAmount = 123.45m,
+        OutstandingBalance = 67.89m,
+        CurrentTerm = 48,
+        StartDate = new DateTime(2025, 12, 15),
+        ActivationDate = new DateTime(2025, 12, 20),
+        StatusCode = 1,
+        StatusName = "Active",
+    };
     private static object? GetMemberValue(Type type, object instance, string name)
     {
         var property = type.GetProperty(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);

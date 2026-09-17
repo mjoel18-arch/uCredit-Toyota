@@ -1,7 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
-using UCredit.Modules.Contracts.Contracts;
 
 namespace UCredit.Api.IntegrationTests;
 
@@ -40,13 +39,29 @@ public sealed class ContractEndpointsIntegrationTests(TestApiFactory factory)
     }
 
     [Fact]
-    public async Task GetWithContractsReadPermissionReturnsContract()
+    public async Task GetWithContractsReadPermissionReturnsExpectedDetailDtoWithoutInternalFields()
     {
         var response = await CreateClient("with-permission").GetAsync("/api/v1/contracts/CONTRACT-1", TestContext.Current.CancellationToken);
-        var contract = await response.Content.ReadFromJsonAsync<ContractSummary>(TestContext.Current.CancellationToken);
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        var root = document.RootElement;
+
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.NotNull(contract);
-        Assert.Equal("CONTRACT-1", contract.ContractNumber);
+        Assert.Equal("CONTRACT-1", root.GetProperty("contractNumber").GetString());
+        Assert.Equal("Active", root.GetProperty("status").GetProperty("description").GetString());
+        Assert.Equal("Loan", root.GetProperty("operationType").GetProperty("description").GetString());
+        Assert.Equal("Integration Test Customer", root.GetProperty("customerName").GetString());
+        Assert.Equal(1000m, root.GetProperty("financedAmount").GetDecimal());
+        Assert.Equal(750m, root.GetProperty("outstandingBalance").GetDecimal());
+        Assert.Equal("MXN", root.GetProperty("currencyCode").GetString());
+        Assert.Equal("PESO MEXICANO", root.GetProperty("currencyName").GetString());
+        Assert.Equal(48, root.GetProperty("currentTerm").GetInt32());
+        Assert.Equal(60, root.GetProperty("originalTerm").GetInt32());
+        Assert.Equal("2025-12-15", root.GetProperty("startDate").GetString());
+        Assert.Equal("2025-12-20", root.GetProperty("activationDate").GetString());
+        Assert.False(root.TryGetProperty("personId", out _));
+        Assert.False(root.TryGetProperty("addressId", out _));
+        Assert.False(root.TryGetProperty("modifiedBy", out _));
+        Assert.False(root.TryGetProperty("modifiedAt", out _));
     }
 
     [Fact]
