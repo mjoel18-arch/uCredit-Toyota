@@ -8,7 +8,7 @@ import {
   type ContractAmortizationPayment,
   type ContractDetail,
 } from '../auth/authApi'
-import { formatAmount, formatCurrency, formatDate, formatText } from './contractFormatting'
+import { formatAmount, formatCurrency, formatDate, formatShortDate, formatText } from './contractFormatting'
 
 type ContractsViewProps = {
   onUnauthorized: () => void
@@ -229,15 +229,15 @@ function AmortizationRow({ detail, payment }: { detail: ContractDetail; payment:
   return (
     <tr>
       <th scope="row">{payment.paymentNumber}</th>
-      <td>{formatDate(payment.startDate)} – {formatDate(payment.endDate)}</td>
-      <td>{formatDate(payment.dueDate)}</td>
+      <td>{formatShortDate(payment.startDate)} – {formatShortDate(payment.endDate)}</td>
+      <td>{formatShortDate(payment.dueDate)}</td>
       <td>{formatAmount(payment.calculationBase, detail.currencyCode)}</td>
       <td>{formatAmount(payment.outstandingBalance, detail.currencyCode)}</td>
       <td>{formatAmount(payment.amortization, detail.currencyCode)}</td>
       <td>{formatAmount(payment.interest, detail.currencyCode)}</td>
       <td>{formatAmount(payment.iva, detail.currencyCode)}</td>
       <td>{formatAmount(payment.payment, detail.currencyCode)}</td>
-      <td>{formatAmount(payment.paymentWithIva, detail.currencyCode)} / {formatAmount(payment.totalPayment, detail.currencyCode)}</td>
+      <td>{formatAmount(payment.totalPayment, detail.currencyCode)}</td>
       <td>{translatePaymentStatus(payment.status)}</td>
     </tr>
   )

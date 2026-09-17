@@ -42,6 +42,24 @@ export function formatDate(value: string | null): string {
   return new Intl.DateTimeFormat('es-MX', { dateStyle: 'medium' }).format(date)
 }
 
+export function formatShortDate(value: string | null): string {
+  if (!value) {
+    return unavailable
+  }
+
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value)
+  if (!match) {
+    return unavailable
+  }
+
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+  if (Number.isNaN(date.getTime())) {
+    return unavailable
+  }
+
+  return `${match[3]}/${match[2]}/${match[1]}`
+}
+
 export function formatText(value: string | number | null | undefined): string {
   return value === null || value === undefined || value === '' ? unavailable : String(value)
 }

@@ -1,6 +1,7 @@
 using System.Data;
 using Dapper;
 using UCredit.Infrastructure.LegacySql.Contracts;
+using UCredit.Modules.Contracts.Contracts;
 
 namespace UCredit.Modules.Contracts.UnitTests;
 
@@ -20,6 +21,9 @@ public sealed class ContractAmortizationSqlTests
         Assert.Contains("V.CTP_CL_TTABLA = @FinancingType", sql, StringComparison.Ordinal);
         Assert.Contains("ORDER BY P.CTP_NO_PAGO ASC", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("CTP_FG_GENERADO =", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("INSERT", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("UPDATE", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("DELETE", sql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(maliciousContractNumber, sql, StringComparison.Ordinal);
         Assert.Contains("@ContractNumber", sql, StringComparison.Ordinal);
     }
@@ -72,6 +76,19 @@ public sealed class ContractAmortizationSqlTests
         Assert.Null(result.DownPayment);
         Assert.Single(result.Payments);
         Assert.All(result.Payments, payment => Assert.True(payment.PaymentNumber > 0));
+    }
+
+    [Fact]
+    public void MappingOrdersPaymentsByPaymentNumber()
+    {
+        var result = LegacyContractAmortizationReadRepository.MapRows(
+        [
+            CreateRow(102, 2, 4, 0, new DateTime(2025, 3, 1)),
+            CreateRow(101, 1, 4, 1, new DateTime(2025, 2, 1)),
+        ]);
+
+        Assert.NotNull(result);
+        Assert.Equal([1, 2], result.Payments.Select(payment => payment.PaymentNumber));
     }
 
     [Fact]

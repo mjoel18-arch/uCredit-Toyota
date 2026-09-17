@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, apiRequest } from '../../src/shared/api/apiClient'
 import {
   getContractByNumber,
+  getContractAmortization,
   getSession,
   login,
   logout,
@@ -111,6 +112,15 @@ describe('local Identity API client', () => {
     fetchMock.mockResolvedValueOnce(response(403))
     await expect(searchContracts('ABC/123')).rejects.toMatchObject({ status: 403 })
     expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/v1/contracts?contractNumber=ABC%2F123&page=1&pageSize=10')
+  })
+
+  it('requests the amortization schedule with the encoded contract number', async () => {
+    fetchMock.mockResolvedValueOnce(response(200, {
+      contractNumber: 'ABC/123', financingType: 1, version: 2, downPayment: null, payments: [],
+    }))
+
+    await expect(getContractAmortization('ABC/123')).resolves.toMatchObject({ version: 2 })
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/v1/contracts/ABC%2F123/amortization-schedule')
   })
 
   it('sends no request body for the CSRF-free GET session request', async () => {

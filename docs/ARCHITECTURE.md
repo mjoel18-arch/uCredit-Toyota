@@ -59,3 +59,11 @@ ASP.NET Core Identity con cookie segura y EF Core únicamente sobre una base nue
 ## Despliegue
 
 Artefactos inmutables promovidos por pipeline. IIS como reverse proxy es la propuesta inicial; TI debe confirmar infraestructura.
+
+## Tabla de amortización
+
+`GET /api/v1/contracts/{contractNumber}/amortization-schedule` es una consulta de sólo lectura protegida por `contracts.read`. `LegacyContractAmortizationReadRepository` valida el contrato mediante `dbo.KCONTRATO`, aplica `C.EMP_FL_CVE IN @AllowedCompanyIds` y obtiene ese alcance exclusivamente de `IExecutionTenantContext`.
+
+La consulta parametrizada lee `dbo.KTPAGO_CONTRATO`, usa `CTP_CL_TTABLA = 1`, selecciona `MAX(CTP_NO_VERSION)` por contrato y tipo, y ordena por `CTP_NO_PAGO`. No filtra `CTP_FG_GENERADO`; el adaptador lo proyecta a `Generated` o `Pending`. Las fechas `datetime` se convierten a `DateOnly`, los importes permanecen `decimal`, el pago cero se proyecta como `downPayment` nullable y `payments` sólo contiene pagos mayores que cero. Contratos fuera del alcance, inexistentes o sin tabla tipo 1 devuelven 404.
+
+La API proyecta el modelo del módulo a un DTO HTTP explícito; los modelos Legacy e identificadores internos no salen de `LegacySql`.

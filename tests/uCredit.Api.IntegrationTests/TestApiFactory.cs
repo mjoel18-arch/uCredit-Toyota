@@ -178,9 +178,16 @@ internal sealed class FakeContractAmortizationReadRepository : IContractAmortiza
         string contractNumber,
         CancellationToken cancellationToken = default) =>
         Task.FromResult<ContractAmortizationSchedule?>(
-            string.Equals(contractNumber, KnownSchedule.ContractNumber, StringComparison.Ordinal)
-                ? KnownSchedule
-                : null);
+            contractNumber switch
+            {
+                "CONTRACT-1" => KnownSchedule,
+                "NODOWNPAY-001" => KnownSchedule with
+                {
+                    DownPayment = null,
+                },
+                "NOAMORT-001" => null,
+                _ => null,
+            });
 }
 internal static class TestIdentityData
 {

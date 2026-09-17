@@ -110,7 +110,10 @@ public sealed class LegacyContractAmortizationReadRepository(
 
         var contractNumber = Require(rows[0].ContractNumber, nameof(LegacyContractAmortizationRow.ContractNumber));
         var version = Require(rows[0].Version, nameof(LegacyContractAmortizationRow.Version));
-        var payments = rows.Select(MapRow).ToArray();
+        var payments = rows
+            .Select(MapRow)
+            .OrderBy(payment => payment.PaymentNumber)
+            .ToArray();
         var downPayments = payments.Where(payment => payment.PaymentNumber == 0).ToArray();
         if (downPayments.Length > 1)
         {

@@ -109,6 +109,21 @@ public sealed class ContractEndpointsIntegrationTests(TestApiFactory factory)
     }
 
     [Fact]
+    public async Task AmortizationWithoutDownPaymentReturnsNullAndPositivePaymentsOnly()
+    {
+        var response = await CreateClient("with-permission").GetAsync(
+            "/api/v1/contracts/NODOWNPAY-001/amortization-schedule",
+            TestContext.Current.CancellationToken);
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        var root = document.RootElement;
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(JsonValueKind.Null, root.GetProperty("downPayment").ValueKind);
+        Assert.All(root.GetProperty("payments").EnumerateArray(), payment =>
+            Assert.True(payment.GetProperty("paymentNumber").GetInt32() > 0));
+    }
+
+    [Fact]
     public async Task AmortizationMissingContractReturnsNotFound()
     {
         var response = await CreateClient("with-permission").GetAsync(
@@ -117,6 +132,17 @@ public sealed class ContractEndpointsIntegrationTests(TestApiFactory factory)
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
+
+    [Fact]
+    public async Task AmortizationWithoutFinancingScheduleReturnsNotFound()
+    {
+        var response = await CreateClient("with-permission").GetAsync(
+            "/api/v1/contracts/NOAMORT-001/amortization-schedule",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
     [Fact]
     public async Task GetMissingContractReturnsNotFound()
     {
