@@ -2,7 +2,8 @@ namespace UCredit.Modules.Branding;
 
 public sealed record BrandTheme(
     string TenantCode,
-    string ApplicationName,
+    string ProductName,
+    string CustomerName,
     string? LogoUrl,
     string PrimaryColor,
     string SecondaryColor,
@@ -11,11 +12,14 @@ public sealed record BrandTheme(
     string SurfaceColor,
     string TextColor,
     string FontFamily,
-    string ThemeMode)
+    string ThemeMode,
+    string BrowserTitle,
+    string? FaviconUrl)
 {
     public static BrandTheme Default { get; } = new(
         TenantCode: "UCREDIT",
-        ApplicationName: "uCredit",
+        ProductName: "uCredit",
+        CustomerName: "",
         LogoUrl: null,
         PrimaryColor: "#155EEF",
         SecondaryColor: "#344054",
@@ -24,6 +28,8 @@ public sealed record BrandTheme(
         SurfaceColor: "#FFFFFF",
         TextColor: "#101828",
         FontFamily: "Inter, system-ui, sans-serif",
-        ThemeMode: "light");
+        ThemeMode: "light",
+        BrowserTitle: "uCredit",
+        FaviconUrl: null);
 }
 

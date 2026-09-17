@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { useBranding } from './shared/branding/BrandingProvider'
 import { ContractsView } from './features/contracts/ContractsView'
 import { useAuthSession } from './features/auth/useAuthSession'
@@ -10,12 +10,12 @@ function LoadingView({ label = 'Cargando…' }: { label?: string }) {
 }
 
 function LoginView({
-  applicationName,
+  theme,
   busy,
   error,
   onLogin,
 }: {
-  applicationName: string
+  theme: BrandTheme
   busy: boolean
   error: string
   onLogin: (userName: string, password: string) => Promise<void>
@@ -33,7 +33,7 @@ function LoginView({
   return (
     <main className="centered-page">
       <section className="auth-card" aria-labelledby="login-title">
-        <span className="eyebrow">{applicationName}</span>
+        <BrandIdentity theme={theme} />
         <h1 id="login-title">Iniciar sesión</h1>
         <p>Usa tus credenciales de la instalación para continuar.</p>
         <form onSubmit={submit} className="auth-form">
@@ -70,13 +70,13 @@ function LoginView({
 }
 
 function TenantSelector({
-  applicationName,
+  theme,
   session,
   busy,
   error,
   onSelect,
 }: {
-  applicationName: string
+  theme: BrandTheme
   session: AuthSession
   busy: boolean
   error: string
@@ -95,7 +95,7 @@ function TenantSelector({
   return (
     <main className="centered-page">
       <section className="auth-card tenant-card" aria-labelledby="tenant-title">
-        <span className="eyebrow">{applicationName} · sesión autenticada</span>
+        <BrandIdentity theme={theme} suffix="· sesión autenticada" />
         <h1 id="tenant-title">Selecciona una cartera</h1>
         <p>Elige una membresía activa disponible para tu usuario.</p>
         {memberships.length === 0 ? (
@@ -132,6 +132,26 @@ function formatCompanyIds(companyIds: number[] | undefined): string {
   return companyIds && companyIds.length > 0 ? companyIds.join(', ') : 'ninguno'
 }
 
+function BrandIdentity({ theme, suffix }: { theme: BrandTheme; suffix?: string }) {
+  return (
+    <div className="auth-brand">
+      <BrandLogo theme={theme} />
+      <div>
+        <span className="eyebrow">{theme.productName}{suffix ? ` ${suffix}` : ''}</span>
+        {theme.customerName && <small>{theme.customerName}</small>}
+      </div>
+    </div>
+  )
+}
+
+export function BrandLogo({ theme }: { theme: BrandTheme }) {
+  const [logoAvailable, setLogoAvailable] = useState(Boolean(theme.logoUrl))
+
+  return theme.logoUrl && logoAvailable
+    ? <img className="brand-logo" src={theme.logoUrl} alt={theme.customerName || theme.productName} onError={() => setLogoAvailable(false)} />
+    : <span className="brand-mark" aria-label={theme.productName}>{theme.productName}</span>
+}
+
 function initials(userName: string): string {
   return userName
     .split(/[\s@._-]+/)
@@ -159,16 +179,15 @@ function ApplicationView({
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <div className="brand">
-          {theme.logoUrl ? <img src={theme.logoUrl} alt={'Logotipo de ' + theme.applicationName} /> : <span className="brand-mark">uC</span>}
-          <div>
-            <strong>{theme.applicationName}</strong>
-            <small>{brandingLoading ? 'Cargando identidad…' : session.tenant?.tenantCode}</small>
-          </div>
+        <div className="brand brand-stack">
+          <strong className="brand-product">{theme.productName}</strong>
+          <BrandLogo theme={theme} />
+          <small className="brand-customer">{theme.customerName || (brandingLoading ? 'Cargando identidad…' : session.tenant?.tenantCode)}</small>
         </div>
         <nav aria-label="Navegación principal">
           <a className={hasContractsPermission ? 'active' : ''} href="#contracts">Contratos</a>
-          <a href="#people" aria-disabled="true">Personas</a>
+          <a href="#customers" aria-disabled="true">Clientes / Prospectos</a>
+          <a href="#contract-entry" aria-disabled="true">Captura de contrato</a>
           <a href="#collections" aria-disabled="true">Cobranza</a>
           <a href="#reports" aria-disabled="true">Reportes</a>
         </nav>
@@ -178,7 +197,7 @@ function ApplicationView({
         <header className="topbar">
           <div>
             <span className="eyebrow">Primer vertical</span>
-            <h1>{session.tenant?.tenantCode ?? 'Sesión activa'}</h1>
+            <h1>{theme.productName} · {theme.customerName || session.tenant?.tenantCode || 'Sesión activa'}</h1>
           </div>
           <div className="session-actions">
             <span className="user-chip" aria-label={'Usuario actual: ' + session.userName}>{initials(session.userName)}</span>
@@ -188,7 +207,11 @@ function ApplicationView({
         </header>
 
         {hasContractsPermission ? (
-          <ContractsView onUnauthorized={onUnauthorized} />
+          <ContractsView
+            productName={theme.productName}
+            customerName={theme.customerName}
+            onUnauthorized={onUnauthorized}
+          />
         ) : (
           <section className="hero-card" aria-labelledby="forbidden-title">
             <span className="status-dot status-dot-warning" />
@@ -202,14 +225,32 @@ function ApplicationView({
           <article><span>Acceso</span><strong>Lectura</strong><small>Sin cambios en Legacy</small></article>
           <article><span>Seguridad</span><strong>Cookie segura</strong><small>Sesión protegida por Identity</small></article>
         </section>
+
+        <section className="future-modules" aria-label="Módulos próximos">
+          <article className="future-module-card" id="customers">
+            <span className="eyebrow">{theme.productName} · {theme.customerName || 'uCredit'}</span>
+            <h2>Cliente / Prospecto</h2>
+            <p>Vista inicial preparada para el siguiente módulo.</p>
+          </article>
+          <article className="future-module-card" id="contract-entry">
+            <span className="eyebrow">{theme.productName} · {theme.customerName || 'uCredit'}</span>
+            <h2>Captura de contrato</h2>
+            <p>Espacio reservado para la captura controlada del contrato.</p>
+          </article>
+        </section>
       </main>
     </div>
   )
 }
 
 export function App() {
-  const { theme, loading: brandingLoading } = useBranding()
+  const { theme, loading: brandingLoading, refresh: refreshBranding, reset: resetBranding } = useBranding()
   const auth = useAuthSession()
+
+  useEffect(() => {
+    if (auth.session?.tenant?.tenantCode) void refreshBranding()
+    else if (auth.status === 'anonymous' || auth.status === 'needsTenant') resetBranding()
+  }, [auth.session?.tenant?.tenantCode, auth.status, refreshBranding, resetBranding])
 
   if (auth.status === 'loading') {
     return <LoadingView />
@@ -228,13 +269,13 @@ export function App() {
   }
 
   if (auth.status === 'anonymous' || !auth.session) {
-    return <LoginView applicationName={theme.applicationName} busy={auth.busy} error={auth.error} onLogin={auth.login} />
+    return <LoginView theme={theme} busy={auth.busy} error={auth.error} onLogin={auth.login} />
   }
 
   if (auth.status === 'needsTenant') {
     return (
       <TenantSelector
-        applicationName={theme.applicationName}
+        theme={theme}
         session={auth.session}
         busy={auth.busy}
         error={auth.error}
