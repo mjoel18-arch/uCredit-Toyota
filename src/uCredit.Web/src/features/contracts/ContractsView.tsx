@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { apiErrorMessage, ApiError } from '../../shared/api/apiClient'
-import { getContractByNumber, searchContracts, type SafeContract } from '../auth/authApi'
+import { getContractByNumber, searchContracts, type ContractDetail } from '../auth/authApi'
+import { formatAmount, formatCurrency, formatDate, formatText } from './contractFormatting'
 
 type ContractsViewProps = {
   onUnauthorized: () => void
@@ -8,7 +9,7 @@ type ContractsViewProps = {
 
 export function ContractsView({ onUnauthorized }: ContractsViewProps) {
   const [contractNumber, setContractNumber] = useState('')
-  const [detail, setDetail] = useState<SafeContract | null>(null)
+  const [detail, setDetail] = useState<ContractDetail | null>(null)
   const [searchCount, setSearchCount] = useState<number | null>(null)
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
@@ -49,6 +50,11 @@ export function ContractsView({ onUnauthorized }: ContractsViewProps) {
         return
       }
 
+      if (requestError instanceof ApiError && requestError.status === 404) {
+        setMessage('No se encontró el contrato dentro del alcance permitido.')
+        return
+      }
+
       setMessage(apiErrorMessage(requestError, 'No fue posible consultar el contrato.'))
     } finally {
       setBusy(false)
@@ -60,7 +66,7 @@ export function ContractsView({ onUnauthorized }: ContractsViewProps) {
       <div>
         <span className="status-dot" /> Consulta de sólo lectura
         <h2 id="contracts-title">Encuentra un contrato</h2>
-        <p>La respuesta muestra únicamente el identificador y el estado operativo.</p>
+        <p>Consulta la información operativa disponible para el alcance autorizado de tu tenant.</p>
       </div>
 
       <form onSubmit={submit} className="search-form">
@@ -70,7 +76,7 @@ export function ContractsView({ onUnauthorized }: ContractsViewProps) {
             value={contractNumber}
             onChange={(event) => setContractNumber(event.target.value)}
             placeholder="Captura el número de contrato"
-            maxLength={64}
+            maxLength={15}
             autoComplete="off"
             required
           />
@@ -79,14 +85,64 @@ export function ContractsView({ onUnauthorized }: ContractsViewProps) {
       </form>
 
       {message && <div className="notice notice-error" role="alert">{message}</div>}
-      {detail && (
-        <div className="notice" role="status">
-          <strong>Contrato {detail.contractNumber}</strong>
-          <span>{detail.statusName ?? 'Estado no disponible'}</span>
-          {detail.operationTypeName && <span>{detail.operationTypeName}</span>}
-          {searchCount !== null && <span>Coincidencias exactas: {searchCount}</span>}
-        </div>
-      )}
+      {detail && <ContractDetailCard detail={detail} searchCount={searchCount} />}
     </section>
+  )
+}
+
+function ContractDetailCard({ detail, searchCount }: { detail: ContractDetail; searchCount: number | null }) {
+  const operationType = detail.operationType?.description ?? detail.operationType?.code
+
+  return (
+    <article className="contract-detail" aria-labelledby="contract-detail-title">
+      <header className="contract-detail-header">
+        <div>
+          <span className="eyebrow">Resultado protegido</span>
+          <h3 id="contract-detail-title">Contrato {detail.contractNumber}</h3>
+        </div>
+        {searchCount !== null && <span className="detail-match">Coincidencias exactas: {searchCount}</span>}
+      </header>
+
+      <section className="contract-detail-section" aria-labelledby="contract-identification-title">
+        <h4 id="contract-identification-title">Identificación</h4>
+        <dl className="detail-grid">
+          <DetailField label="Número de contrato" value={detail.contractNumber} />
+          <DetailField label="Estado" value={detail.status?.description} />
+          <DetailField label="Tipo de operación" value={operationType} />
+          <DetailField label="Persona o cliente" value={detail.customerName} />
+        </dl>
+      </section>
+
+      <section className="contract-detail-section" aria-labelledby="contract-financial-title">
+        <h4 id="contract-financial-title">Datos financieros</h4>
+        <dl className="detail-grid">
+          <DetailField label="Moneda" value={formatCurrency(detail.currencyCode, detail.currencyName)} />
+          <DetailField label="Monto financiado" value={formatAmount(detail.financedAmount, detail.currencyCode)} />
+          <DetailField label="Saldo insoluto" value={formatAmount(detail.outstandingBalance, detail.currencyCode)} />
+          <DetailField label="Plazo actual" value={detail.currentTerm} />
+          <DetailField label="Plazo original" value={detail.originalTerm} />
+        </dl>
+      </section>
+
+      <section className="contract-detail-section" aria-labelledby="contract-dates-title">
+        <h4 id="contract-dates-title">Fechas y plazo</h4>
+        <dl className="detail-grid">
+          <DetailField label="Fecha de inicio" value={formatDate(detail.startDate)} />
+          <DetailField label="Fecha de activación" value={formatDate(detail.activationDate)} />
+          <DetailField label="Fecha de desembolso" value={formatDate(detail.disbursementDate)} />
+          <DetailField label="Fecha del primer pago" value={formatDate(detail.firstPaymentDate)} />
+          <DetailField label="Fecha del último pago" value={formatDate(detail.lastPaymentDate)} />
+        </dl>
+      </section>
+    </article>
+  )
+}
+
+function DetailField({ label, value }: { label: string; value: string | number | null | undefined }) {
+  return (
+    <div className="detail-field">
+      <dt>{label}</dt>
+      <dd>{formatText(value)}</dd>
+    </div>
   )
 }

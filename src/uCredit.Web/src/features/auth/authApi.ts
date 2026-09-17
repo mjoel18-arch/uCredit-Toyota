@@ -60,6 +60,24 @@ export type SafeContract = {
   operationTypeName?: string | null
 }
 
+export type ContractDetail = {
+  contractNumber: string
+  status: { code: number | null; description: string | null } | null
+  operationType: { code: string | null; description: string | null } | null
+  customerName: string | null
+  currencyCode: string | null
+  currencyName: string | null
+  financedAmount: number | null
+  outstandingBalance: number | null
+  currentTerm: number
+  originalTerm: number | null
+  startDate: string
+  activationDate: string
+  disbursementDate: string | null
+  firstPaymentDate: string | null
+  lastPaymentDate: string | null
+}
+
 type ContractSearchResponse = {
   items: SafeContract[]
   page: number
@@ -67,8 +85,8 @@ type ContractSearchResponse = {
   total: number
 }
 
-export function getContractByNumber(contractNumber: string): Promise<SafeContract> {
-  return apiRequest<SafeContract>('/api/v1/contracts/' + encodeURIComponent(contractNumber))
+export function getContractByNumber(contractNumber: string): Promise<ContractDetail> {
+  return apiRequest<ContractDetail>('/api/v1/contracts/' + encodeURIComponent(contractNumber))
 }
 
 export function searchContracts(contractNumber: string): Promise<ContractSearchResponse> {

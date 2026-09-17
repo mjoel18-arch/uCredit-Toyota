@@ -34,7 +34,7 @@ flowchart TB
 
 ## Dirección de dependencias
 
-- API conoce módulos e infraestructura durante composición.
+- API conoce módulos e infraestructura durante composición y proyecta sus resultados a DTOs HTTP explícitos; los modelos internos no se exponen directamente.
 - Módulos no conocen API, Web ni infraestructura.
 - `uCredit.Application` no conoce Identity ni LegacySql.
 - Identity implementa `IExecutionTenantContext`; LegacySql lo consume.
@@ -48,12 +48,13 @@ flowchart TB
 - Dapper y `Microsoft.Data.SqlClient` para Legacy.
 - parámetros tipados y cancelación asíncrona;
 - `C.EMP_FL_CVE IN @AllowedCompanyIds` obligatorio en contratos;
+- `CMONEDA` se consulta desde `LegacySql` mediante `LEFT JOIN` por su PK, sin filtrar monedas históricas;
 - EF Core únicamente para estructuras nuevas justificadas;
 - sin migraciones automáticas sobre Legacy.
 
 ## Identidad
 
-ASP.NET Core Identity con cookie segura y EF Core únicamente sobre una base nueva configurada mediante `IdentitySql__ConnectionString`. `Deployment__TenantCode` limita la instalación a un tenant. `TenantLegacyCompanyScopes` mantiene los CompanyId activos sin guardar conexiones Legacy. La selección aún usa la cookie firmada como autoridad y no acepta listas desde el navegador. Entra External ID queda como alternativa OIDC postergada.
+ASP.NET Core Identity con cookie segura y EF Core únicamente sobre una base nueva configurada mediante `IdentitySql__ConnectionString`. `Deployment__TenantCode` limita la instalación a un tenant. `TenantLegacyCompanyScopes` mantiene los CompanyId activos sin guardar conexiones Legacy. El adaptador `LegacySql` proyecta el catálogo `CMONEDA` y los campos de plazo/fechas a un modelo interno que conserva la nulabilidad Legacy donde corresponde; la API los publica mediante `ContractDetailResponse`. La selección aún usa la cookie firmada como autoridad y no acepta listas desde el navegador. Entra External ID queda como alternativa OIDC postergada.
 
 ## Despliegue
 

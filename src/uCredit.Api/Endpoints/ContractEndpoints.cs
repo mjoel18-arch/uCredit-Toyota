@@ -1,3 +1,4 @@
+using UCredit.Api.Contracts;
 using UCredit.Modules.Contracts.Contracts;
 
 namespace UCredit.Api.Endpoints;
@@ -50,7 +51,9 @@ public static class ContractEndpoints
         }
 
         var contract = await repository.GetByNumberAsync(contractNumber, cancellationToken);
-        return contract is null ? Results.NotFound() : Results.Ok(contract);
+        return contract is null
+            ? Results.NotFound()
+            : Results.Ok(ContractDetailResponse.FromSummary(contract));
     }
 }
 

@@ -17,6 +17,12 @@ internal sealed class LegacyContractSummaryRow
     public int? AddressId { get; set; }
     public decimal? FinancedAmount { get; set; }
     public decimal? OutstandingBalance { get; set; }
+    public string? CurrencyCode { get; set; }
+    public string? CurrencyName { get; set; }
+    public int? CurrentTerm { get; set; }
+    public int? OriginalTerm { get; set; }
+    public DateTime? StartDate { get; set; }
+    public DateTime? ActivationDate { get; set; }
     public DateTime? DisbursementDate { get; set; }
     public DateTime? FirstPaymentDate { get; set; }
     public DateTime? LastPaymentDate { get; set; }
@@ -58,71 +64,13 @@ public sealed class LegacyContractReadRepository(
         EnsureConfigured();
 
         var parameters = CreateParameters(criteria, executionTenant.AllowedCompanyIds);
-        var predicates = CreatePredicates(criteria, executionTenant.AllowedCompanyIds);
-        var sortExpression = SortExpressions[criteria.Sort];
         var firstRow = ((long)criteria.Page - 1) * criteria.PageSize + 1;
         var lastRow = (long)criteria.Page * criteria.PageSize;
         parameters.Add("FirstRow", firstRow, DbType.Int64);
         parameters.Add("LastRow", lastRow, DbType.Int64);
 
-        const string fromClause = """
-            FROM dbo.KCONTRATO AS C
-            INNER JOIN dbo.CPERSONA AS P
-                ON P.PNA_FL_PERSONA = C.PNA_FL_PERSONA
-            INNER JOIN dbo.KTOPERACION AS O
-                ON O.TOP_CL_CVE = C.TOP_CL_CVE
-            INNER JOIN dbo.CPARAMETRO AS S
-                ON S.PAR_FL_CVE = 33
-                AND S.PAR_CL_VALOR = C.CTO_FG_STATUS
-            LEFT JOIN dbo.CUSUARIO AS U
-                ON U.USR_CL_CVE = C.USR_CL_CVE
-            """;
-
-        var whereClause = $"WHERE {string.Join(" AND ", predicates)}";
         var countSql = CreateCountSql(criteria, executionTenant.AllowedCompanyIds);
-        var pageSql = $"""
-            WITH RankedContracts AS
-            (
-                SELECT
-                    C.CTO_FL_CVE AS ContractNumber,
-                    C.PNA_FL_PERSONA AS PersonId,
-                    P.PNA_DS_NOMBRE AS PersonName,
-                    C.TOP_CL_CVE AS OperationTypeCode,
-                    O.TOP_DS_DESCRIPCION AS OperationTypeName,
-                    C.DMO_FL_CVE AS AddressId,
-                    C.CTO_NO_MTO_FINANCIAR AS FinancedAmount,
-                    C.CTO_NO_SALDO AS OutstandingBalance,
-                    C.CTO_FE_SOL_DESEMBOLSO AS DisbursementDate,
-                    C.CTO_FE_PRIMER_PAGO AS FirstPaymentDate,
-                    C.CTO_FE_ULTPAGO AS LastPaymentDate,
-                    CONVERT(INT, C.CTO_FG_STATUS) AS StatusCode,
-                    S.PAR_DS_DESCRIPCION AS StatusName,
-                    U.USR_DS_NOMBRE AS ModifiedBy,
-                    C.CTO_FE_ULTMOD AS ModifiedAt,
-                    ROW_NUMBER() OVER (ORDER BY {sortExpression}) AS RowNumber
-                {fromClause}
-                {whereClause}
-            )
-            SELECT
-                ContractNumber,
-                PersonId,
-                PersonName,
-                OperationTypeCode,
-                OperationTypeName,
-                AddressId,
-                FinancedAmount,
-                OutstandingBalance,
-                DisbursementDate,
-                FirstPaymentDate,
-                LastPaymentDate,
-                StatusCode,
-                StatusName,
-                ModifiedBy,
-                ModifiedAt
-            FROM RankedContracts
-            WHERE RowNumber BETWEEN @FirstRow AND @LastRow
-            ORDER BY RowNumber;
-            """;
+        var pageSql = CreateSearchSql(criteria, executionTenant.AllowedCompanyIds, firstRow, lastRow);
 
         await using var connection = new SqlConnection(_options.ReadConnectionString);
         var total = await connection.ExecuteScalarAsync<long>(
@@ -165,6 +113,86 @@ public sealed class LegacyContractReadRepository(
         return row is null ? null : MapRow(row);
     }
 
+    internal static string CreateSearchSql(
+        ContractSearchCriteria criteria,
+        IReadOnlyCollection<int> allowedCompanyIds,
+        long firstRow,
+        long lastRow)
+    {
+        var predicates = CreatePredicates(criteria, allowedCompanyIds);
+        var sortExpression = SortExpressions[criteria.Sort];
+        var whereClause = $"WHERE {string.Join(" AND ", predicates)}";
+        const string fromClause = """
+            FROM dbo.KCONTRATO AS C
+            INNER JOIN dbo.CPERSONA AS P
+                ON P.PNA_FL_PERSONA = C.PNA_FL_PERSONA
+            INNER JOIN dbo.KTOPERACION AS O
+                ON O.TOP_CL_CVE = C.TOP_CL_CVE
+            INNER JOIN dbo.CPARAMETRO AS S
+                ON S.PAR_FL_CVE = 33
+                AND S.PAR_CL_VALOR = C.CTO_FG_STATUS
+            LEFT JOIN dbo.CUSUARIO AS U
+                ON U.USR_CL_CVE = C.USR_CL_CVE
+            LEFT JOIN dbo.CMONEDA AS M
+                ON M.MON_FL_CVE = C.CTO_CL_MONEDA
+            """;
+
+        return $"""
+            WITH RankedContracts AS
+            (
+                SELECT
+                    C.CTO_FL_CVE AS ContractNumber,
+                    C.PNA_FL_PERSONA AS PersonId,
+                    P.PNA_DS_NOMBRE AS PersonName,
+                    C.TOP_CL_CVE AS OperationTypeCode,
+                    O.TOP_DS_DESCRIPCION AS OperationTypeName,
+                    C.DMO_FL_CVE AS AddressId,
+                    C.CTO_NO_MTO_FINANCIAR AS FinancedAmount,
+                    C.CTO_NO_SALDO AS OutstandingBalance,
+                    M.MON_CL_CLAVE AS CurrencyCode,
+                    M.MON_DS_DESCRIPCION AS CurrencyName,
+                    C.CTO_NO_PLAZO AS CurrentTerm,
+                    C.CTO_NO_PLAZOORIGINAL AS OriginalTerm,
+                    C.CTO_FE_INICIO AS StartDate,
+                    C.CTO_FE_ACTIVACION AS ActivationDate,
+                    C.CTO_FE_SOL_DESEMBOLSO AS DisbursementDate,
+                    C.CTO_FE_PRIMER_PAGO AS FirstPaymentDate,
+                    C.CTO_FE_ULTPAGO AS LastPaymentDate,
+                    CONVERT(INT, C.CTO_FG_STATUS) AS StatusCode,
+                    S.PAR_DS_DESCRIPCION AS StatusName,
+                    U.USR_DS_NOMBRE AS ModifiedBy,
+                    C.CTO_FE_ULTMOD AS ModifiedAt,
+                    ROW_NUMBER() OVER (ORDER BY {sortExpression}) AS RowNumber
+                {fromClause}
+                {whereClause}
+            )
+            SELECT
+                ContractNumber,
+                PersonId,
+                PersonName,
+                OperationTypeCode,
+                OperationTypeName,
+                AddressId,
+                FinancedAmount,
+                OutstandingBalance,
+                CurrencyCode,
+                CurrencyName,
+                CurrentTerm,
+                OriginalTerm,
+                StartDate,
+                ActivationDate,
+                DisbursementDate,
+                FirstPaymentDate,
+                LastPaymentDate,
+                StatusCode,
+                StatusName,
+                ModifiedBy,
+                ModifiedAt
+            FROM RankedContracts
+            WHERE RowNumber BETWEEN @FirstRow AND @LastRow
+            ORDER BY RowNumber;
+            """;
+    }
     internal static string CreateGetByNumberSql() => """
         SELECT TOP (1)
             C.CTO_FL_CVE AS ContractNumber,
@@ -175,6 +203,12 @@ public sealed class LegacyContractReadRepository(
             C.DMO_FL_CVE AS AddressId,
             C.CTO_NO_MTO_FINANCIAR AS FinancedAmount,
             C.CTO_NO_SALDO AS OutstandingBalance,
+            M.MON_CL_CLAVE AS CurrencyCode,
+            M.MON_DS_DESCRIPCION AS CurrencyName,
+            C.CTO_NO_PLAZO AS CurrentTerm,
+            C.CTO_NO_PLAZOORIGINAL AS OriginalTerm,
+            C.CTO_FE_INICIO AS StartDate,
+            C.CTO_FE_ACTIVACION AS ActivationDate,
             C.CTO_FE_SOL_DESEMBOLSO AS DisbursementDate,
             C.CTO_FE_PRIMER_PAGO AS FirstPaymentDate,
             C.CTO_FE_ULTPAGO AS LastPaymentDate,
@@ -192,10 +226,11 @@ public sealed class LegacyContractReadRepository(
             AND S.PAR_CL_VALOR = C.CTO_FG_STATUS
         LEFT JOIN dbo.CUSUARIO AS U
             ON U.USR_CL_CVE = C.USR_CL_CVE
+        LEFT JOIN dbo.CMONEDA AS M
+            ON M.MON_FL_CVE = C.CTO_CL_MONEDA
         WHERE C.CTO_FL_CVE = @ContractNumber
           AND C.EMP_FL_CVE IN @AllowedCompanyIds;
         """;
-
     internal static string CreateCountSql(
         ContractSearchCriteria criteria,
         IReadOnlyCollection<int> allowedCompanyIds)
@@ -220,20 +255,29 @@ public sealed class LegacyContractReadRepository(
         return new ContractSummary(
             Require(row.ContractNumber, nameof(row.ContractNumber)),
             Require(row.PersonId, nameof(row.PersonId)),
-            Require(row.PersonName, nameof(row.PersonName)),
-            Require(row.OperationTypeCode, nameof(row.OperationTypeCode)),
-            Require(row.OperationTypeName, nameof(row.OperationTypeName)),
+            row.PersonName,
+            row.OperationTypeCode,
+            row.OperationTypeName,
             row.AddressId,
-            Require(row.FinancedAmount, nameof(row.FinancedAmount)),
-            Require(row.OutstandingBalance, nameof(row.OutstandingBalance)),
+            row.FinancedAmount,
+            row.OutstandingBalance,
+            row.CurrencyCode,
+            row.CurrencyName,
+            Require(row.CurrentTerm, nameof(row.CurrentTerm)),
+            row.OriginalTerm,
+            ToRequiredDateOnly(row.StartDate, nameof(row.StartDate)),
+            ToRequiredDateOnly(row.ActivationDate, nameof(row.ActivationDate)),
             ToDateOnly(row.DisbursementDate),
             ToDateOnly(row.FirstPaymentDate),
             ToDateOnly(row.LastPaymentDate),
-            Require(row.StatusCode, nameof(row.StatusCode)),
-            Require(row.StatusName, nameof(row.StatusName)),
+            row.StatusCode,
+            row.StatusName,
             row.ModifiedBy,
             ToDateTimeOffset(row.ModifiedAt));
     }
+
+    private static DateOnly ToRequiredDateOnly(DateTime? value, string fieldName) =>
+        DateOnly.FromDateTime(Require(value, fieldName));
 
     private static DateOnly? ToDateOnly(DateTime? value) =>
         value is null ? null : DateOnly.FromDateTime(value.Value);
