@@ -17,9 +17,31 @@ public static class ContractEndpoints
         group.MapGet("/{contractNumber}", GetContractAsync)
             .WithName("GetContract");
 
+        group.MapGet("/{contractNumber}/amortization-schedule", GetAmortizationScheduleAsync)
+            .WithName("GetContractAmortizationSchedule");
+
         return endpoints;
     }
 
+
+    private static async Task<IResult> GetAmortizationScheduleAsync(
+        string contractNumber,
+        IContractAmortizationReadRepository repository,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(contractNumber) || contractNumber.Length > 15)
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["contractNumber"] = ["Contract number is required and must not exceed 15 characters."]
+            });
+        }
+
+        var schedule = await repository.GetScheduleByNumberAsync(contractNumber, cancellationToken);
+        return schedule is null
+            ? Results.NotFound()
+            : Results.Ok(ContractAmortizationResponse.FromModel(schedule));
+    }
     private static async Task<IResult> SearchContractsAsync(
         [AsParameters] ContractSearchRequest request,
         IContractReadRepository repository,

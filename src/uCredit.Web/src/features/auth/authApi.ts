@@ -78,6 +78,30 @@ export type ContractDetail = {
   lastPaymentDate: string | null
 }
 
+
+export type ContractAmortizationPayment = {
+  paymentNumber: number
+  status: 'Generated' | 'Pending'
+  startDate: string
+  endDate: string
+  dueDate: string
+  calculationBase: number
+  outstandingBalance: number
+  amortization: number
+  interest: number
+  iva: number
+  payment: number
+  paymentWithIva: number
+  totalPayment: number
+}
+
+export type ContractAmortization = {
+  contractNumber: string
+  financingType: number
+  version: number
+  downPayment: ContractAmortizationPayment | null
+  payments: ContractAmortizationPayment[]
+}
 type ContractSearchResponse = {
   items: SafeContract[]
   page: number
@@ -89,6 +113,12 @@ export function getContractByNumber(contractNumber: string): Promise<ContractDet
   return apiRequest<ContractDetail>('/api/v1/contracts/' + encodeURIComponent(contractNumber))
 }
 
+
+export function getContractAmortization(contractNumber: string): Promise<ContractAmortization> {
+  return apiRequest<ContractAmortization>(
+    '/api/v1/contracts/' + encodeURIComponent(contractNumber) + '/amortization-schedule',
+  )
+}
 export function searchContracts(contractNumber: string): Promise<ContractSearchResponse> {
   const query = new URLSearchParams({
     contractNumber,

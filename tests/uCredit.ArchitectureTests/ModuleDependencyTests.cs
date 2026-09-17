@@ -61,6 +61,7 @@ public sealed class ModuleDependencyTests
     public void LegacySqlCanImplementContractsInterfaces()
     {
         Assert.True(typeof(IContractReadRepository).IsAssignableFrom(typeof(LegacyContractReadRepository)));
+        Assert.True(typeof(IContractAmortizationReadRepository).IsAssignableFrom(typeof(LegacyContractAmortizationReadRepository)));
     }
 
     [Fact]

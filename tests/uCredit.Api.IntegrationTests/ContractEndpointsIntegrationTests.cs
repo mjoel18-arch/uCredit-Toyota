@@ -64,6 +64,59 @@ public sealed class ContractEndpointsIntegrationTests(TestApiFactory factory)
         Assert.False(root.TryGetProperty("modifiedAt", out _));
     }
 
+[Fact]
+    public async Task AmortizationWithoutAuthenticationReturnsUnauthorized()
+    {
+        var response = await factory.CreateClient().GetAsync(
+            "/api/v1/contracts/CONTRACT-1/amortization-schedule",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Null(response.Headers.Location);
+    }
+
+    [Fact]
+    public async Task AmortizationWithoutContractsReadPermissionReturnsForbidden()
+    {
+        var response = await CreateClient("without-permission").GetAsync(
+            "/api/v1/contracts/CONTRACT-1/amortization-schedule",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Null(response.Headers.Location);
+    }
+
+    [Fact]
+    public async Task AmortizationWithContractsReadPermissionReturnsCurrentVersionAndPaymentStates()
+    {
+        var response = await CreateClient("with-permission").GetAsync(
+            "/api/v1/contracts/CONTRACT-1/amortization-schedule",
+            TestContext.Current.CancellationToken);
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        var root = document.RootElement;
+        var payments = root.GetProperty("payments");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("CONTRACT-1", root.GetProperty("contractNumber").GetString());
+        Assert.Equal(1, root.GetProperty("financingType").GetInt32());
+        Assert.Equal(4, root.GetProperty("version").GetInt32());
+        Assert.Equal(0, root.GetProperty("downPayment").GetProperty("paymentNumber").GetInt32());
+        Assert.Equal(2, payments.GetArrayLength());
+        Assert.Equal(1, payments[0].GetProperty("paymentNumber").GetInt32());
+        Assert.Equal("Generated", payments[0].GetProperty("status").GetString());
+        Assert.Equal("Pending", payments[1].GetProperty("status").GetString());
+        Assert.DoesNotContain("paymentId", document.RootElement.GetRawText(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AmortizationMissingContractReturnsNotFound()
+    {
+        var response = await CreateClient("with-permission").GetAsync(
+            "/api/v1/contracts/MISSING/amortization-schedule",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
     [Fact]
     public async Task GetMissingContractReturnsNotFound()
     {
