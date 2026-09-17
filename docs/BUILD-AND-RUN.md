@@ -39,6 +39,8 @@ npm run dev
 
 El frontend pide `/api/v1/branding/current`. El endpoint usa únicamente el tenant seleccionado en la cookie firmada; `X-Tenant-Code` no se acepta como autoridad. Sin selección, se devuelve el tema predeterminado.
 
+Para la demostración Toyota, el tenant `TOYOTA` devuelve `productName: uCredit-auto`, `customerName: Toyota Financial Services`, colores configurables, título `uCredit-auto | Toyota Financial Services` y la ruta local autorizada `/branding/toyota/logo.png`. El PNG oficial proporcionado por el cliente debe permanecer en `src/uCredit.Web/public/branding/toyota/logo.png`; no se convierte ni se renombra. Si el archivo falla, la UI usa el fallback textual `uCredit-auto` y no muestra un icono roto. Las pantallas futuras de Cliente / Prospecto y Captura de contrato ya reservan su identidad visual con el mismo tema.
+
 ## Autenticación
 
 Los endpoints de contratos exigen `contracts.read`. La primera versión usa ASP.NET Core Identity con una cookie HttpOnly, Secure fuera de pruebas y SameSite=Lax. Login, selección de tenant y logout usan antiforgery; login y selección tienen rate limiting. La selección valida membresía activa y regenera la cookie con permisos sólo del tenant seleccionado. El entorno de pruebas sustituye explícitamente la autenticación mediante `WebApplicationFactory`. Entra External ID queda como alternativa OIDC postergada.

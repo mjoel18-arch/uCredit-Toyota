@@ -67,3 +67,9 @@ Artefactos inmutables promovidos por pipeline. IIS como reverse proxy es la prop
 La consulta parametrizada lee `dbo.KTPAGO_CONTRATO`, usa `CTP_CL_TTABLA = 1`, selecciona `MAX(CTP_NO_VERSION)` por contrato y tipo, y ordena por `CTP_NO_PAGO`. No filtra `CTP_FG_GENERADO`; el adaptador lo proyecta a `Generated` o `Pending`. Las fechas `datetime` se convierten a `DateOnly`, los importes permanecen `decimal`, el pago cero se proyecta como `downPayment` nullable y `payments` sólo contiene pagos mayores que cero. Contratos fuera del alcance, inexistentes o sin tabla tipo 1 devuelven 404.
 
 La API proyecta el modelo del módulo a un DTO HTTP explícito; los modelos Legacy e identificadores internos no salen de `LegacySql`.
+
+## Branding dinámico
+
+El módulo `uCredit.Modules.Branding` expone un contrato de tema con `productName`, `customerName`, `logoUrl`, `primaryColor`, `secondaryColor`, `browserTitle` y `faviconUrl`, además de los colores semánticos del tema. `GET /api/v1/branding/current` resuelve el tema usando exclusivamente el tenant de la cookie firmada; no acepta `X-Tenant-Code` ni valores de tenant enviados como autoridad por el navegador.
+
+El tenant de demostración `TOYOTA` usa `uCredit-auto` como nombre comercial y `Toyota Financial Services` como cliente. El logo oficial se sirve desde `/branding/toyota/logo.png`, conservando su proporción mediante límites CSS (`max-width`/`max-height` con dimensiones automáticas). Si el asset no existe o falla, la interfaz muestra el fallback textual `uCredit-auto`, conserva el texto alternativo `Toyota Financial Services` y sólo acepta assets bajo `/branding/`.

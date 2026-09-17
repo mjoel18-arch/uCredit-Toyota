@@ -16,6 +16,7 @@ El frontend aprobado es React con TypeScript.
 ## Capacidades
 
 - logotipo y nombre comercial;
+- contrato público con `productName`, `customerName`, `logoUrl`, `primaryColor`, `secondaryColor`, `browserTitle` y `faviconUrl` opcional;
 - colores primario, secundario, acento y navegación;
 - superficie, texto, tipografía y modo claro/oscuro;
 - tema predeterminado uCredit;
@@ -28,6 +29,7 @@ El frontend aprobado es React con TypeScript.
 - archivos de marca desde ubicaciones autorizadas;
 - contraste WCAG por validar antes de publicar;
 - configuración funcional separada de la identidad visual;
+- tenant resuelto exclusivamente desde la cookie firmada; `X-Tenant-Code` no es autoridad;
 - el encabezado temporal `X-Tenant-Code` del esqueleto no es el mecanismo productivo de identidad.
 
 ## Consecuencias
