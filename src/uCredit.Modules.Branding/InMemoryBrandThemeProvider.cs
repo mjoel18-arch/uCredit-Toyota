@@ -9,11 +9,26 @@ public sealed class InMemoryBrandThemeProvider : IBrandThemeProvider
             ["DEMO"] = BrandTheme.Default with
             {
                 TenantCode = "DEMO",
-                ApplicationName = "uCredit Demo",
+                ProductName = "uCredit Demo",
+                CustomerName = "Demo",
                 PrimaryColor = "#7F56D9",
                 SecondaryColor = "#53389E",
                 AccentColor = "#F79009",
-                NavigationColor = "#2D1B69"
+                NavigationColor = "#2D1B69",
+                BrowserTitle = "uCredit Demo"
+            },
+            ["TOYOTA"] = BrandTheme.Default with
+            {
+                TenantCode = "TOYOTA",
+                ProductName = "uCredit-auto",
+                CustomerName = "Toyota Financial Services",
+                LogoUrl = "/branding/toyota/logo.png",
+                PrimaryColor = "#EB0A1E",
+                SecondaryColor = "#1D1D1F",
+                AccentColor = "#EB0A1E",
+                NavigationColor = "#1D1D1F",
+                BrowserTitle = "uCredit-auto | Toyota Financial Services",
+                FaviconUrl = null
             }
         };
 

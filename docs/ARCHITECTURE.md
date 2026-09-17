@@ -59,3 +59,9 @@ ASP.NET Core Identity con cookie segura y EF Core únicamente sobre una base nue
 ## Despliegue
 
 Artefactos inmutables promovidos por pipeline. IIS como reverse proxy es la propuesta inicial; TI debe confirmar infraestructura.
+
+## Branding dinámico
+
+El módulo `uCredit.Modules.Branding` expone un contrato de tema con `productName`, `customerName`, `logoUrl`, `primaryColor`, `secondaryColor`, `browserTitle` y `faviconUrl`, además de los colores semánticos del tema. `GET /api/v1/branding/current` resuelve el tema usando exclusivamente el tenant de la cookie firmada; no acepta `X-Tenant-Code` ni valores de tenant enviados como autoridad por el navegador.
+
+El tenant de demostración `TOYOTA` usa `uCredit-auto` como nombre comercial y `Toyota Financial Services` como cliente. El logo oficial se sirve desde `/branding/toyota/logo.png`, conservando su proporción mediante límites CSS (`max-width`/`max-height` con dimensiones automáticas). Si el asset no existe o falla, la interfaz muestra el fallback textual `uCredit-auto`, conserva el texto alternativo `Toyota Financial Services` y sólo acepta assets bajo `/branding/`.

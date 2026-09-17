@@ -67,6 +67,11 @@ internal sealed class TestAuthenticationHandler(
             claims.Add(new Claim("permission", "contracts.read"));
         }
 
+        if (string.Equals(mode, "toyota", StringComparison.Ordinal))
+        {
+            claims.Add(new Claim(TenantClaimTypes.Code, "TOYOTA"));
+        }
+
         var identity = new ClaimsIdentity(claims, SchemeName);
         var principal = new ClaimsPrincipal(identity);
         return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(principal, SchemeName)));
