@@ -9,5 +9,6 @@
   <ItemGroup>
     <ProjectReference Include="../uCredit.Application/uCredit.Application.csproj" />
     <ProjectReference Include="../uCredit.Modules.Contracts/uCredit.Modules.Contracts.csproj" />
+    <ProjectReference Include="../uCredit.Modules.Customers/uCredit.Modules.Customers.csproj" />
   </ItemGroup>
 </Project>

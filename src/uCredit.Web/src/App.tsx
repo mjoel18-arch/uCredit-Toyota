@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useBranding } from './shared/branding/BrandingProvider'
 import { ContractsView } from './features/contracts/ContractsView'
+import { CustomersView } from './features/customers/CustomersView'
 import { useAuthSession } from './features/auth/useAuthSession'
 import type { AuthSession } from './features/auth/authApi'
 import type { BrandTheme } from './shared/branding/brandTheme'
@@ -175,6 +176,8 @@ function ApplicationView({
   onUnauthorized: () => void
 }) {
   const hasContractsPermission = session.permissions.includes('contracts.read')
+  const hasCustomersPermission = session.permissions.includes('customers.read')
+  const [activeModule, setActiveModule] = useState<'contracts' | 'customers'>('contracts')
 
   return (
     <div className="app-shell">
@@ -185,11 +188,11 @@ function ApplicationView({
           <small className="brand-customer">{theme.customerName || (brandingLoading ? 'Cargando identidad…' : session.tenant?.tenantCode)}</small>
         </div>
         <nav aria-label="Navegación principal">
-          <a className={hasContractsPermission ? 'active' : ''} href="#contracts">Contratos</a>
-          <a href="#customers" aria-disabled="true">Clientes / Prospectos</a>
-          <a href="#contract-entry" aria-disabled="true">Captura de contrato</a>
-          <a href="#collections" aria-disabled="true">Cobranza</a>
-          <a href="#reports" aria-disabled="true">Reportes</a>
+          <button type="button" className={activeModule === 'contracts' ? 'active' : ''} aria-current={activeModule === 'contracts' ? 'page' : undefined} onClick={() => setActiveModule('contracts')}>Contratos</button>
+          <button type="button" className={activeModule === 'customers' ? 'active' : ''} aria-current={activeModule === 'customers' ? 'page' : undefined} disabled={!hasCustomersPermission} aria-disabled={!hasCustomersPermission} onClick={() => setActiveModule('customers')}>Clientes</button>
+          <button type="button" disabled aria-disabled="true">Captura de contrato · Próximamente</button>
+          <button type="button" disabled aria-disabled="true">Cobranza · Próximamente</button>
+          <button type="button" disabled aria-disabled="true">Reportes · Próximamente</button>
         </nav>
       </aside>
 
@@ -206,7 +209,9 @@ function ApplicationView({
           </div>
         </header>
 
-        {hasContractsPermission ? (
+        {activeModule === 'customers' && hasCustomersPermission ? (
+          <CustomersView productName={theme.productName} customerName={theme.customerName} onUnauthorized={onUnauthorized} />
+        ) : hasContractsPermission ? (
           <ContractsView
             productName={theme.productName}
             customerName={theme.customerName}

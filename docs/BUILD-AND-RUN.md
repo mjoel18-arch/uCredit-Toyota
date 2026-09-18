@@ -82,7 +82,7 @@ La ejecución posterior debe ser explícita:
 dotnet run --project tools/uCredit.IdentityAdmin -- --apply
 ```
 
-La herramienta es idempotente: reutiliza tenant, permiso, usuario, membresía y asignación existentes. Nunca cambia silenciosamente la contraseña de un usuario existente y no imprime contraseñas, hashes, stamps, tokens ni cadenas de conexión.
+La herramienta es idempotente: reutiliza tenant, permisos `contracts.read` y `customers.read`, usuario, membresía y asignaciones existentes. En una ejecución nueva crea ambos permisos y los asigna a la membresía activa del administrador del tenant indicado; en ejecuciones repetidas no duplica asignaciones ni elimina permisos existentes. Las asignaciones se filtran por tenant y no se propagan a otras membresías. Nunca cambia silenciosamente la contraseña de un usuario existente y no imprime contraseñas, hashes, stamps, tokens ni cadenas de conexión.
 También exige que `AddTenantLegacyCompanyScope` ya esté aplicada. Para cada CompanyId indicado crea o reactiva el scope del tenant; no elimina ni desactiva scopes omitidos. No consulta Legacy ni ejecuta migraciones.
 
 ## Smoke test de Identity local

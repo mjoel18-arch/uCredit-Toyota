@@ -11,7 +11,7 @@ namespace UCredit.IdentityAdmin.UnitTests;
 public sealed class IdentityBootstrapperTests
 {
     [Fact]
-    public async Task ProvisioningIsIdempotentAndCreatesOneCompanyScope()
+    public async Task ProvisioningCreatesBothPermissionsAndIsIdempotent()
     {
         using var provider = CreateProvider();
         using var scope = provider.CreateScope();
@@ -23,18 +23,80 @@ public sealed class IdentityBootstrapperTests
         var first = await bootstrapper.ExecuteAsync(options, context, userManager, TestContext.Current.CancellationToken);
         var second = await bootstrapper.ExecuteAsync(options, context, userManager, TestContext.Current.CancellationToken);
 
-        Assert.Equal(6, first.Actions.Count);
+        Assert.Equal(8, first.Actions.Count);
         Assert.All(first.Actions, action => Assert.True(action.Created));
-        Assert.Equal(6, second.Actions.Count);
+        Assert.Equal(8, second.Actions.Count);
         Assert.All(second.Actions, action => Assert.False(action.Created));
         Assert.Single(await context.Tenants.ToListAsync(TestContext.Current.CancellationToken));
-        Assert.Single(await context.Permissions.ToListAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(["contracts.read", "customers.read"], await context.Permissions
+            .OrderBy(permission => permission.Code)
+            .Select(permission => permission.Code)
+            .ToListAsync(TestContext.Current.CancellationToken));
         Assert.Single(await context.Users.ToListAsync(TestContext.Current.CancellationToken));
         Assert.Single(await context.UserTenantMemberships.ToListAsync(TestContext.Current.CancellationToken));
-        Assert.Single(await context.MembershipPermissions.ToListAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(2, await context.MembershipPermissions.CountAsync(TestContext.Current.CancellationToken));
         var companyScope = Assert.Single(await context.TenantLegacyCompanyScopes.ToListAsync(TestContext.Current.CancellationToken));
         Assert.Equal(1, companyScope.CompanyId);
         Assert.True(companyScope.IsActive);
+    }
+
+    [Fact]
+    public async Task ProvisioningPreservesExistingPermissionsAndDoesNotAssignAcrossTenants()
+    {
+        using var provider = CreateProvider();
+        using var scope = provider.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var bootstrapper = new IdentityBootstrapper(new AlwaysReadyMigration());
+
+        await bootstrapper.ExecuteAsync(CreateOptions(), context, userManager, TestContext.Current.CancellationToken);
+        var developmentTenant = await context.Tenants.SingleAsync(TestContext.Current.CancellationToken);
+        var developmentUser = await userManager.FindByEmailAsync("admin@example.test");
+        var contractsPermission = await context.Permissions.SingleAsync(item => item.Code == "contracts.read", TestContext.Current.CancellationToken);
+        var existingPermission = new Permission { Id = Guid.NewGuid(), Code = "reports.read", Name = "Read reports" };
+        context.Permissions.Add(existingPermission);
+        context.MembershipPermissions.Add(new MembershipPermission
+        {
+            UserId = developmentUser!.Id,
+            TenantId = developmentTenant.Id,
+            PermissionId = existingPermission.Id
+        });
+
+        var otherTenant = new Tenant { Id = Guid.NewGuid(), Code = "OTHER", Name = "Other tenant", IsActive = true };
+        var otherUser = new ApplicationUser
+        {
+            Id = Guid.NewGuid(),
+            UserName = "other@example.test",
+            Email = "other@example.test",
+            EmailConfirmed = true,
+            DisplayName = "Other administrator",
+            IsActive = true
+        };
+        context.Tenants.Add(otherTenant);
+        var creation = await userManager.CreateAsync(otherUser, "OnlyTest-Password-123!");
+        Assert.True(creation.Succeeded);
+        context.UserTenantMemberships.Add(new UserTenantMembership
+        {
+            UserId = otherUser.Id,
+            User = otherUser,
+            TenantId = otherTenant.Id,
+            Tenant = otherTenant,
+            IsActive = true
+        });
+        context.MembershipPermissions.Add(new MembershipPermission
+        {
+            UserId = otherUser.Id,
+            TenantId = otherTenant.Id,
+            PermissionId = contractsPermission.Id
+        });
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        await bootstrapper.ExecuteAsync(CreateOptions(), context, userManager, TestContext.Current.CancellationToken);
+
+        Assert.Contains(await context.MembershipPermissions.ToListAsync(TestContext.Current.CancellationToken), assignment =>
+            assignment.UserId == developmentUser.Id && assignment.TenantId == developmentTenant.Id && assignment.PermissionId == existingPermission.Id);
+        Assert.Single(await context.MembershipPermissions.Where(assignment => assignment.TenantId == otherTenant.Id)
+            .ToListAsync(TestContext.Current.CancellationToken));
     }
 
     [Fact]

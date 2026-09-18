@@ -27,8 +27,11 @@ public sealed class BootstrapResult
 
 public sealed class IdentityBootstrapper(IIdentityMigrationReadiness migrationReadiness)
 {
-    private const string PermissionCode = "contracts.read";
-    private const string PermissionName = "Read contracts";
+    private static readonly (string Code, string Name)[] RequiredPermissions =
+    [
+        ("contracts.read", "Read contracts"),
+        ("customers.read", "Read customers")
+    ];
     private const string DevelopmentAdminDisplayName = "Development Administrator";
 
     public async Task<BootstrapResult> ExecuteAsync(
@@ -70,21 +73,27 @@ public sealed class IdentityBootstrapper(IIdentityMigrationReadiness migrationRe
                 actions.Add(new BootstrapAction("Tenant", tenant.Id, null, false));
             }
 
-            var permission = await FindPermissionAsync(context, PermissionCode, cancellationToken);
-            if (permission is null)
+            var permissions = new List<Permission>(RequiredPermissions.Length);
+            foreach (var definition in RequiredPermissions)
             {
-                permission = new Permission
+                var permission = await FindPermissionAsync(context, definition.Code, cancellationToken);
+                if (permission is null)
                 {
-                    Id = Guid.NewGuid(),
-                    Code = PermissionCode,
-                    Name = PermissionName
-                };
-                context.Permissions.Add(permission);
-                actions.Add(new BootstrapAction("Permission", permission.Id, null, true));
-            }
-            else
-            {
-                actions.Add(new BootstrapAction("Permission", permission.Id, null, false));
+                    permission = new Permission
+                    {
+                        Id = Guid.NewGuid(),
+                        Code = definition.Code,
+                        Name = definition.Name
+                    };
+                    context.Permissions.Add(permission);
+                    actions.Add(new BootstrapAction("Permission", permission.Id, null, true));
+                }
+                else
+                {
+                    actions.Add(new BootstrapAction("Permission", permission.Id, null, false));
+                }
+
+                permissions.Add(permission);
             }
 
             await context.SaveChangesAsync(cancellationToken);
@@ -145,27 +154,30 @@ public sealed class IdentityBootstrapper(IIdentityMigrationReadiness migrationRe
                 actions.Add(new BootstrapAction("UserTenantMembership", user.Id, tenant.Id, false));
             }
 
-            var assignment = await context.MembershipPermissions
-                .SingleOrDefaultAsync(
-                    candidate => candidate.UserId == user.Id &&
-                        candidate.TenantId == tenant.Id &&
-                        candidate.PermissionId == permission.Id,
-                    cancellationToken);
-            if (assignment is null)
+            foreach (var permission in permissions)
             {
-                context.MembershipPermissions.Add(new MembershipPermission
+                var assignment = await context.MembershipPermissions
+                    .SingleOrDefaultAsync(
+                        candidate => candidate.UserId == user.Id &&
+                            candidate.TenantId == tenant.Id &&
+                            candidate.PermissionId == permission.Id,
+                        cancellationToken);
+                if (assignment is null)
                 {
-                    UserId = user.Id,
-                    TenantId = tenant.Id,
-                    PermissionId = permission.Id,
-                    Membership = membership,
-                    Permission = permission
-                });
-                actions.Add(new BootstrapAction("MembershipPermission", user.Id, tenant.Id, true));
-            }
-            else
-            {
-                actions.Add(new BootstrapAction("MembershipPermission", user.Id, tenant.Id, false));
+                    context.MembershipPermissions.Add(new MembershipPermission
+                    {
+                        UserId = user.Id,
+                        TenantId = tenant.Id,
+                        PermissionId = permission.Id,
+                        Membership = membership,
+                        Permission = permission
+                    });
+                    actions.Add(new BootstrapAction("MembershipPermission", user.Id, tenant.Id, true));
+                }
+                else
+                {
+                    actions.Add(new BootstrapAction("MembershipPermission", user.Id, tenant.Id, false));
+                }
             }
 
             foreach (var companyId in options.CompanyIds)

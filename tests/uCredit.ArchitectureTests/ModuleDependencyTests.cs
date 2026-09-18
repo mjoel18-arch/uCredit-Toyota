@@ -3,6 +3,8 @@ using UCredit.Infrastructure.Identity;
 using UCredit.Infrastructure.LegacySql.Contracts;
 using UCredit.Modules.Contracts.Contracts;
 using UCredit.Modules.Branding;
+using UCredit.Modules.Customers.Customers;
+using UCredit.Infrastructure.LegacySql.Customers;
 
 namespace UCredit.ArchitectureTests;
 
@@ -28,6 +30,13 @@ public sealed class ModuleDependencyTests
     }
 
     [Fact]
+    public void CustomersModuleDoesNotReferenceLegacyInfrastructureOrApi()
+    {
+        var references = typeof(Customer).Assembly.GetReferencedAssemblies();
+        Assert.DoesNotContain(references, reference => reference.Name is "uCredit.Infrastructure.LegacySql" or "uCredit.Api" or "uCredit.Web");
+    }
+
+    [Fact]
     public void BrandingModuleDoesNotReferenceContractsOrLegacyInfrastructure()
     {
         var references = typeof(BrandTheme).Assembly.GetReferencedAssemblies();
@@ -42,6 +51,7 @@ public sealed class ModuleDependencyTests
         {
             typeof(ContractSummary).Assembly,
             typeof(BrandTheme).Assembly,
+            typeof(Customer).Assembly,
         };
 
         foreach (var assembly in functionalAssemblies)
@@ -62,6 +72,12 @@ public sealed class ModuleDependencyTests
     {
         Assert.True(typeof(IContractReadRepository).IsAssignableFrom(typeof(LegacyContractReadRepository)));
         Assert.True(typeof(IContractAmortizationReadRepository).IsAssignableFrom(typeof(LegacyContractAmortizationReadRepository)));
+    }
+
+    [Fact]
+    public void LegacySqlCanImplementCustomerInterface()
+    {
+        Assert.True(typeof(ICustomerReadRepository).IsAssignableFrom(typeof(LegacyCustomerReadRepository)));
     }
 
     [Fact]

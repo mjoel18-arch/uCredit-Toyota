@@ -6,6 +6,7 @@
     <Project Path="src/uCredit.Infrastructure.Identity/uCredit.Infrastructure.Identity.csproj" />
     <Project Path="src/uCredit.Modules.Branding/uCredit.Modules.Branding.csproj" />
     <Project Path="src/uCredit.Modules.Contracts/uCredit.Modules.Contracts.csproj" />
+    <Project Path="src/uCredit.Modules.Customers/uCredit.Modules.Customers.csproj" />
   </Folder>
   <Folder Name="/tools/">
     <Project Path="tools/uCredit.IdentityAdmin/uCredit.IdentityAdmin.csproj" />
@@ -16,6 +17,7 @@
     <Project Path="tests/uCredit.IdentityAdmin.UnitTests/uCredit.IdentityAdmin.UnitTests.csproj" />
     <Project Path="tests/uCredit.Modules.Contracts.UnitTests/uCredit.Modules.Contracts.UnitTests.csproj" />
     <Project Path="tests/uCredit.Modules.Contracts.IntegrationTests/uCredit.Modules.Contracts.IntegrationTests.csproj" />
+    <Project Path="tests/uCredit.Modules.Customers.UnitTests/uCredit.Modules.Customers.UnitTests.csproj" />
     <Project Path="tests/uCredit.Api.IntegrationTests/uCredit.Api.IntegrationTests.csproj" />
   </Folder>
 </Solution>

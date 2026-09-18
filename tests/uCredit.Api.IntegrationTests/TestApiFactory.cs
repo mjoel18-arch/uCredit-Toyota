@@ -10,6 +10,7 @@ using Microsoft.Extensions.Options;
 using UCredit.Infrastructure.Identity.Models;
 using UCredit.Infrastructure.Identity.Tenants;
 using UCredit.Modules.Contracts.Contracts;
+using UCredit.Modules.Customers.Customers;
 
 namespace UCredit.Api.IntegrationTests;
 
@@ -31,6 +32,8 @@ public sealed class TestApiFactory : WebApplicationFactory<Program>
             services.RemoveAll<IContractReadRepository>();
             services.AddSingleton<IContractReadRepository, FakeContractReadRepository>();
             services.AddSingleton<IContractAmortizationReadRepository, FakeContractAmortizationReadRepository>();
+            services.RemoveAll<ICustomerReadRepository>();
+            services.AddSingleton<ICustomerReadRepository, FakeCustomerReadRepository>();
             services.AddSingleton<ITenantMembershipStore, FakeTenantMembershipStore>();
             services.AddSingleton<IDeploymentTenantPolicy>(new DeploymentTenantPolicy("TENANT-A"));
             services.AddSingleton<FakeTenantCookieIssuer>();
@@ -63,9 +66,15 @@ internal sealed class TestAuthenticationHandler(
             new(ClaimTypes.Name, "integration-test-user"),
             new(ClaimTypes.NameIdentifier, userId.ToString("D"))
         };
-        if (string.Equals(mode, "with-permission", StringComparison.Ordinal))
+        if (string.Equals(mode, "with-permission", StringComparison.Ordinal) ||
+            string.Equals(mode, "customers-with-permission", StringComparison.Ordinal))
         {
             claims.Add(new Claim("permission", "contracts.read"));
+        }
+
+        if (string.Equals(mode, "customers-with-permission", StringComparison.Ordinal))
+        {
+            claims.Add(new Claim("permission", "customers.read"));
         }
 
         if (string.Equals(mode, "toyota", StringComparison.Ordinal))
@@ -120,6 +129,39 @@ internal sealed class FakeContractReadRepository : IContractReadRepository
             string.Equals(contractNumber, KnownContract.ContractNumber, StringComparison.Ordinal)
                 ? KnownContract
                 : null);
+}
+
+internal sealed class FakeCustomerReadRepository : ICustomerReadRepository
+{
+    private static readonly Customer KnownCustomer = new(
+        42,
+        "ABC010203AB1",
+        "Cliente de prueba",
+        1,
+        "FISICA",
+        1,
+        "ACTIVO",
+        new CustomerAddress(10, "01000", "CIUDAD DE MÉXICO", "ÁLVARO OBREGÓN", "CIUDAD DE MÉXICO", "SAN ÁNGEL", "AV. PRUEBA", "1", null, 1, "DIRECCION UNICA"),
+        new CustomerPhone(2, "55", "5555555555", null, true),
+        [new CustomerRole(1, "CLIENTE")],
+        [new CustomerPhone(2, "55", "5555555555", null, true), new CustomerPhone(3, "55", "5555555556", "10", false)],
+        [new CustomerEmail(4, "Contacto", "cliente@example.test")]);
+
+    public Task<PagedCustomers> SearchAsync(CustomerSearchCriteria criteria, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var matches = criteria.PersonId is 42 || string.Equals(criteria.Rfc, KnownCustomer.Rfc, StringComparison.OrdinalIgnoreCase) ||
+            (criteria.Name is not null && KnownCustomer.Name.StartsWith(criteria.Name, StringComparison.OrdinalIgnoreCase))
+            ? new[] { KnownCustomer }
+            : Array.Empty<Customer>();
+        return Task.FromResult(new PagedCustomers(matches, criteria.Page, criteria.PageSize, matches.Length));
+    }
+
+    public Task<Customer?> GetByPersonIdAsync(int personId, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult<Customer?>(personId == KnownCustomer.PersonId ? KnownCustomer : null);
+    }
 }
 
 internal sealed class FakeContractAmortizationReadRepository : IContractAmortizationReadRepository

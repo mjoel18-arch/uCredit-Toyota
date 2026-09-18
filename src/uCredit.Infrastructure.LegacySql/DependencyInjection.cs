@@ -1,7 +1,9 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using UCredit.Infrastructure.LegacySql.Contracts;
+using UCredit.Infrastructure.LegacySql.Customers;
 using UCredit.Modules.Contracts.Contracts;
+using UCredit.Modules.Customers.Customers;
 
 namespace UCredit.Infrastructure.LegacySql;
 
@@ -18,6 +20,7 @@ public static class DependencyInjection
 
         services.AddScoped<IContractReadRepository, LegacyContractReadRepository>();
         services.AddScoped<IContractAmortizationReadRepository, LegacyContractAmortizationReadRepository>();
+        services.AddScoped<ICustomerReadRepository, LegacyCustomerReadRepository>();
         return services;
     }
 }

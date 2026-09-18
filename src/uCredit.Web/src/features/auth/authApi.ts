@@ -127,3 +127,59 @@ export function searchContracts(contractNumber: string): Promise<ContractSearchR
   })
   return apiRequest<ContractSearchResponse>('/api/v1/contracts?' + query.toString())
 }
+
+export type CustomerAddress = {
+  addressId: number
+  postalCode: string | null
+  state: string | null
+  municipality: string | null
+  city: string | null
+  neighborhood: string | null
+  streetAndNumber: string | null
+  exteriorNumber: string | null
+  interiorNumber: string | null
+  typeCode: number
+  typeDescription: string | null
+}
+
+export type CustomerPhone = {
+  phoneId: number
+  areaCode: string | null
+  phoneNumber: string | null
+  extension: string | null
+  isDefault: boolean
+}
+
+export type CustomerEmail = { emailId: number; contact: string | null; email: string | null }
+export type CustomerRole = { code: number; description: string | null }
+export type CustomerListItem = {
+  personId: number
+  rfcMasked: string | null
+  name: string
+  legalPersonality: { code: number; description: string | null }
+  status: { code: number; description: string | null }
+  primaryAddress: CustomerAddress | null
+  primaryPhone: CustomerPhone | null
+  roles: CustomerRole[]
+}
+export type CustomerPage = { items: CustomerListItem[]; page: number; pageSize: number; total: number }
+export type CustomerDetail = Omit<CustomerListItem, 'rfcMasked'> & {
+  rfc: string | null
+  activePhones: CustomerPhone[]
+  activeEmails: CustomerEmail[]
+}
+
+export function searchCustomers(criteria: { personId?: number; rfc?: string; name?: string; legalPersonality?: number; page?: number; pageSize?: number }): Promise<CustomerPage> {
+  const query = new URLSearchParams()
+  if (criteria.personId) query.set('personId', String(criteria.personId))
+  if (criteria.rfc) query.set('rfc', criteria.rfc)
+  if (criteria.name) query.set('name', criteria.name)
+  if (criteria.legalPersonality) query.set('legalPersonality', String(criteria.legalPersonality))
+  query.set('page', String(criteria.page ?? 1))
+  query.set('pageSize', String(criteria.pageSize ?? 20))
+  return apiRequest<CustomerPage>('/api/v1/customers/?' + query.toString())
+}
+
+export function getCustomerByPersonId(personId: number): Promise<CustomerDetail> {
+  return apiRequest<CustomerDetail>('/api/v1/customers/' + encodeURIComponent(personId))
+}
