@@ -59,6 +59,8 @@ builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("contracts.read", policy =>
         policy.RequireClaim("permission", "contracts.read"));
+    options.AddPolicy("customers.read", policy =>
+        policy.RequireClaim("permission", "customers.read"));
 });
 builder.Services.AddSingleton<IBrandThemeProvider, InMemoryBrandThemeProvider>();
 builder.Services.AddLegacySql(builder.Configuration);
@@ -81,6 +83,7 @@ app.MapHealthChecks("/health");
 app.MapAuthEndpoints();
 app.MapBrandingEndpoints();
 app.MapContractEndpoints();
+app.MapCustomerEndpoints();
 app.Run();
 
 public partial class Program;

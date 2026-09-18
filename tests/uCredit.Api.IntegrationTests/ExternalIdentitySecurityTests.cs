@@ -51,6 +51,17 @@ public sealed class ExternalIdentitySecurityTests(TestApiFactory factory)
     }
 
     [Fact]
+    public async Task CustomersReadRoleIsTransformedToPermission()
+    {
+        var principal = new ClaimsPrincipal(new ClaimsIdentity(
+            [new Claim("roles", "customers.read")], "test"));
+
+        var transformed = await new ExternalIdRoleClaimsTransformation().TransformAsync(principal);
+
+        Assert.Contains(transformed.Claims, claim => claim.Type == "permission" && claim.Value == "customers.read");
+    }
+
+    [Fact]
     public void ProductionContractsReadPolicyRemainsPermissionClaim()
     {
         var options = factory.Services.GetRequiredService<IOptions<AuthorizationOptions>>().Value;
@@ -60,6 +71,18 @@ public sealed class ExternalIdentitySecurityTests(TestApiFactory factory)
         var requirement = Assert.Single(policy.Requirements.OfType<ClaimsAuthorizationRequirement>());
         Assert.Equal("permission", requirement.ClaimType);
         Assert.Contains("contracts.read", requirement.AllowedValues!);
+    }
+
+    [Fact]
+    public void ProductionCustomersReadPolicyUsesPermissionClaim()
+    {
+        var options = factory.Services.GetRequiredService<IOptions<AuthorizationOptions>>().Value;
+        var policy = options.GetPolicy("customers.read");
+
+        Assert.NotNull(policy);
+        var requirement = Assert.Single(policy.Requirements.OfType<ClaimsAuthorizationRequirement>());
+        Assert.Equal("permission", requirement.ClaimType);
+        Assert.Contains("customers.read", requirement.AllowedValues!);
     }
 
     [Fact]

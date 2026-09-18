@@ -22,7 +22,7 @@ Login y selección de tenant tienen rate limiting por dirección remota. Identit
 
 ## Autorizaci�n y tenants
 
-La API conserva la pol�tica `contracts.read` basada en `permission=contracts.read`. El usuario selecciona un tenant mediante `POST /api/v1/auth/select-tenant`; la API valida usuario activo, tenant activo y membres�a activa, y emite una nueva cookie firmada con s�lo los permisos de esa membres�a. El tenant activo se obtiene exclusivamente de `tenant_id` y `tenant_code` en la cookie; `X-Tenant-Code` no es autoridad. La resoluci�n de tenant no filtra todav�a contratos ni selecciona conexiones Legacy.
+La API conserva las políticas `contracts.read` y `customers.read`, basadas en los claims `permission` correspondientes. El usuario selecciona un tenant mediante `POST /api/v1/auth/select-tenant`; la API valida usuario activo, tenant activo y membresía activa, y emite una nueva cookie firmada con sólo los permisos de esa membresía. El tenant activo se obtiene exclusivamente de `tenant_id` y `tenant_code` en la cookie; `X-Tenant-Code` no es autoridad. La resolución de tenant no filtra todavía contratos ni selecciona conexiones Legacy.
 
 ## Secretos y bases
 
@@ -57,7 +57,7 @@ La configuración de desarrollo se recibe por variables de entorno o User Secret
 - `UCREDIT_BOOTSTRAP_ADMIN_PASSWORD`;
 - `UCREDIT_BOOTSTRAP_COMPANY_IDS` (lista separada por comas de enteros 0 a 255).
 
-La operación es idempotente y no cambia la contraseña de un usuario existente. La salida sólo muestra identificadores de objetos y si fueron creados o ya existían; nunca muestra contraseñas, hashes, security stamps, tokens o cadenas de conexión. No se deben agregar valores reales a Git ni ejecutar la herramienta contra Legacy.
+La operación es idempotente y no cambia la contraseña de un usuario existente. En cada ejecución garantiza la existencia de `contracts.read` y `customers.read` y los asigna únicamente a la membresía activa del administrador en el tenant indicado. Las asignaciones están vinculadas por `UserId`, `TenantId` y `PermissionId`; no se copian permisos a otros tenants ni se eliminan permisos existentes. La salida sólo muestra identificadores de objetos y si fueron creados o ya existían; nunca muestra contraseñas, hashes, security stamps, tokens o cadenas de conexión. No se deben agregar valores reales a Git ni ejecutar la herramienta contra Legacy.
 
 Antes de ejecutar el aprovisionamiento, la migracion `AddTenantLegacyCompanyScope` debe estar aplicada en la base Identity. La herramienta nunca ejecuta `Migrate`, `EnsureCreated` ni `database update`. `UCREDIT_BOOTSTRAP_COMPANY_IDS` solo agrega o reactiva scopes para el tenant indicado; no desactiva scopes ausentes de la lista. `DisplayName` queda nulo y no se consulta `CEMPRESA` ni ninguna base Legacy.
 
