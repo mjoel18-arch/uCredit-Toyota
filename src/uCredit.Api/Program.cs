@@ -76,6 +76,17 @@ builder.Services.AddSingleton<IBrandThemeProvider, InMemoryBrandThemeProvider>()
 builder.Services.AddLegacySql(builder.Configuration);
 
 var app = builder.Build();
+var legacyOptions = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<LegacySqlOptions>>().Value;
+var isDevelopment = app.Environment.IsDevelopment();
+var writeConnectionConfigured = !string.IsNullOrWhiteSpace(legacyOptions.WriteConnectionString);
+var expectedDatabaseConfigured = !string.IsNullOrWhiteSpace(legacyOptions.LegacyWriteTestDatabase);
+UCredit.Api.StartupConfigurationLogging.Log(
+    app.Logger,
+    isDevelopment,
+    writeConnectionConfigured,
+    legacyOptions.AllowLegacyWriteTests,
+    expectedDatabaseConfigured,
+    requirePepCheck);
 app.UseExceptionHandler();
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseHttpsRedirection();

@@ -32,7 +32,12 @@ Ejemplo de clave de variable de ambiente:
 
 ```text
 LegacySql__ReadConnectionString
+LegacySql__WriteConnectionString
+UCREDIT_ALLOW_LEGACY_WRITE_TESTS=true
+UCREDIT_LEGACY_WRITE_TEST_DATABASE=pr_t
 ```
+
+El alta de clientes sólo resuelve la escritura con `DOTNET_ENVIRONMENT=Development`, la sección `LegacySql:WriteConnectionString` (variable `LegacySql__WriteConnectionString`) y las dos variables explícitas de prueba anteriores. La API registra únicamente indicadores booleanos de esta configuración; nunca registra cadenas de conexión ni sus componentes.
 
 ## Frontend
 

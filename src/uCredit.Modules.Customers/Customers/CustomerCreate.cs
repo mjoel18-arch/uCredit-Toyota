@@ -67,7 +67,7 @@ public sealed class CustomerCreationOptions
 
 public interface ICustomerWriteRepository
 {
-    Task<CustomerCreateResult> CreateAsync(CustomerCreateCommand command, string legacyUserCode, CancellationToken cancellationToken = default);
+    Task<CustomerCreateResult> CreateAsync(CustomerCreateCommand command, string legacyUserCode, string correlationId, CancellationToken cancellationToken = default);
 }
 
 public static class CustomerCreateValidator

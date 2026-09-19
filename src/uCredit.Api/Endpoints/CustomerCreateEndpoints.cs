@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Logging;
 using UCredit.Api.Security;
 using UCredit.Application.Execution;
 using UCredit.Infrastructure.LegacySql.Customers;
@@ -9,6 +10,8 @@ namespace UCredit.Api.Endpoints;
 
 public static class CustomerCreateEndpoints
 {
+    private static readonly Action<ILogger, string, string, string, string, Exception?> UnavailableLog =
+        LoggerMessage.Define<string, string, string, string>(LogLevel.Warning, new EventId(4202), "Customer creation unavailable. ExceptionType={ExceptionType} Stage={Stage} Reason={Reason} CorrelationId={CorrelationId}");
     public static IEndpointRouteBuilder MapCustomerCreateEndpoints(this IEndpointRouteBuilder endpoints)
     {
         endpoints.MapPost("/api/v1/customers", CreateAsync)
@@ -25,8 +28,12 @@ public static class CustomerCreateEndpoints
         IEnumerable<IPersonPepChecker> pepCheckers,
         ICustomerWriteRepository repository,
         IExecutionActorContext actorContext,
+        ILoggerFactory loggerFactory,
+        HttpContext httpContext,
         CancellationToken cancellationToken)
     {
+        var logger = loggerFactory.CreateLogger("CustomerCreate");
+        var correlationId = httpContext.TraceIdentifier;
         var command = request.ToCommand();
         var errors = CustomerCreateValidator.Validate(command);
         if (errors.Count > 0) return Results.ValidationProblem(errors);
@@ -39,18 +46,26 @@ public static class CustomerCreateEndpoints
         if (options.Value.RequirePepCheck)
         {
             var checker = pepCheckers.SingleOrDefault();
-            if (checker is null) return Results.Problem(statusCode: StatusCodes.Status503ServiceUnavailable, title: "The PEP service is unavailable.");
+            if (checker is null)
+            {
+                LogUnavailable(logger, "configuration", typeof(LegacyWriteNotConfiguredException), "none", correlationId);
+                return Unavailable("The PEP service is unavailable.", correlationId);
+            }
             PepCheckResult pep;
             try
             {
                 pep = await checker.CheckAsync(command, cancellationToken);
             }
-            catch (LegacyWriteNotConfiguredException)
+            catch (LegacyWriteNotConfiguredException exception)
             {
-                return Results.Problem(statusCode: StatusCodes.Status503ServiceUnavailable, title: "The PEP service is unavailable.");
+                LogUnavailable(logger, exception.Stage, exception.GetType(), exception.Reason.ToString(), correlationId);
+                return Unavailable("The PEP service is unavailable.", correlationId);
             }
             if (pep.Status == PepCheckStatus.Unavailable)
-                return Results.Problem(statusCode: StatusCodes.Status503ServiceUnavailable, title: "The PEP service is unavailable.");
+            {
+                LogUnavailable(logger, "configuration", typeof(LegacyWriteNotConfiguredException), "none", correlationId);
+                return Unavailable("The PEP service is unavailable.", correlationId);
+            }
             if (pep.Status == PepCheckStatus.Match && !request.PepConfirmed)
             {
                 var problem = new ProblemDetails { Title = "PEP review confirmation is required before creating the customer.", Status = StatusCodes.Status422UnprocessableEntity };
@@ -62,18 +77,34 @@ public static class CustomerCreateEndpoints
 
         try
         {
-            var result = await repository.CreateAsync(command, actor.LegacyUserCode, cancellationToken);
+            var result = await repository.CreateAsync(command, actor.LegacyUserCode, correlationId, cancellationToken);
             return Results.Created($"/api/v1/customers/{result.PersonId}", new CustomerCreateResponse(result.PersonId, pepStatus));
         }
         catch (CustomerCreateConflictException exception)
         {
             return Results.Conflict(new ProblemDetails { Title = "The customer already exists or conflicts with Legacy data.", Detail = exception.Message, Status = StatusCodes.Status409Conflict });
         }
-        catch (LegacyWriteNotConfiguredException)
+        catch (LegacyWriteNotConfiguredException exception)
         {
-            return Results.Problem(statusCode: StatusCodes.Status503ServiceUnavailable, title: "The Legacy write service is unavailable.");
+            LogUnavailable(logger, exception.Stage, exception.GetType(), exception.Reason.ToString(), correlationId);
+            return Unavailable("The Legacy write service is unavailable.", correlationId);
+        }
+        catch (LegacyWriteUnavailableException exception)
+        {
+            LogUnavailable(logger, exception.Stage, exception.InnerException?.GetType() ?? exception.GetType(), "none", correlationId);
+            return Unavailable("The Legacy write service is unavailable.", correlationId);
         }
     }
+
+    private static IResult Unavailable(string title, string correlationId)
+    {
+        var problem = new ProblemDetails { Title = title, Status = StatusCodes.Status503ServiceUnavailable };
+        problem.Extensions["correlationId"] = correlationId;
+        return Results.Problem(problem);
+    }
+
+    private static void LogUnavailable(ILogger logger, string stage, Type exceptionType, string reason, string correlationId) =>
+        UnavailableLog(logger, exceptionType.Name, stage, reason, correlationId, null);
 }
 
 public sealed record CustomerCreateRequest(

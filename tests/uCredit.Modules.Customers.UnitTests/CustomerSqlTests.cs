@@ -1,3 +1,4 @@
+using UCredit.Infrastructure.LegacySql;
 using UCredit.Infrastructure.LegacySql.Customers;
 using UCredit.Modules.Customers.Customers;
 
@@ -5,6 +6,25 @@ namespace UCredit.Modules.Customers.UnitTests;
 
 public sealed class CustomerSqlTests
 {
+    [Theory]
+    [InlineData(false, "Server=synthetic", true, "pr_t", LegacyWriteConfigurationReason.NotDevelopment)]
+    [InlineData(true, "", true, "pr_t", LegacyWriteConfigurationReason.MissingWriteConnection)]
+    [InlineData(true, "Server=synthetic", false, "pr_t", LegacyWriteConfigurationReason.WriteTestsNotAllowed)]
+    [InlineData(true, "Server=synthetic", true, "", LegacyWriteConfigurationReason.MissingExpectedDatabase)]
+    [InlineData(true, "Server=synthetic", true, "other", LegacyWriteConfigurationReason.InvalidExpectedDatabase)]
+    public void WriteConfigurationReportsSafeReason(bool development, string connection, bool allow, string database, LegacyWriteConfigurationReason expected)
+    {
+        var options = new LegacySqlOptions { WriteConnectionString = connection, AllowLegacyWriteTests = allow, LegacyWriteTestDatabase = database };
+        Assert.Equal(expected, LegacyCustomerWriteRepository.GetConfigurationReason(options, development));
+    }
+
+    [Fact]
+    public void ValidWriteConfigurationPassesAllConfigurationGuards()
+    {
+        var options = new LegacySqlOptions { WriteConnectionString = "Server=synthetic", AllowLegacyWriteTests = true, LegacyWriteTestDatabase = "pr_t" };
+        Assert.Null(LegacyCustomerWriteRepository.GetConfigurationReason(options, isDevelopment: true));
+    }
+
     [Fact]
     public void SearchSqlUsesOnlyParameterizedCriteriaAndNoSelectStar()
     {

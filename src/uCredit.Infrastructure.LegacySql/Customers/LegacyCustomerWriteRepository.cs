@@ -2,6 +2,7 @@ using System.Data;
 using Dapper;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using UCredit.Application.Execution;
 using UCredit.Modules.Customers.Customers;
@@ -9,7 +10,25 @@ using UCredit.Modules.Customers.Customers;
 namespace UCredit.Infrastructure.LegacySql.Customers;
 
 public sealed class CustomerCreateConflictException(string message) : Exception(message);
-public sealed class LegacyWriteNotConfiguredException(string message) : Exception(message);
+public enum LegacyWriteConfigurationReason
+{
+    NotDevelopment,
+    MissingWriteConnection,
+    WriteTestsNotAllowed,
+    MissingExpectedDatabase,
+    InvalidExpectedDatabase
+}
+
+public sealed class LegacyWriteNotConfiguredException(string message, string stage, LegacyWriteConfigurationReason reason) : Exception(message)
+{
+    public string Stage { get; } = stage;
+    public LegacyWriteConfigurationReason Reason { get; } = reason;
+}
+
+public sealed class LegacyWriteUnavailableException(string stage, Exception innerException) : Exception("Legacy write service unavailable.", innerException)
+{
+    public string Stage { get; } = stage;
+}
 
 internal sealed class LegacyPersonPepChecker : IPersonPepChecker
 {
@@ -17,16 +36,28 @@ internal sealed class LegacyPersonPepChecker : IPersonPepChecker
         Task.FromResult(new PepCheckResult(PepCheckStatus.Unavailable));
 }
 
-public sealed class LegacyCustomerWriteRepository(
+public sealed partial class LegacyCustomerWriteRepository(
     IOptions<LegacySqlOptions> options,
     IExecutionTenantContext tenantContext,
-    IHostEnvironment hostEnvironment) : ICustomerWriteRepository
+    IHostEnvironment hostEnvironment,
+    ILogger<LegacyCustomerWriteRepository> logger) : ICustomerWriteRepository
 {
     private readonly LegacySqlOptions _options = options.Value;
     private readonly IExecutionTenantContext _tenantContext = tenantContext;
     private readonly IHostEnvironment _hostEnvironment = hostEnvironment;
+    private readonly ILogger<LegacyCustomerWriteRepository> _logger = logger;
 
-    public async Task<CustomerCreateResult> CreateAsync(CustomerCreateCommand command, string legacyUserCode, CancellationToken cancellationToken = default)
+    public static LegacyWriteConfigurationReason? GetConfigurationReason(LegacySqlOptions options, bool isDevelopment)
+    {
+        if (!isDevelopment) return LegacyWriteConfigurationReason.NotDevelopment;
+        if (string.IsNullOrWhiteSpace(options.WriteConnectionString)) return LegacyWriteConfigurationReason.MissingWriteConnection;
+        if (!options.AllowLegacyWriteTests) return LegacyWriteConfigurationReason.WriteTestsNotAllowed;
+        if (string.IsNullOrWhiteSpace(options.LegacyWriteTestDatabase)) return LegacyWriteConfigurationReason.MissingExpectedDatabase;
+        if (!string.Equals(options.LegacyWriteTestDatabase, "pr_t", StringComparison.Ordinal)) return LegacyWriteConfigurationReason.InvalidExpectedDatabase;
+        return null;
+    }
+
+    public async Task<CustomerCreateResult> CreateAsync(CustomerCreateCommand command, string legacyUserCode, string correlationId, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(legacyUserCode) || legacyUserCode.Trim().Length > 8)
             throw new ArgumentException("A valid LegacyUserCode is required.", nameof(legacyUserCode));
@@ -39,12 +70,28 @@ public sealed class LegacyCustomerWriteRepository(
         EnsureWriteConfigured();
 
         await using var connection = new SqlConnection(_options.WriteConnectionString);
-        await connection.OpenAsync(cancellationToken);
-        await EnsureTestDatabaseAsync(connection, cancellationToken);
+        try
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+        catch (SqlException exception)
+        {
+            throw new LegacyWriteUnavailableException("connection", exception);
+        }
+        try
+        {
+            await EnsureTestDatabaseAsync(connection, cancellationToken);
+        }
+        catch (SqlException exception)
+        {
+            throw new LegacyWriteUnavailableException("database_guard", exception);
+        }
         await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync(cancellationToken);
+        var stage = "rfc";
         try
         {
             await EnsureRfcAvailableAsync(connection, transaction, command.Rfc.Trim(), cancellationToken);
+            stage = "consecutive";
             var personId = await NextIdAsync(connection, transaction, "CPERSONA", cancellationToken);
             var addressId = await NextIdAsync(connection, transaction, "CDOMICILIO", cancellationToken);
             var phoneId = await NextIdAsync(connection, transaction, "CTELEFONO", cancellationToken);
@@ -65,10 +112,14 @@ public sealed class LegacyCustomerWriteRepository(
             parameters.Add("PhoneId", phoneId, DbType.Int32); parameters.Add("PhoneType", command.PhoneTypeCode, DbType.Int32); parameters.Add("AreaCode", command.AreaCode.Trim(), DbType.String, size: 10); parameters.Add("PhoneNumber", command.PhoneNumber.Trim(), DbType.String, size: 30); parameters.Add("PhoneExtension", command.PhoneExtension, DbType.String, size: 10); parameters.Add("PhoneContact", command.PhoneContact, DbType.String, size: 200);
             parameters.Add("EmailId", emailId, DbType.Int32); parameters.Add("EmailContact", command.EmailContact.Trim(), DbType.String, size: 250); parameters.Add("BitacoraId", bitacoraId, DbType.Int32);
 
+            stage = "person";
             await connection.ExecuteAsync(new CommandDefinition(CreateInsertSql(command), parameters, transaction, _options.CommandTimeoutSeconds, CommandType.Text, cancellationToken: cancellationToken));
+            stage = "email_usage";
             foreach (var usageCode in command.EmailUsageCodes)
                 await connection.ExecuteAsync(new CommandDefinition("INSERT INTO dbo.KEMAIL_USO (PAR_CL_VALOR, MAI_FL_CVE, USR_CL_CVE, USO_FE_MODIFICACION) VALUES (@UsageCode, @EmailId, @LegacyUserCode, @OperationDate);", new { UsageCode = usageCode, EmailId = emailId, LegacyUserCode = legacyUserCode.Trim(), OperationDate = operationDate }, transaction, _options.CommandTimeoutSeconds, CommandType.Text, cancellationToken: cancellationToken));
+            stage = "audit";
             await connection.ExecuteAsync(new CommandDefinition("INSERT INTO dbo.KBITACORA (BIT_FL_CVE, BIT_FE_FECHA, ATV_FL_CVE, BIT_FE_OPERACION, BIT_DS_REFERENCIA, USR_CL_CVE, USR_CL_FIRMA, BIT_TOP_CVE) VALUES (@BitacoraId, SYSUTCDATETIME(), 4, @OperationDate, @Reference, @LegacyUserCode, @LegacyUserCode, '');", new { BitacoraId = bitacoraId, OperationDate = operationDate, Reference = $"Se agrego la persona con clave {personId}", LegacyUserCode = legacyUserCode.Trim() }, transaction, _options.CommandTimeoutSeconds, CommandType.Text, cancellationToken: cancellationToken));
+            stage = "commit";
             await transaction.CommitAsync(cancellationToken);
             return new CustomerCreateResult(personId);
         }
@@ -77,12 +128,16 @@ public sealed class LegacyCustomerWriteRepository(
             await transaction.RollbackAsync(CancellationToken.None);
             throw new CustomerCreateConflictException("The customer already exists or conflicts with Legacy data.");
         }
-        catch
+        catch (Exception exception)
         {
             await transaction.RollbackAsync(CancellationToken.None);
+            LogFailure(_logger, exception.GetType().Name, stage, correlationId);
             throw;
         }
     }
+
+    [LoggerMessage(EventId = 4201, Level = LogLevel.Error, Message = "Customer creation failed. ExceptionType={ExceptionType} Stage={Stage} CorrelationId={CorrelationId}")]
+    private static partial void LogFailure(ILogger logger, string exceptionType, string stage, string correlationId);
 
     private static string CreateInsertSql(CustomerCreateCommand command) => $"""
         INSERT INTO dbo.CPERSONA (PNA_FL_PERSONA, PNA_CL_PJURIDICA, PNA_CL_RFC, PNA_DS_NOMBRE, PNA_DS_EMAIL, PNA_FG_FCONTACTO, GPR_FL_CVE, PNA_FE_ALTA, PNA_FE_ULTMOD, PNA_FG_STATUS, USR_CL_CVE, PNA_CL_TCARTERA, PNA_CL_REFPAGO, GRI_FL_CVE, PAI_FL_CVE, PNA_NO_CODE, PNA_FG_FRONTERIZO, RFI_CL_CLAVE)
@@ -108,13 +163,14 @@ public sealed class LegacyCustomerWriteRepository(
 
     private void EnsureWriteConfigured()
     {
-        if (!_hostEnvironment.IsDevelopment() || string.IsNullOrWhiteSpace(_options.WriteConnectionString) || !_options.AllowLegacyWriteTests || !string.Equals(_options.LegacyWriteTestDatabase, "pr_t", StringComparison.Ordinal))
-            throw new LegacyWriteNotConfiguredException("Legacy writes are disabled unless the Development pr_t guard is enabled.");
+        var reason = GetConfigurationReason(_options, _hostEnvironment.IsDevelopment());
+        if (reason is not null)
+            throw new LegacyWriteNotConfiguredException("Legacy write configuration is not valid.", "configuration", reason.Value);
     }
 
     private static async Task EnsureTestDatabaseAsync(SqlConnection connection, CancellationToken cancellationToken)
     {
         var database = await connection.ExecuteScalarAsync<string>(new CommandDefinition("SELECT DB_NAME();", cancellationToken: cancellationToken));
-        if (!string.Equals(database, "pr_t", StringComparison.Ordinal)) throw new LegacyWriteNotConfiguredException("Legacy write test database is not pr_t.");
+        if (!string.Equals(database, "pr_t", StringComparison.Ordinal)) throw new LegacyWriteNotConfiguredException("Legacy write test database is not pr_t.", "database_guard", LegacyWriteConfigurationReason.InvalidExpectedDatabase);
     }
 }
