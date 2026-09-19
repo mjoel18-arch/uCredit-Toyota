@@ -24,6 +24,7 @@ public static class BootstrapConfiguration
             configuration["UCREDIT_BOOTSTRAP_ADMIN_EMAIL"],
             configuration["UCREDIT_BOOTSTRAP_ADMIN_PASSWORD"],
             unknownArguments,
-            configuration["UCREDIT_BOOTSTRAP_COMPANY_IDS"]);
+            configuration["UCREDIT_BOOTSTRAP_COMPANY_IDS"],
+            configuration["UCREDIT_BOOTSTRAP_LEGACY_USER_CODE"]);
     }
 }

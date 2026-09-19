@@ -1,10 +1,12 @@
 export class ApiError extends Error {
   readonly status: number
+  readonly code?: string
 
-  constructor(status: number) {
+  constructor(status: number, code?: string) {
     super('API request failed')
     this.name = 'ApiError'
     this.status = status
+    this.code = code
   }
 }
 
@@ -30,7 +32,12 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
   }
 
   if (!response.ok) {
-    throw new ApiError(response.status)
+    let code: string | undefined
+    try {
+      const problem = await response.json() as { code?: string; extensions?: { code?: string } }
+      code = problem.code ?? problem.extensions?.code
+    } catch { /* Keep the status-only error for non-JSON responses. */ }
+    throw new ApiError(response.status, code)
   }
 
   if (response.status === 204) {

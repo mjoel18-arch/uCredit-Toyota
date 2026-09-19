@@ -177,6 +177,7 @@ function ApplicationView({
 }) {
   const hasContractsPermission = session.permissions.includes('contracts.read')
   const hasCustomersPermission = session.permissions.includes('customers.read')
+  const hasCustomersWritePermission = session.permissions.includes('customers.write')
   const [activeModule, setActiveModule] = useState<'contracts' | 'customers'>('contracts')
 
   return (
@@ -210,7 +211,7 @@ function ApplicationView({
         </header>
 
         {activeModule === 'customers' && hasCustomersPermission ? (
-          <CustomersView productName={theme.productName} customerName={theme.customerName} onUnauthorized={onUnauthorized} />
+          <CustomersView productName={theme.productName} customerName={theme.customerName} onUnauthorized={onUnauthorized} canCreate={hasCustomersWritePermission} onCreated={() => undefined} />
         ) : hasContractsPermission ? (
           <ContractsView
             productName={theme.productName}

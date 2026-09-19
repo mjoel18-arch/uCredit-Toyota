@@ -117,6 +117,14 @@ public sealed class BootstrapValidatorTests
         Assert.DoesNotContain("Server=", output, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void RejectsLegacyUserCodeLongerThanEightCharacters()
+    {
+        var result = BootstrapValidator.Validate(CreateInput(legacyUserCode: "TOO-LONG9"));
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, error => error.Contains("LEGACY_USER_CODE", StringComparison.Ordinal));
+    }
+
     private static BootstrapInput CreateInput(
         string environmentName = "Development",
         bool apply = true,
@@ -125,6 +133,7 @@ public sealed class BootstrapValidatorTests
         string tenantName = "Development tenant",
         string adminEmail = "admin@example.test",
         string adminPassword = "OnlyTest-Password-123!",
-        string? companyIds = "1") =>
-        new(environmentName, apply, connectionString, tenantCode, tenantName, adminEmail, adminPassword, companyIds: companyIds);
+        string? companyIds = "1",
+        string? legacyUserCode = "FICO") =>
+        new(environmentName, apply, connectionString, tenantCode, tenantName, adminEmail, adminPassword, companyIds: companyIds, legacyUserCode: legacyUserCode);
 }

@@ -16,7 +16,8 @@ public sealed record ActiveTenantMembership(
     string TenantCode,
     string TenantName,
     IReadOnlyList<string> PermissionCodes,
-    IReadOnlyList<int>? AllowedCompanyIds = null);
+    IReadOnlyList<int>? AllowedCompanyIds = null,
+    string? LegacyUserCode = null);
 
 public interface IDeploymentTenantPolicy
 {

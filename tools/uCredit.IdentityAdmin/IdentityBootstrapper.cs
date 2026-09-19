@@ -13,6 +13,7 @@ public sealed record BootstrapAction(
 {
     public int? NumericIdentifier { get; init; }
     public bool Reactivated { get; init; }
+    public string? SafeMessage { get; init; }
 }
 
 public sealed class BootstrapResult
@@ -30,7 +31,8 @@ public sealed class IdentityBootstrapper(IIdentityMigrationReadiness migrationRe
     private static readonly (string Code, string Name)[] RequiredPermissions =
     [
         ("contracts.read", "Read contracts"),
-        ("customers.read", "Read customers")
+        ("customers.read", "Read customers"),
+        ("customers.write", "Create customers")
     ];
     private const string DevelopmentAdminDisplayName = "Development Administrator";
 
@@ -128,7 +130,6 @@ public sealed class IdentityBootstrapper(IIdentityMigrationReadiness migrationRe
 
                 actions.Add(new BootstrapAction("ApplicationUser", user.Id, null, false));
             }
-
             var membership = await context.UserTenantMemberships
                 .SingleOrDefaultAsync(
                     candidate => candidate.UserId == user.Id && candidate.TenantId == tenant.Id,
@@ -141,17 +142,35 @@ public sealed class IdentityBootstrapper(IIdentityMigrationReadiness migrationRe
                     User = user,
                     TenantId = tenant.Id,
                     Tenant = tenant,
-                    IsActive = true
+                    IsActive = true,
+                    LegacyUserCode = options.LegacyUserCode
                 };
                 context.UserTenantMemberships.Add(membership);
-                actions.Add(new BootstrapAction("UserTenantMembership", user.Id, tenant.Id, true));
+                actions.Add(new BootstrapAction("UserTenantMembership", user.Id, tenant.Id, true)
+                {
+                    SafeMessage = "Legacy user code: configured"
+                });
             }
             else
             {
                 if (!membership.IsActive)
                     throw new BootstrapException("The development administrator membership exists but is inactive.");
 
-                actions.Add(new BootstrapAction("UserTenantMembership", user.Id, tenant.Id, false));
+                if (string.IsNullOrWhiteSpace(membership.LegacyUserCode))
+                {
+                    membership.LegacyUserCode = options.LegacyUserCode;
+                    actions.Add(new BootstrapAction("UserTenantMembership", user.Id, tenant.Id, false)
+                    {
+                        SafeMessage = "Legacy user code: configured"
+                    });
+                }
+                else if (!string.Equals(membership.LegacyUserCode, options.LegacyUserCode, StringComparison.Ordinal))
+                    throw new BootstrapException("The development administrator membership already has a different Legacy user code.");
+                else
+                    actions.Add(new BootstrapAction("UserTenantMembership", user.Id, tenant.Id, false)
+                    {
+                        SafeMessage = "Legacy user code: already configured"
+                    });
             }
 
             foreach (var permission in permissions)
@@ -259,6 +278,9 @@ public static class BootstrapOutput
 {
     public static string Format(BootstrapAction action)
     {
+        if (action.SafeMessage is not null)
+            return action.SafeMessage;
+
         var identifier = action.NumericIdentifier is not null
             ? $"{action.PrimaryId:D}/{action.NumericIdentifier.Value}"
             : action.SecondaryId is null

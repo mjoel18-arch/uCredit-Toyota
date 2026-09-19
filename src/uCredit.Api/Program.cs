@@ -6,9 +6,15 @@ using UCredit.Api.Middleware;
 using UCredit.Infrastructure.Identity;
 using UCredit.Infrastructure.LegacySql;
 using UCredit.Modules.Branding;
+using UCredit.Modules.Customers.Customers;
 
 var builder = WebApplication.CreateBuilder(args);
 var isTesting = builder.Environment.IsEnvironment("Testing");
+var requirePepCheck = builder.Configuration.GetValue("CustomerCreation:RequirePepCheck", true);
+if (builder.Environment.IsProduction() && !requirePepCheck)
+    throw new InvalidOperationException("CustomerCreation__RequirePepCheck must be true in Production.");
+builder.Services.AddOptions<CustomerCreationOptions>()
+    .Bind(builder.Configuration.GetSection("CustomerCreation"));
 
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
@@ -16,6 +22,8 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 });
 builder.Services.AddProblemDetails();
 builder.Services.AddHealthChecks();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<UCredit.Application.Execution.IExecutionActorContext, UCredit.Api.Security.HttpExecutionActorContext>();
 builder.Services.AddAntiforgery(options =>
 {
     options.HeaderName = "X-CSRF-TOKEN";
@@ -61,6 +69,8 @@ builder.Services.AddAuthorization(options =>
         policy.RequireClaim("permission", "contracts.read"));
     options.AddPolicy("customers.read", policy =>
         policy.RequireClaim("permission", "customers.read"));
+    options.AddPolicy("customers.write", policy =>
+        policy.RequireClaim("permission", "customers.write"));
 });
 builder.Services.AddSingleton<IBrandThemeProvider, InMemoryBrandThemeProvider>();
 builder.Services.AddLegacySql(builder.Configuration);
@@ -84,6 +94,7 @@ app.MapAuthEndpoints();
 app.MapBrandingEndpoints();
 app.MapContractEndpoints();
 app.MapCustomerEndpoints();
+app.MapCustomerCreateEndpoints();
 app.Run();
 
 public partial class Program;

@@ -87,5 +87,6 @@ public sealed class EfTenantMembershipStore(IdentityDbContext dbContext) : ITena
                 .Select(scope => scope.CompanyId)
                 .Distinct()
                 .Order()
-                .ToArray());
+                .ToArray(),
+            membership.LegacyUserCode);
 }

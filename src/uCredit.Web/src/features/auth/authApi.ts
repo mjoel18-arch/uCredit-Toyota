@@ -183,3 +183,44 @@ export function searchCustomers(criteria: { personId?: number; rfc?: string; nam
 export function getCustomerByPersonId(personId: number): Promise<CustomerDetail> {
   return apiRequest<CustomerDetail>('/api/v1/customers/' + encodeURIComponent(personId))
 }
+
+export type CustomerCreatePayload = {
+  legalPersonality: number
+  rfc: string
+  firstName?: string
+  paternalSurname?: string
+  maternalSurname?: string
+  legalName?: string
+  capitalRegime?: string
+  constitutionOrBirthDate: string
+  countryCode: number
+  groupCode: number
+  riskCode: number
+  contactFormCode: number
+  taxRegimeCode: number
+  addressTypeCode: number
+  postalCode: string
+  state: string
+  city: string
+  municipality: string
+  neighborhood: string
+  streetAndNumber: string
+  exteriorNumber: string
+  interiorNumber?: string
+  addressReference?: string
+  addressSchedule?: string
+  addressStatusCode: number
+  phoneTypeCode: number
+  areaCode: string
+  phoneNumber: string
+  phoneExtension?: string
+  phoneContact?: string
+  emailContact: string
+  email: string
+  emailUsageCodes: number[]
+  pepConfirmed: boolean
+}
+
+export function createCustomer(payload: CustomerCreatePayload): Promise<{ personId: number; pepValidationStatus: 'Executed' | 'NotExecuted' }> {
+  return withCsrf('/api/v1/customers', { method: 'POST', body: JSON.stringify(payload) })
+}

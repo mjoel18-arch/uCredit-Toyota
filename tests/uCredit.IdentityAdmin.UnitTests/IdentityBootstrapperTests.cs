@@ -23,18 +23,19 @@ public sealed class IdentityBootstrapperTests
         var first = await bootstrapper.ExecuteAsync(options, context, userManager, TestContext.Current.CancellationToken);
         var second = await bootstrapper.ExecuteAsync(options, context, userManager, TestContext.Current.CancellationToken);
 
-        Assert.Equal(8, first.Actions.Count);
+        Assert.Equal(10, first.Actions.Count);
         Assert.All(first.Actions, action => Assert.True(action.Created));
-        Assert.Equal(8, second.Actions.Count);
+        Assert.Equal(10, second.Actions.Count);
         Assert.All(second.Actions, action => Assert.False(action.Created));
         Assert.Single(await context.Tenants.ToListAsync(TestContext.Current.CancellationToken));
-        Assert.Equal(["contracts.read", "customers.read"], await context.Permissions
+        Assert.Equal(["contracts.read", "customers.read", "customers.write"], await context.Permissions
             .OrderBy(permission => permission.Code)
             .Select(permission => permission.Code)
             .ToListAsync(TestContext.Current.CancellationToken));
         Assert.Single(await context.Users.ToListAsync(TestContext.Current.CancellationToken));
-        Assert.Single(await context.UserTenantMemberships.ToListAsync(TestContext.Current.CancellationToken));
-        Assert.Equal(2, await context.MembershipPermissions.CountAsync(TestContext.Current.CancellationToken));
+        var membership = Assert.Single(await context.UserTenantMemberships.ToListAsync(TestContext.Current.CancellationToken));
+        Assert.Equal("FICO", membership.LegacyUserCode);
+        Assert.Equal(3, await context.MembershipPermissions.CountAsync(TestContext.Current.CancellationToken));
         var companyScope = Assert.Single(await context.TenantLegacyCompanyScopes.ToListAsync(TestContext.Current.CancellationToken));
         Assert.Equal(1, companyScope.CompanyId);
         Assert.True(companyScope.IsActive);
@@ -98,7 +99,93 @@ public sealed class IdentityBootstrapperTests
         Assert.Single(await context.MembershipPermissions.Where(assignment => assignment.TenantId == otherTenant.Id)
             .ToListAsync(TestContext.Current.CancellationToken));
     }
+    [Fact]
+    public async Task ExistingMembershipCodeIsNotChangedSilently()
+    {
+        using var provider = CreateProvider();
+        using var scope = provider.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var bootstrapper = new IdentityBootstrapper(new AlwaysReadyMigration());
 
+        await bootstrapper.ExecuteAsync(CreateOptions(), context, userManager, TestContext.Current.CancellationToken);
+        var membership = await context.UserTenantMemberships.SingleAsync(TestContext.Current.CancellationToken);
+        membership.LegacyUserCode = "OTHER";
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        await Assert.ThrowsAsync<BootstrapException>(() => bootstrapper.ExecuteAsync(CreateOptions(), context, userManager, TestContext.Current.CancellationToken));
+        Assert.Equal("OTHER", (await context.UserTenantMemberships.SingleAsync(TestContext.Current.CancellationToken)).LegacyUserCode);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task EmptyExistingMembershipCodeAllowsFirstAssignment(string? existingCode)
+    {
+        using var provider = CreateProvider();
+        using var scope = provider.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var bootstrapper = new IdentityBootstrapper(new AlwaysReadyMigration());
+
+        await bootstrapper.ExecuteAsync(CreateOptions(), context, userManager, TestContext.Current.CancellationToken);
+        var membership = await context.UserTenantMemberships.SingleAsync(TestContext.Current.CancellationToken);
+        membership.LegacyUserCode = existingCode;
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var result = await bootstrapper.ExecuteAsync(CreateOptions(), context, userManager, TestContext.Current.CancellationToken);
+
+        Assert.Equal("FICO", (await context.UserTenantMemberships.SingleAsync(TestContext.Current.CancellationToken)).LegacyUserCode);
+        Assert.Contains(result.Actions, action => action.SafeMessage == "Legacy user code: configured");
+        Assert.DoesNotContain("FICO", string.Join("\n", result.Actions.Select(BootstrapOutput.Format)), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task MatchingMembershipCodeIsIdempotentAndDoesNotExposeValue()
+    {
+        using var provider = CreateProvider();
+        using var scope = provider.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var bootstrapper = new IdentityBootstrapper(new AlwaysReadyMigration());
+
+        await bootstrapper.ExecuteAsync(CreateOptions(), context, userManager, TestContext.Current.CancellationToken);
+        var result = await bootstrapper.ExecuteAsync(CreateOptions(), context, userManager, TestContext.Current.CancellationToken);
+
+        Assert.Contains(result.Actions, action => action.SafeMessage == "Legacy user code: already configured");
+        Assert.DoesNotContain("FICO", string.Join("\n", result.Actions.Select(BootstrapOutput.Format)), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CodeOnAnotherTenantDoesNotInterfere()
+    {
+        using var provider = CreateProvider();
+        using var scope = provider.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var bootstrapper = new IdentityBootstrapper(new AlwaysReadyMigration());
+
+        await bootstrapper.ExecuteAsync(CreateOptions(), context, userManager, TestContext.Current.CancellationToken);
+        var user = await userManager.FindByEmailAsync("admin@example.test");
+        var otherTenant = new Tenant { Id = Guid.NewGuid(), Code = "OTHER", Name = "Other", IsActive = true };
+        context.Tenants.Add(otherTenant);
+        context.UserTenantMemberships.Add(new UserTenantMembership
+        {
+            UserId = user!.Id,
+            User = user,
+            TenantId = otherTenant.Id,
+            Tenant = otherTenant,
+            IsActive = true,
+            LegacyUserCode = "OTHER"
+        });
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var result = await bootstrapper.ExecuteAsync(CreateOptions(), context, userManager, TestContext.Current.CancellationToken);
+
+        Assert.Contains(result.Actions, action => action.SafeMessage == "Legacy user code: already configured");
+        Assert.Equal("OTHER", (await context.UserTenantMemberships.SingleAsync(item => item.TenantId == otherTenant.Id, TestContext.Current.CancellationToken)).LegacyUserCode);
+    }
     [Fact]
     public async Task ProvisioningCreatesSeveralCompanyScopesWithoutRemovingUnlistedScopes()
     {
@@ -233,7 +320,8 @@ public sealed class IdentityBootstrapperTests
         TenantName = "Development tenant",
         AdminEmail = "admin@example.test",
         AdminPassword = password,
-        CompanyIds = companyIds ?? [1]
+        CompanyIds = companyIds ?? [1],
+        LegacyUserCode = "FICO"
     };
 
     private sealed class AlwaysReadyMigration : IIdentityMigrationReadiness
