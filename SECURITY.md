@@ -22,7 +22,7 @@ Login y selección de tenant tienen rate limiting por dirección remota. Identit
 
 ## Autorizaci�n y tenants
 
-La API conserva las políticas `contracts.read` y `customers.read`, basadas en los claims `permission` correspondientes. El usuario selecciona un tenant mediante `POST /api/v1/auth/select-tenant`; la API valida usuario activo, tenant activo y membresía activa, y emite una nueva cookie firmada con sólo los permisos de esa membresía. El tenant activo se obtiene exclusivamente de `tenant_id` y `tenant_code` en la cookie; `X-Tenant-Code` no es autoridad. La resolución de tenant no filtra todavía contratos ni selecciona conexiones Legacy.
+La API conserva las políticas `contracts.read`, `customers.read` y `customers.write`, basadas en los claims `permission` correspondientes. `LegacyUserCode` se resuelve desde la membresía activa seleccionada y no se expone en `/auth/me`, DTOs, headers ni logs. El usuario selecciona un tenant mediante `POST /api/v1/auth/select-tenant`; la API valida usuario activo, tenant activo y membresía activa, y emite una nueva cookie firmada con sólo los permisos de esa membresía. El tenant activo se obtiene exclusivamente de `tenant_id` y `tenant_code` en la cookie; `X-Tenant-Code` no es autoridad. La resolución de tenant no filtra todavía contratos ni selecciona conexiones Legacy.
 
 ## Secretos y bases
 
@@ -31,6 +31,10 @@ Est� prohibido guardar credenciales, tokens o cadenas de conexi�n reales en 
 ## Entra External ID
 
 Microsoft Entra External ID queda como alternativa OIDC postergada. Sus componentes de transformaci�n se conservan aislados como referencia hist�rica, pero no se registran como autenticaci�n productiva de esta versi�n.
+
+## Validación PEP del alta de clientes
+
+El puerto `IPersonPepChecker` se conserva para una integración PEP real, pero el alta moderna no consulta tablas PLD/PEP ni registra un resultado falso de "sin coincidencias". El proveedor debe expresar `NoMatch`, `Match` o `Unavailable`; `Match` requiere confirmación explícita del usuario y `Unavailable` produce 503 sin escribir. `CustomerCreation__RequirePepCheck` vale `true` por defecto y debe permanecer en `true` en Production; la API falla al iniciar si Production intenta desactivarlo. Sólo Development puede usar `false`, lo que permite la demo con el estado visible `Validación PEP no ejecutada en este ambiente de demostración`. Esta configuración no es válida para producción.
 
 ## Migraciones
 
@@ -45,7 +49,7 @@ Las pruebas rápidas usan `Microsoft.EntityFrameworkCore.InMemory` para verifica
 Cada solicitud autenticada con cookie consulta Identity para verificar usuario, tenant, membresía y permisos actuales. Esto agrega una consulta y costo de latencia por solicitud protegida, priorizando seguridad durante esta fase. Más adelante podrá agregarse caché de corta duración con invalidación explícita ante cambios de identidad, membresías o permisos.
 ## Aprovisionamiento inicial controlado
 
-El proyecto `tools/uCredit.IdentityAdmin` permite aprovisionar únicamente la base independiente de Identity en desarrollo. Exige `DOTNET_ENVIRONMENT=Development`, el argumento explícito `--apply`, `IdentitySql__ConnectionString` y un nombre de base terminado en `_Dev`. Rechaza producción, conexiones sin base, tenant o correo inválidos y contraseñas ausentes.
+El proyecto `tools/uCredit.IdentityAdmin` permite aprovisionar únicamente la base independiente de Identity en desarrollo. Exige `DOTNET_ENVIRONMENT=Development`, el argumento explícito `--apply`, `IdentitySql__ConnectionString` y un nombre de base terminado en `_Dev`. Rechaza producción, conexiones sin base, tenant o correo inválidos y contraseñas o `UCREDIT_BOOTSTRAP_LEGACY_USER_CODE` ausentes o inválidos.
 
 La herramienta verifica que la migración `InitialIdentity` ya esté registrada y falla si la base no está preparada. No ejecuta `Migrate`, `EnsureCreated`, `database update` ni crea bases automáticamente. Usa `UserManager<ApplicationUser>` para crear el usuario y una transacción sobre Identity cuando la operación se ejecuta.
 
@@ -57,7 +61,7 @@ La configuración de desarrollo se recibe por variables de entorno o User Secret
 - `UCREDIT_BOOTSTRAP_ADMIN_PASSWORD`;
 - `UCREDIT_BOOTSTRAP_COMPANY_IDS` (lista separada por comas de enteros 0 a 255).
 
-La operación es idempotente y no cambia la contraseña de un usuario existente. En cada ejecución garantiza la existencia de `contracts.read` y `customers.read` y los asigna únicamente a la membresía activa del administrador en el tenant indicado. Las asignaciones están vinculadas por `UserId`, `TenantId` y `PermissionId`; no se copian permisos a otros tenants ni se eliminan permisos existentes. La salida sólo muestra identificadores de objetos y si fueron creados o ya existían; nunca muestra contraseñas, hashes, security stamps, tokens o cadenas de conexión. No se deben agregar valores reales a Git ni ejecutar la herramienta contra Legacy.
+La operación es idempotente y no cambia la contraseña de un usuario existente. En cada ejecución garantiza la existencia de `contracts.read`, `customers.read` y `customers.write` y los asigna únicamente a la membresía activa del administrador en el tenant indicado. Las asignaciones están vinculadas por `UserId`, `TenantId` y `PermissionId`; no se copian permisos a otros tenants ni se eliminan permisos existentes. La salida sólo muestra identificadores de objetos y si fueron creados o ya existían; nunca muestra contraseñas, hashes, security stamps, tokens o cadenas de conexión. No se deben agregar valores reales a Git ni ejecutar la herramienta contra Legacy.
 
 Antes de ejecutar el aprovisionamiento, la migracion `AddTenantLegacyCompanyScope` debe estar aplicada en la base Identity. La herramienta nunca ejecuta `Migrate`, `EnsureCreated` ni `database update`. `UCREDIT_BOOTSTRAP_COMPANY_IDS` solo agrega o reactiva scopes para el tenant indicado; no desactiva scopes ausentes de la lista. `DisplayName` queda nulo y no se consulta `CEMPRESA` ni ninguna base Legacy.
 

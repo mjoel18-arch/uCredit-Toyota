@@ -15,7 +15,8 @@ public sealed class BootstrapInput
         string? adminEmail,
         string? adminPassword,
         IReadOnlyList<string>? unknownArguments = null,
-        string? companyIds = null)
+        string? companyIds = null,
+        string? legacyUserCode = null)
     {
         EnvironmentName = environmentName;
         Apply = apply;
@@ -25,6 +26,7 @@ public sealed class BootstrapInput
         AdminEmail = adminEmail;
         AdminPassword = adminPassword;
         CompanyIds = companyIds;
+        LegacyUserCode = legacyUserCode;
         UnknownArguments = unknownArguments ?? [];
     }
 
@@ -36,6 +38,7 @@ public sealed class BootstrapInput
     public string? AdminEmail { get; }
     public string? AdminPassword { get; }
     public string? CompanyIds { get; }
+    public string? LegacyUserCode { get; }
     public IReadOnlyList<string> UnknownArguments { get; }
 }
 
@@ -47,6 +50,7 @@ public sealed class BootstrapOptions
     public required string AdminEmail { get; init; }
     public required string AdminPassword { get; init; }
     public required IReadOnlyList<int> CompanyIds { get; init; }
+    public string LegacyUserCode { get; init; } = string.Empty;
     public bool Apply { get; init; }
 }
 
@@ -120,6 +124,10 @@ public static class BootstrapValidator
 
         var companyIds = ParseCompanyIds(input.CompanyIds, errors);
 
+        var legacyUserCode = input.LegacyUserCode?.Trim();
+        if (string.IsNullOrWhiteSpace(legacyUserCode) || legacyUserCode.Length > 8 || legacyUserCode.Any(char.IsWhiteSpace))
+            errors.Add("UCREDIT_BOOTSTRAP_LEGACY_USER_CODE is invalid.");
+
         if (errors.Count > 0)
             return new BootstrapValidationResult(null, errors);
 
@@ -132,6 +140,7 @@ public static class BootstrapValidator
                 AdminEmail = adminEmail!,
                 AdminPassword = input.AdminPassword!,
                 CompanyIds = companyIds!,
+                LegacyUserCode = legacyUserCode!,
                 Apply = true
             },
             errors);

@@ -6,5 +6,6 @@ public sealed class UserTenantMembership
     public Guid TenantId { get; set; }
     public Tenant Tenant { get; set; } = null!;
     public bool IsActive { get; set; } = true;
+    public string? LegacyUserCode { get; set; }
     public ICollection<MembershipPermission> Permissions { get; } = new List<MembershipPermission>();
 }

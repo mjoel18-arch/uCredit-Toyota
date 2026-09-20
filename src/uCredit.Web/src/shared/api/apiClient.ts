@@ -1,10 +1,12 @@
 export class ApiError extends Error {
   readonly status: number
+  readonly code?: string
 
-  constructor(status: number) {
+  constructor(status: number, code?: string) {
     super('API request failed')
     this.name = 'ApiError'
     this.status = status
+    this.code = code
   }
 }
 
@@ -30,7 +32,12 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
   }
 
   if (!response.ok) {
-    throw new ApiError(response.status)
+    let code: string | undefined
+    try {
+      const problem = await response.json() as { code?: string; extensions?: { code?: string } }
+      code = problem.code ?? problem.extensions?.code
+    } catch { /* Keep the status-only error for non-JSON responses. */ }
+    throw new ApiError(response.status, code)
   }
 
   if (response.status === 204) {
@@ -56,8 +63,14 @@ export function apiErrorMessage(error: unknown, fallback = 'No fue posible compl
       return 'La sesión no es válida o ya expiró.'
     case 403:
       return 'No tienes autorización para realizar esta operación.'
+    case 409:
+      return 'Ya existe un cliente registrado con ese RFC; no se guardó información.'
+    case 422:
+      return 'La solicitud requiere una confirmación o corrección adicional.'
     case 500:
       return 'El servicio no está disponible en este momento.'
+    case 503:
+      return 'El servicio no está disponible; no se guardó información.'
     default:
       return fallback
   }

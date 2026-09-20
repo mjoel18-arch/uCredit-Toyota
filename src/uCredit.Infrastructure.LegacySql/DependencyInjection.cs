@@ -9,19 +9,23 @@ namespace UCredit.Infrastructure.LegacySql;
 
 public static class DependencyInjection
 {
-    public static IServiceCollection AddLegacySql(
-        this IServiceCollection services,
-        IConfiguration configuration)
+    public static IServiceCollection AddLegacySql(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddOptions<LegacySqlOptions>()
             .Bind(configuration.GetSection(LegacySqlOptions.SectionName))
-            .Validate(options => options.CommandTimeoutSeconds is > 0 and <= 300,
-                "Command timeout must be between 1 and 300 seconds.");
-
+            .Configure(options =>
+            {
+                if (bool.TryParse(Environment.GetEnvironmentVariable("UCREDIT_ALLOW_LEGACY_WRITE_TESTS"), out var allow))
+                    options.AllowLegacyWriteTests = allow;
+                var database = Environment.GetEnvironmentVariable("UCREDIT_LEGACY_WRITE_TEST_DATABASE");
+                if (database is not null)
+                    options.LegacyWriteTestDatabase = database;
+            })
+            .Validate(options => options.CommandTimeoutSeconds is > 0 and <= 300, "Command timeout must be between 1 and 300 seconds.");
         services.AddScoped<IContractReadRepository, LegacyContractReadRepository>();
         services.AddScoped<IContractAmortizationReadRepository, LegacyContractAmortizationReadRepository>();
         services.AddScoped<ICustomerReadRepository, LegacyCustomerReadRepository>();
+        services.AddScoped<ICustomerWriteRepository, LegacyCustomerWriteRepository>();
         return services;
     }
 }
-

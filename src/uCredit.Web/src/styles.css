@@ -123,3 +123,12 @@ h1 { margin: 5px 0 0; font-size: clamp(26px, 4vw, 36px); }
 .amortization-table th, .amortization-table td { padding: 12px; border-top: 1px solid #eaecf0; text-align: right; white-space: nowrap; }
 .amortization-table th { color: var(--color-secondary); font-weight: 700; }
 .amortization-table th:first-child, .amortization-table td:nth-child(2), .amortization-table td:nth-child(3), .amortization-table td:last-child { text-align: left; }
+
+.customer-create-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin-top: 1.25rem; }
+.customer-create-form label, .customer-create-form fieldset { display: grid; gap: .35rem; }
+.customer-create-form input, .customer-create-form select { min-width: 0; }
+.customer-create-form fieldset { border: 1px solid var(--border-color); padding: .75rem; }
+.customer-create-form fieldset label { display: flex; align-items: center; }
+.customer-create-form .form-actions { grid-column: 1 / -1; display: flex; gap: .75rem; flex-wrap: wrap; }
+.pep-confirmation { grid-column: 1 / -1; padding: .75rem; border: 1px solid var(--warning-color, #b7791f); }
+@media (max-width: 720px) { .customer-create-form { grid-template-columns: 1fr; } .customer-create-form .form-actions, .pep-confirmation { grid-column: auto; } }

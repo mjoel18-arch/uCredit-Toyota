@@ -1,3 +1,4 @@
+using UCredit.Infrastructure.LegacySql;
 using UCredit.Infrastructure.LegacySql.Customers;
 using UCredit.Modules.Customers.Customers;
 
@@ -5,6 +6,25 @@ namespace UCredit.Modules.Customers.UnitTests;
 
 public sealed class CustomerSqlTests
 {
+    [Theory]
+    [InlineData(false, "Server=synthetic", true, "pr_t", LegacyWriteConfigurationReason.NotDevelopment)]
+    [InlineData(true, "", true, "pr_t", LegacyWriteConfigurationReason.MissingWriteConnection)]
+    [InlineData(true, "Server=synthetic", false, "pr_t", LegacyWriteConfigurationReason.WriteTestsNotAllowed)]
+    [InlineData(true, "Server=synthetic", true, "", LegacyWriteConfigurationReason.MissingExpectedDatabase)]
+    [InlineData(true, "Server=synthetic", true, "other", LegacyWriteConfigurationReason.InvalidExpectedDatabase)]
+    public void WriteConfigurationReportsSafeReason(bool development, string connection, bool allow, string database, LegacyWriteConfigurationReason expected)
+    {
+        var options = new LegacySqlOptions { WriteConnectionString = connection, AllowLegacyWriteTests = allow, LegacyWriteTestDatabase = database };
+        Assert.Equal(expected, LegacyCustomerWriteRepository.GetConfigurationReason(options, development));
+    }
+
+    [Fact]
+    public void ValidWriteConfigurationPassesAllConfigurationGuards()
+    {
+        var options = new LegacySqlOptions { WriteConnectionString = "Server=synthetic", AllowLegacyWriteTests = true, LegacyWriteTestDatabase = "pr_t" };
+        Assert.Null(LegacyCustomerWriteRepository.GetConfigurationReason(options, isDevelopment: true));
+    }
+
     [Fact]
     public void SearchSqlUsesOnlyParameterizedCriteriaAndNoSelectStar()
     {
@@ -29,5 +49,51 @@ public sealed class CustomerSqlTests
         Assert.Contains("TFN_FG_REGDEFAULT DESC, TFN_FL_CVE ASC", phones, StringComparison.Ordinal);
         Assert.Contains("MAI_FG_STATUS = 1", emails, StringComparison.Ordinal);
         Assert.DoesNotContain("TOP (1)", emails, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void OptionalInteriorNumberUsesLegacyEmptyStringAndSchemaSize()
+    {
+        Assert.Equal(string.Empty, LegacyCustomerWriteRepository.NormalizeOptionalLegacyString(null, 100));
+        Assert.Equal(string.Empty, LegacyCustomerWriteRepository.NormalizeOptionalLegacyString("   ", 100));
+        Assert.Equal("12-B", LegacyCustomerWriteRepository.NormalizeOptionalLegacyString(" 12-B ", 100));
+        Assert.Contains("@InteriorNumber", LegacyCustomerWriteRepository.CreateAddressInsertSql, StringComparison.Ordinal);
+        Assert.Contains("PAI_FL_CVE", LegacyCustomerWriteRepository.CreateAddressInsertSql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AddressInsertHasEveryConfirmedRequiredColumnAndNoConcatenatedValues()
+    {
+        var sql = LegacyCustomerWriteRepository.CreateAddressInsertSql;
+        foreach (var column in new[]
+        {
+            "DMO_FL_CVE", "PNA_FL_PERSONA", "DMO_CL_CPOSTAL", "DMO_DS_NUMEXT", "DMO_DS_NUMINT",
+            "DMO_FG_TDIRECCION", "DMO_FG_STATUS", "DMO_FG_FACTURA", "DMO_FG_EDOCTA", "DMO_FG_REGDEFAULT",
+            "DMO_FG_OTROS", "DMO_FE_ULTMOD", "PAI_FL_CVE"
+        })
+        {
+            Assert.Contains(column, sql, StringComparison.Ordinal);
+        }
+
+        Assert.DoesNotContain("VALUES ('", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("@Rfc", sql, StringComparison.Ordinal);
+        Assert.Contains("Stage=", "Customer creation failed. ExceptionType={ExceptionType} Stage={Stage} CorrelationId={CorrelationId}", StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AddressFailuresAreAssignedAddressStageByOperationBoundary()
+    {
+        Assert.Equal("address", LegacyCustomerWriteRepository.AddressStage);
+        Assert.Contains("@InteriorNumber", LegacyCustomerWriteRepository.CreateAddressInsertSql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TaxRegimeLookupUsesSatKeyStatusAndPersonalityWithoutInternalId()
+    {
+        var sql = LegacyCustomerWriteRepository.TaxRegimeLookupSql;
+        Assert.Contains("RFI_CL_CLAVE = @TaxRegimeCode", sql, StringComparison.Ordinal);
+        Assert.Contains("RFI_CL_PJURIDICA = @FiscalPersonality", sql, StringComparison.Ordinal);
+        Assert.Contains("RFI_FG_STATUS = 1", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("RFI_FL_CVE", sql, StringComparison.Ordinal);
     }
 }

@@ -38,6 +38,10 @@ public sealed class IdentityDbContext(DbContextOptions<IdentityDbContext> option
         });
         builder.Entity<UserTenantMembership>(e =>
         {
+            e.Property(x => x.LegacyUserCode).HasMaxLength(8);
+        });
+        builder.Entity<UserTenantMembership>(e =>
+        {
             e.HasKey(x => new { x.UserId, x.TenantId });
             e.HasOne(x => x.User).WithMany(x => x.Memberships)
                 .HasForeignKey(x => x.UserId)

@@ -18,13 +18,26 @@ dotnet run --project src/uCredit.Api
 
 La cadena `LegacySql:ReadConnectionString` debe proporcionarse mediante Secret Manager o variable de ambiente. No editar `appsettings.json` con credenciales.
 
+Para el alta de clientes, `CustomerCreation__RequirePepCheck` es `true` por defecto. Production rechaza iniciar con `false`. Para una demo local sin proveedor PEP operativo puede configurarse únicamente en Development:
+
+```text
+CustomerCreation__RequirePepCheck=false
+```
+
+La respuesta y la pantalla mostrarán `Validación PEP no ejecutada en este ambiente de demostración`; no se simula un resultado limpio ni se considera al cliente validado. Esta configuración no debe usarse en producción.
+
 La API requiere configurar `IdentitySql:ConnectionString` mediante configuración segura. La variable equivalente es `IdentitySql__ConnectionString`; corresponde exclusivamente a la base nueva de seguridad y nunca debe apuntar a Legacy. No guardar valores reales en Git.
 
 Ejemplo de clave de variable de ambiente:
 
 ```text
 LegacySql__ReadConnectionString
+LegacySql__WriteConnectionString
+UCREDIT_ALLOW_LEGACY_WRITE_TESTS=true
+UCREDIT_LEGACY_WRITE_TEST_DATABASE=pr_t
 ```
+
+El alta de clientes sólo resuelve la escritura con `DOTNET_ENVIRONMENT=Development`, la sección `LegacySql:WriteConnectionString` (variable `LegacySql__WriteConnectionString`) y las dos variables explícitas de prueba anteriores. La API registra únicamente indicadores booleanos de esta configuración; nunca registra cadenas de conexión ni sus componentes.
 
 ## Frontend
 
@@ -74,7 +87,16 @@ dotnet user-secrets --project tools/uCredit.IdentityAdmin set "UCREDIT_BOOTSTRAP
 dotnet user-secrets --project tools/uCredit.IdentityAdmin set "UCREDIT_BOOTSTRAP_ADMIN_EMAIL" "<valor-local>"
 dotnet user-secrets --project tools/uCredit.IdentityAdmin set "UCREDIT_BOOTSTRAP_ADMIN_PASSWORD" "<valor-local>"
 dotnet user-secrets --project tools/uCredit.IdentityAdmin set "UCREDIT_BOOTSTRAP_COMPANY_IDS" "<company-ids>"
+dotnet user-secrets --project tools/uCredit.IdentityAdmin set "UCREDIT_BOOTSTRAP_LEGACY_USER_CODE" "<codigo-actor>"
 ```
+
+`UCREDIT_BOOTSTRAP_LEGACY_USER_CODE` se normaliza con `Trim()` y se valida
+entre 1 y 8 caracteres. La comparación contra el valor existente de la
+membresía es `StringComparison.Ordinal`. Un valor `NULL`, vacío o compuesto
+únicamente por espacios se considera no configurado y permite la primera
+asignación; un valor no vacío distinto se rechaza. La salida sólo informa
+`Legacy user code: configured` o `Legacy user code: already configured`, sin
+mostrar el código.
 
 La ejecución posterior debe ser explícita:
 
@@ -82,7 +104,7 @@ La ejecución posterior debe ser explícita:
 dotnet run --project tools/uCredit.IdentityAdmin -- --apply
 ```
 
-La herramienta es idempotente: reutiliza tenant, permisos `contracts.read` y `customers.read`, usuario, membresía y asignaciones existentes. En una ejecución nueva crea ambos permisos y los asigna a la membresía activa del administrador del tenant indicado; en ejecuciones repetidas no duplica asignaciones ni elimina permisos existentes. Las asignaciones se filtran por tenant y no se propagan a otras membresías. Nunca cambia silenciosamente la contraseña de un usuario existente y no imprime contraseñas, hashes, stamps, tokens ni cadenas de conexión.
+La herramienta es idempotente: reutiliza tenant, permisos `contracts.read`, `customers.read` y `customers.write`, usuario, membresía y asignaciones existentes. En una ejecución nueva crea los tres permisos y los asigna a la membresía activa del administrador del tenant indicado; en ejecuciones repetidas no duplica asignaciones ni elimina permisos existentes. Las asignaciones se filtran por tenant y no se propagan a otras membresías. Nunca cambia silenciosamente la contraseña de un usuario existente y no imprime contraseñas, hashes, stamps, tokens ni cadenas de conexión.
 También exige que `AddTenantLegacyCompanyScope` ya esté aplicada. Para cada CompanyId indicado crea o reactiva el scope del tenant; no elimina ni desactiva scopes omitidos. No consulta Legacy ni ejecuta migraciones.
 
 ## Smoke test de Identity local
