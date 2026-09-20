@@ -78,6 +78,7 @@ public sealed class ModuleDependencyTests
     public void LegacySqlCanImplementCustomerInterface()
     {
         Assert.True(typeof(ICustomerReadRepository).IsAssignableFrom(typeof(LegacyCustomerReadRepository)));
+        Assert.True(typeof(ICustomerProfileReadinessRepository).IsAssignableFrom(typeof(LegacyCustomerProfileReadinessRepository)));
     }
 
     [Fact]

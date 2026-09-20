@@ -25,6 +25,8 @@ public static class DependencyInjection
         services.AddScoped<IContractReadRepository, LegacyContractReadRepository>();
         services.AddScoped<IContractAmortizationReadRepository, LegacyContractAmortizationReadRepository>();
         services.AddScoped<ICustomerReadRepository, LegacyCustomerReadRepository>();
+        services.AddScoped<ICustomerProfileReadinessRepository, LegacyCustomerProfileReadinessRepository>();
+        services.AddScoped<ICustomerProfileReadinessService, CustomerProfileReadinessService>();
         services.AddScoped<ICustomerWriteRepository, LegacyCustomerWriteRepository>();
         return services;
     }

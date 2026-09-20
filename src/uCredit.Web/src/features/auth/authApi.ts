@@ -184,6 +184,21 @@ export function getCustomerByPersonId(personId: number): Promise<CustomerDetail>
   return apiRequest<CustomerDetail>('/api/v1/customers/' + encodeURIComponent(personId))
 }
 
+export type CustomerProfileRequirement = 'generalData' | 'address' | 'phone' | 'account'
+export type CustomerProfileReadiness = {
+  personId: number
+  hasGeneralData: boolean
+  hasAddress: boolean
+  hasPhone: boolean
+  hasAccount: boolean
+  canCreateContract: boolean
+  missingRequirements: CustomerProfileRequirement[]
+}
+
+export function getCustomerProfileReadiness(personId: number): Promise<CustomerProfileReadiness> {
+  return apiRequest<CustomerProfileReadiness>('/api/v1/customers/' + encodeURIComponent(personId) + '/readiness')
+}
+
 export type CustomerCreatePayload = {
   legalPersonality: number
   rfc: string

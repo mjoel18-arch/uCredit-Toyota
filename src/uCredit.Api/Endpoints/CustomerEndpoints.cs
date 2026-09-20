@@ -1,4 +1,5 @@
 using UCredit.Api.Contracts;
+using UCredit.Application.Execution;
 using UCredit.Modules.Customers.Customers;
 
 namespace UCredit.Api.Endpoints;
@@ -12,6 +13,7 @@ public static class CustomerEndpoints
             .RequireAuthorization("customers.read");
 
         group.MapGet("/", SearchCustomersAsync).WithName("SearchCustomers");
+        group.MapGet("/{personId:int}/readiness", GetReadinessAsync).WithName("GetCustomerProfileReadiness");
         group.MapGet("/{personId:int}", GetCustomerAsync).WithName("GetCustomer");
         return endpoints;
     }
@@ -45,6 +47,27 @@ public static class CustomerEndpoints
 
         var customer = await repository.GetByPersonIdAsync(personId, cancellationToken);
         return customer is null ? Results.NotFound() : Results.Ok(CustomerDetailResponse.FromModel(customer));
+    }
+
+    private static async Task<IResult> GetReadinessAsync(
+        int personId,
+        IExecutionTenantContext executionTenantContext,
+        ICustomerProfileReadinessService service,
+        CancellationToken cancellationToken)
+    {
+        if (personId <= 0)
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["personId"] = ["personId must be greater than zero."]
+            });
+        }
+
+        if (await executionTenantContext.GetAsync(cancellationToken) is null)
+            return Results.NotFound();
+
+        var readiness = await service.GetAsync(personId, cancellationToken);
+        return readiness is null ? Results.NotFound() : Results.Ok(CustomerProfileReadinessResponse.FromModel(readiness));
     }
 }
 

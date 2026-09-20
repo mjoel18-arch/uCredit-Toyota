@@ -56,6 +56,34 @@ public sealed record CustomerDetailResponse(
         customer.Roles.Select(CustomerRoleResponse.FromModel).ToArray());
 }
 
+public sealed record CustomerProfileReadinessResponse(
+    int PersonId,
+    bool HasGeneralData,
+    bool HasAddress,
+    bool HasPhone,
+    bool HasAccount,
+    bool CanCreateContract,
+    IReadOnlyList<string> MissingRequirements)
+{
+    public static CustomerProfileReadinessResponse FromModel(CustomerProfileReadiness readiness) => new(
+        readiness.PersonId,
+        readiness.HasGeneralData,
+        readiness.HasAddress,
+        readiness.HasPhone,
+        readiness.HasAccount,
+        readiness.CanCreateContract,
+        readiness.MissingRequirements.Select(ToWireValue).ToArray());
+
+    private static string ToWireValue(CustomerProfileRequirement requirement) => requirement switch
+    {
+        CustomerProfileRequirement.GeneralData => "generalData",
+        CustomerProfileRequirement.Address => "address",
+        CustomerProfileRequirement.Phone => "phone",
+        CustomerProfileRequirement.Account => "account",
+        _ => throw new ArgumentOutOfRangeException(nameof(requirement)),
+    };
+}
+
 public sealed record CustomerLegalPersonalityResponse(int Code, string? Description);
 public sealed record CustomerStatusResponse(int Code, string? Description);
 public sealed record CustomerRoleResponse(int Code, string? Description)

@@ -52,6 +52,40 @@ public sealed class CustomerSqlTests
     }
 
     [Fact]
+    public void ReadinessSqlUsesActiveExistsChecksWithoutAccountSensitiveColumns()
+    {
+        var sql = LegacyCustomerProfileReadinessRepository.CreateSql();
+
+        Assert.Contains("P.PNA_FL_PERSONA = @PersonId", sql, StringComparison.Ordinal);
+        Assert.Contains("P.PNA_FG_STATUS = 1", sql, StringComparison.Ordinal);
+        Assert.Contains("DMO_FG_STATUS = 1", sql, StringComparison.Ordinal);
+        Assert.Contains("TFN_FG_STATUS = 1", sql, StringComparison.Ordinal);
+        Assert.Contains("PCT_FG_STATUS = 1", sql, StringComparison.Ordinal);
+        Assert.Equal(3, sql.Split("EXISTS", StringSplitOptions.None).Length - 1);
+        Assert.DoesNotContain("PCT_NO_CUENTA", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("PCT_NO_CLABE", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("AllowedCompanyIds", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("SELECT *", sql, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ReadinessSqlUsesActiveExistsChecksWithoutAccountSensitiveColumns()
+    {
+        var sql = LegacyCustomerProfileReadinessRepository.CreateSql();
+
+        Assert.Contains("P.PNA_FL_PERSONA = @PersonId", sql, StringComparison.Ordinal);
+        Assert.Contains("P.PNA_FG_STATUS = 1", sql, StringComparison.Ordinal);
+        Assert.Contains("DMO_FG_STATUS = 1", sql, StringComparison.Ordinal);
+        Assert.Contains("TFN_FG_STATUS = 1", sql, StringComparison.Ordinal);
+        Assert.Contains("PCT_FG_STATUS = 1", sql, StringComparison.Ordinal);
+        Assert.Equal(3, sql.Split("EXISTS", StringSplitOptions.None).Length - 1);
+        Assert.DoesNotContain("PCT_NO_CUENTA", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("PCT_NO_CLABE", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("AllowedCompanyIds", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("SELECT *", sql, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void OptionalInteriorNumberUsesLegacyEmptyStringAndSchemaSize()
     {
         Assert.Equal(string.Empty, LegacyCustomerWriteRepository.NormalizeOptionalLegacyString(null, 100));
