@@ -26,7 +26,11 @@ describe('CustomerCreateView email usages', () => {
 
   it('keeps the moral personality disabled until its capital regime catalog is confirmed', () => {
     render(<CustomerCreateView onBack={vi.fn()} onCreated={vi.fn()} />)
-    expect(screen.getByRole('option', { name: 'Moral (Próximamente)' })).toBeDisabled()
+    const moralOption = screen.getByRole('option', {
+      name: 'Moral (Próximamente)',
+    }) as HTMLOptionElement
+
+    expect(moralOption.disabled).toBe(true)
   })
 
   it('sends the temporary tax regime selected by personality', async () => {
@@ -90,8 +94,9 @@ describe('CustomerCreateView email usages', () => {
     render(<CustomerCreateView onBack={vi.fn()} onCreated={vi.fn()} />)
 
     fireEvent.submit(document.querySelector('form.customer-create-form') as HTMLFormElement)
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Ya existe un cliente registrado con ese RFC; no se guardó información'))
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain('Ya existe un cliente registrado con ese RFC; no se guardó información.')
     expect(createMock).toHaveBeenCalledTimes(1)
-    expect(screen.getByRole('alert')).not.toHaveTextContent('AAA')
+    expect(alert.textContent).not.toContain('AAA')
   })
 })
