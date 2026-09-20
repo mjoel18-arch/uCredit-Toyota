@@ -197,7 +197,7 @@ export type CustomerCreatePayload = {
   groupCode: number
   riskCode: number
   contactFormCode: number
-  taxRegimeCode: number
+  taxRegimeCode: string
   addressTypeCode: number
   postalCode: string
   state: string

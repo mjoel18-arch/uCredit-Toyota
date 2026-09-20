@@ -84,6 +84,10 @@ public static class CustomerCreateEndpoints
         {
             return Results.Conflict(new ProblemDetails { Title = "The customer already exists or conflicts with Legacy data.", Detail = exception.Message, Status = StatusCodes.Status409Conflict });
         }
+        catch (CustomerCreateValidationException exception)
+        {
+            return Results.BadRequest(new ProblemDetails { Title = "The customer data is invalid.", Detail = exception.Message, Status = StatusCodes.Status400BadRequest });
+        }
         catch (LegacyWriteNotConfiguredException exception)
         {
             LogUnavailable(logger, exception.Stage, exception.GetType(), exception.Reason.ToString(), correlationId);
@@ -110,7 +114,7 @@ public static class CustomerCreateEndpoints
 public sealed record CustomerCreateRequest(
     CustomerCreatePersonality LegalPersonality, string Rfc, string? FirstName, string? PaternalSurname, string? MaternalSurname,
     string? LegalName, string? CapitalRegime, DateOnly ConstitutionOrBirthDate, int CountryCode, int GroupCode, int RiskCode,
-    int ContactFormCode, int TaxRegimeCode, int AddressTypeCode, string PostalCode, string State, string City, string Municipality,
+    int ContactFormCode, string TaxRegimeCode, int AddressTypeCode, string PostalCode, string State, string City, string Municipality,
     string Neighborhood, string StreetAndNumber, string ExteriorNumber, string? InteriorNumber, string? AddressReference,
     string? AddressSchedule, int AddressStatusCode, int PhoneTypeCode, string AreaCode, string PhoneNumber, string? PhoneExtension,
     string? PhoneContact, string EmailContact, string Email, IReadOnlyList<int> EmailUsageCodes, bool PepConfirmed)

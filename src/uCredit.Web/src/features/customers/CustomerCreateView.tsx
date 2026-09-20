@@ -2,9 +2,13 @@ import { useRef, useState, type FormEvent } from 'react'
 import { ApiError, apiErrorMessage } from '../../shared/api/apiClient'
 import { createCustomer, type CustomerCreatePayload } from '../auth/authApi'
 
+export function getTemporaryTaxRegimeCode(legalPersonality: number): string {
+  return legalPersonality === 2 ? '612' : legalPersonality === 20 ? '601' : '605'
+}
+
 const initial: CustomerCreatePayload = {
   legalPersonality: 1, rfc: '', firstName: '', paternalSurname: '', maternalSurname: '', constitutionOrBirthDate: '',
-  countryCode: 1, groupCode: 1, riskCode: 1, contactFormCode: 1, taxRegimeCode: 1,
+  countryCode: 1, groupCode: 1, riskCode: 1, contactFormCode: 1, taxRegimeCode: getTemporaryTaxRegimeCode(1),
   addressTypeCode: 1, postalCode: '', state: '', city: '', municipality: '', neighborhood: '', streetAndNumber: '', exteriorNumber: '', addressStatusCode: 1,
   phoneTypeCode: 1, areaCode: '', phoneNumber: '', emailContact: '', email: '', emailUsageCodes: [1], pepConfirmed: false,
 }
@@ -45,7 +49,7 @@ export function CustomerCreateView({ onBack, onCreated }: { onBack: () => void; 
     <p>La información se valida antes de una única transacción Legacy. No se almacenan formularios localmente.</p>
     {message && <div className="notice notice-error" role="alert">{message}</div>}
     <form className="customer-create-form" onSubmit={(event) => void submit(event)}>
-      <label>Personalidad<select value={form.legalPersonality} onChange={e => set('legalPersonality', Number(e.target.value))}><option value="1">Física</option><option value="2">Física con actividad empresarial</option><option value="20">Moral</option></select></label>
+      <label>Personalidad<select value={form.legalPersonality} onChange={e => { const legalPersonality = Number(e.target.value); setForm(current => ({ ...current, legalPersonality, taxRegimeCode: getTemporaryTaxRegimeCode(legalPersonality) })) }}><option value="1">Física</option><option value="2">Física con actividad empresarial</option><option value="20" disabled>Moral (Próximamente)</option></select></label>
       <label>RFC<input required maxLength={13} value={form.rfc} onChange={e => set('rfc', e.target.value)} /></label>
       {form.legalPersonality === 20 ? <><label>Razón social<input required value={form.legalName ?? ''} onChange={e => set('legalName', e.target.value)} /></label><label>Régimen de capital<input required value={form.capitalRegime ?? ''} onChange={e => set('capitalRegime', e.target.value)} /></label></> : <><label>Nombre<input required value={form.firstName ?? ''} onChange={e => set('firstName', e.target.value)} /></label><label>Apellido paterno<input value={form.paternalSurname ?? ''} onChange={e => set('paternalSurname', e.target.value)} /></label><label>Apellido materno<input value={form.maternalSurname ?? ''} onChange={e => set('maternalSurname', e.target.value)} /></label></>}
       <label>Fecha de nacimiento o constitución<input required type="date" value={form.constitutionOrBirthDate} onChange={e => set('constitutionOrBirthDate', e.target.value)} /></label>

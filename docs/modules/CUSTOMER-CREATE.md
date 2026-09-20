@@ -10,6 +10,62 @@ El alta de persona usa una transacción para `CPERSONA`, `CPFISICA` o `CPMORAL` 
 
 ## Matriz final de inserción
 
+### Matriz autoritativa de `CPMORAL` y régimen fiscal
+
+La evidencia obtenida directamente de `pr_t` mediante `sys.columns` es la fuente de verdad. `PMO_DS_REGIMEN_CAPITAL` y `CPERSONA.RFI_CL_CLAVE` no representan el mismo dato.
+
+| Columna | Tipo SQL | Nullable | Propiedad propuesta | Tipo C# propuesto | Control UI | Parámetro Dapper | Validación |
+|---|---|---:|---|---|---|---|---|
+| `CPMORAL.PNA_FL_PERSONA` | `int` | No | `PersonId` | `int` | No editable | `DbType.Int32` | Consecutivo generado y FK a `CPERSONA` |
+| `CPMORAL.PMO_DS_RAZON_SOCIAL` | `varchar(200)` | No | `LegalName` | `string` | Input requerido | `DbType.String`, 200 | Requerido y máximo 200 |
+| `CPMORAL.PMO_FE_ULTMOD` | `datetime` | No | `OperationDate` | `DateTime` | No editable | `DbType.DateTime` | Fecha generada por el servidor |
+| `CPMORAL.PMO_DS_REGIMEN_CAPITAL` | `int` | Sí | `CapitalRegime` | Pendiente | Select pendiente | Pendiente | Bloqueado hasta confirmar catálogo y regla funcional |
+
+Las restantes columnas de `CPMORAL` son nullable según la evidencia: contacto, puesto, fecha de constitución, compañía social, tipo de proveedor, facturación, sector, actividad, subtipo de actividad, nacionalidad, clave tributaria y usuario Legacy. No se deben rellenar con valores estadísticos ni constantes no confirmadas.
+
+#### Régimen fiscal: conceptos separados
+
+| Elemento | Tipo real | Función |
+|---|---|---|
+| `CPERSONA.RFI_CL_CLAVE` | `int`, nullable | Valor almacenado por `CPERSONA`; no es la columna de texto del catálogo |
+| `CREGIMEN_FISCAL.RFI_FL_CVE` | `tinyint`, `NOT NULL` | Identificador interno del catálogo |
+| `CREGIMEN_FISCAL.RFI_CL_CLAVE` | `varchar(20)`, `NOT NULL` | Clave fiscal SAT consumida conceptualmente por el alta |
+| `CREGIMEN_FISCAL.RFI_DS_DESCRIPCION` | `varchar(200)`, `NOT NULL` | Descripción presentada al usuario |
+| `CREGIMEN_FISCAL.RFI_CL_PJURIDICA` | `tinyint`, `NOT NULL` | Compatibilidad con personalidad jurídica |
+| `CREGIMEN_FISCAL.RFI_FG_STATUS` | `tinyint`, `NOT NULL` | Vigencia del régimen |
+
+Implementado: el DTO HTTP y el formulario reciben `taxRegimeCode` como `string`; el repositorio consulta `CREGIMEN_FISCAL` con `RFI_CL_CLAVE = @TaxRegimeCode`, `RFI_FG_STATUS = 1` y la personalidad compatible. Sólo después de esa coincidencia activa se convierte la misma clave SAT a `int` para `CPERSONA.RFI_CL_CLAVE`; el parámetro del `INSERT` de `CPERSONA` es `DbType.Int32` porque esa columna es `int`. No se usa `RFI_FL_CVE` ni se envía texto directamente a `CPERSONA`.
+
+Para la demostración, el frontend asigna temporalmente la clave SAT por personalidad y no muestra un campo fiscal editable: física (`1`) usa `605`, física con actividad empresarial (`2`) usa `612` y moral (`20`) usa `601`. Son valores predeterminados temporales, no una sustitución del catálogo; el backend siempre verifica vigencia y compatibilidad contra `CREGIMEN_FISCAL`.
+
+Mientras no exista catálogo y regla funcional aprobada para `PMO_DS_REGIMEN_CAPITAL`, la validación rechaza el alta de personas morales antes de abrir una operación de escritura. No se asigna un valor arbitrario.
+
+Las claves confirmadas en el catálogo incluyen `601`, `603`, `605`, `606`, `612`, `616`, `621`, `625` y `626`, entre otras. La compatibilidad se determina por `RFI_CL_PJURIDICA`, no por el texto visible ni por la frecuencia histórica.
+
+### Matriz de `CDOMICILIO` confirmada
+
+La evidencia de esquema confirma que las siguientes columnas son `NOT NULL` y no tienen default SQL utilizable por este alta. Las columnas nullable no se incluyen como obligación de entrada; cuando el formulario no las captura pueden conservar `NULL`.
+
+| Columna | Permite NULL | Default SQL | Origen | Valor cuando no aplica |
+|---|---:|---|---|---|
+| `DMO_FL_CVE` | No | Ninguno | Consecutivo `CCATCONSEC` | Siempre se genera |
+| `DMO_CL_CPOSTAL` | No | Ninguno | Formulario `PostalCode` | La validación rechaza vacío |
+| `DMO_DS_NUMEXT` | No | Ninguno | Formulario `ExteriorNumber` | La validación rechaza vacío |
+| `DMO_FG_TDIRECCION` | No | Ninguno | Formulario `AddressTypeCode` | La validación rechaza valores fuera de 1–4 |
+| `DMO_DS_NUMINT` | No | Ninguno | Formulario `InteriorNumber` | `string.Empty` cuando no se captura, conforme al comportamiento Legacy |
+| `DMO_FG_STATUS` | No | Ninguno | Formulario `AddressStatusCode` | La validación rechaza cero |
+| `DMO_FG_FACTURA` | No | Ninguno | Regla del tipo de domicilio | `1` para tipos 1 y 2; `0` para los demás |
+| `DMO_FG_EDOCTA` | No | Ninguno | Regla del tipo de domicilio | `1` para tipo 1; `0` para los demás |
+| `DMO_FG_REGDEFAULT` | No | Ninguno | Regla de primer domicilio | `1` |
+| `DMO_FG_OTROS` | No | `((0))` | Regla del tipo de domicilio | `1` para tipo 1; `0` para los demás |
+| `DMO_FE_ULTMOD` | No | Ninguno | Fecha de operación | Fecha UTC de la operación |
+| `PNA_FL_PERSONA` | No | Ninguno | Consecutivo de persona de la misma transacción | Siempre se genera |
+| `PAI_FL_CVE` | No | Ninguno | `CountryCode` del formulario | La validación rechaza cero |
+
+`DMO_DS_NUMINT` se envía siempre como parámetro Dapper `DbType.String` con tamaño 100. Los campos `State`, `City`, `Municipality` y `Neighborhood` se validan con el máximo confirmado de 70; `ExteriorNumber` con 100; `StreetAndNumber` con 200; `AddressReference` y `AddressSchedule` con 100.
+
+La inserción se ejecuta por etapas separadas (`person`, `subtype`, `role`, `address`, `phone`, `email`, `email_usage`, `audit`, `commit`). Así, un error de compatibilidad en domicilio se registra como `Stage=address` y provoca rollback completo. Una `SqlException` de mapeo, como el error 515, no se clasifica como indisponibilidad 503: se propaga al manejador global como 500 con respuesta genérica.
+
 | Campo | Valor inicial | Origen | Validación | Tabla destino | Efecto secundario | Evidencia |
 |---|---|---|---|---|---|---|
 | `PNA_FL_PERSONA` | Consecutivo | `sd_clsCatalogo.ObtenConsecutivo("CPERSONA")` | Consecutivo dentro de la transacción | `CPERSONA` | Identifica a la persona | `sdLsenet/sd_clsPersona.vb`, `ActualizaPersona` |

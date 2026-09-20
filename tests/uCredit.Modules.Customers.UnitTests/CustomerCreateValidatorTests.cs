@@ -22,9 +22,9 @@ public sealed class CustomerCreateValidatorTests
     }
 
     [Fact]
-    public void AcceptsPhysicalBusinessMoralAndConfirmedEmailUses()
+    public void AcceptsPhysicalPersonalitiesAndConfirmedEmailUses()
     {
-        foreach (var personality in new[] { CustomerCreatePersonality.Individual, CustomerCreatePersonality.IndividualBusiness, CustomerCreatePersonality.Moral })
+        foreach (var personality in new[] { CustomerCreatePersonality.Individual, CustomerCreatePersonality.IndividualBusiness })
         {
             var command = Valid() with
             {
@@ -36,8 +36,27 @@ public sealed class CustomerCreateValidatorTests
         }
     }
 
+    [Fact]
+    public void RejectsNonNumericTaxRegimeWithoutSendingItToSql()
+    {
+        var errors = CustomerCreateValidator.Validate(Valid() with { TaxRegimeCode = "not-a-sat-key" });
+        Assert.Contains("taxRegimeCode", errors.Keys);
+    }
+
+    [Fact]
+    public void KeepsMoralCreationBlockedUntilCapitalRegimeCatalogIsConfirmed()
+    {
+        var errors = CustomerCreateValidator.Validate(Valid() with
+        {
+            LegalPersonality = CustomerCreatePersonality.Moral,
+            LegalName = "Synthetic Company",
+            CapitalRegime = "22"
+        });
+        Assert.Contains("capitalRegime", errors.Keys);
+    }
+
     private static CustomerCreateCommand Valid() => new(
         CustomerCreatePersonality.Individual, "AAA010101AAA", "Synthetic", "Person", "Test", null, null,
-        new DateOnly(1980, 1, 1), 1, 1, 1, 1, 1, 1, "00000", "State", "City", "Municipality", "Neighborhood", "Street", "1", null, null, null, 1,
+        new DateOnly(1980, 1, 1), 1, 1, 1, 1, "605", 1, "00000", "State", "City", "Municipality", "Neighborhood", "Street", "1", null, null, null, 1,
         1, "55", "5555555555", null, null, "Test Contact", "test@example.invalid", [1, 2]);
 }
