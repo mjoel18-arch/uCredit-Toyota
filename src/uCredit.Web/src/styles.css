@@ -64,16 +64,6 @@ h1 { margin: 5px 0 0; font-size: clamp(26px, 4vw, 36px); }
 .search-form { display: grid; grid-template-columns: minmax(260px, 1.5fr) auto; gap: 16px; align-items: end; margin-top: 28px; }
 .notice { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; padding: 12px 14px; border-radius: 9px; background: color-mix(in srgb, var(--color-accent) 13%, white); border-left: 3px solid var(--color-accent); }
 .notice-error { background: #fff4ed; border-left-color: #f04438; color: #b42318; }
-.metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 20px; }
-.metrics article { padding: 20px; border-radius: 14px; background: white; border: 1px solid #eaecf0; }
-.metrics span, .metrics strong, .metrics small { display: block; }
-.metrics span { color: #667085; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
-.metrics strong { margin: 7px 0 3px; font-size: 20px; }
-.metrics small { color: #667085; }
-.future-modules { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-top: 20px; }
-.future-module-card { padding: 20px; border: 1px dashed #b2c8ff; border-radius: 14px; background: var(--color-surface); }
-.future-module-card h2 { margin: 8px 0 4px; font-size: 19px; }
-.future-module-card p { margin: 0; color: #667085; }
 .customer-search-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) auto; gap: 14px; align-items: end; margin-top: 24px; }
 .customer-search-form label { display: grid; gap: 7px; color: var(--color-secondary); font-size: 13px; font-weight: 650; }
 .customer-search-form input { min-height: 44px; padding: 0 12px; border: 1px solid #d0d5dd; border-radius: 9px; color: var(--color-text); background: white; outline: none; }
@@ -95,7 +85,7 @@ h1 { margin: 5px 0 0; font-size: clamp(26px, 4vw, 36px); }
   main { padding: 24px 18px 40px; }
   .topbar { align-items: flex-start; flex-direction: column; }
   .session-actions { flex-wrap: wrap; }
-  .search-form, .customer-search-form, .metrics, .future-modules { grid-template-columns: 1fr; }
+  .search-form, .customer-search-form { grid-template-columns: 1fr; }
 }
 .contract-detail { min-width: 0; max-width: 100%; margin-top: 24px; padding: 24px; border: 1px solid #eaecf0; border-radius: 14px; background: #fcfcfd; }
 .contract-detail-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; padding-bottom: 18px; border-bottom: 1px solid #eaecf0; }
