@@ -3,7 +3,7 @@ import { ApiError, apiErrorMessage } from '../../shared/api/apiClient'
 import { activateCustomerAccount, activateCustomerAddress, activateCustomerPhone, createCustomerAccount, createCustomerAddress, createCustomerPhone, deactivateCustomerAccount, deactivateCustomerAddress, deactivateCustomerPhone, getCustomerAccounts, getCustomerAddresses, getCustomerBanks, getCustomerByPersonId, getCustomerPhones, getCustomerProfileReadiness, searchCustomers, updateCustomerAccount, updateCustomerAddress, updateCustomerPhone, type CustomerAccountPayload, type CustomerAddressPayload, type CustomerDetail, type CustomerListItem, type CustomerPhonePayload, type CustomerProfileReadiness, type ManagedCustomerAccount, type ManagedCustomerAddress, type ManagedCustomerPhone, type CustomerBank } from '../auth/authApi'
 import { CustomerCreateView } from './CustomerCreateView'
 
-export function CustomersView({ productName, customerName, onUnauthorized, canCreate = false, onCreated = () => undefined }: { productName: string; customerName: string; onUnauthorized: () => void; canCreate?: boolean; onCreated?: (personId: number, pepValidationStatus?: string) => void }) {
+export function CustomersView({ onUnauthorized, canCreate = false, onCreated = () => undefined }: { productName: string; customerName: string; onUnauthorized: () => void; canCreate?: boolean; onCreated?: (personId: number, pepValidationStatus?: string) => void }) {
   const [personId, setPersonId] = useState('')
   const [rfc, setRfc] = useState('')
   const [name, setName] = useState('')
@@ -57,7 +57,7 @@ export function CustomersView({ productName, customerName, onUnauthorized, canCr
 
   return <section className="hero-card customer-search" aria-labelledby="customers-title">
     <span className="status-dot" /> Consulta de clientes
-    <h2 id="customers-title">{productName} · {customerName || 'Clientes'}</h2>
+    <h2 id="customers-title">Clientes</h2>
     <p>Consulta clientes y, si tu sesión está autorizada, inicia un alta controlada.</p>{canCreate && <button type="button" onClick={() => setCreating(true)}>Crear cliente</button>}
     <form className="customer-search-form" onSubmit={(event) => void submit(event)}>
       <label>Identificador<input value={personId} onChange={(event) => setPersonId(event.target.value)} inputMode="numeric" /></label>

@@ -89,7 +89,11 @@ describe('App navigation', () => {
     render(<App />)
 
     expect(screen.getByTestId('contracts-view')).toBeTruthy()
-    expect(screen.getByRole('heading', { name: 'uCredit-auto · Toyota Financial Services' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'uCredit-auto' })).toBeTruthy()
+    expect(screen.queryByText('Arquitectura')).toBeNull()
+    expect(screen.queryByText('Acceso')).toBeNull()
+    expect(screen.queryByText('Seguridad')).toBeNull()
+    expect(screen.queryByText('uCredit-auto · Toyota Financial Services')).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: 'Clientes' }))
     expect(screen.getByTestId('customers-view')).toBeTruthy()

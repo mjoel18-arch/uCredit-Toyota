@@ -16,7 +16,7 @@ type ContractsViewProps = {
   onUnauthorized: () => void
 }
 
-export function ContractsView({ productName, customerName, onUnauthorized }: ContractsViewProps) {
+export function ContractsView({ onUnauthorized }: ContractsViewProps) {
   const [contractNumber, setContractNumber] = useState('')
   const [detail, setDetail] = useState<ContractDetail | null>(null)
   const [amortization, setAmortization] = useState<ContractAmortization | null>(null)
@@ -92,7 +92,7 @@ export function ContractsView({ productName, customerName, onUnauthorized }: Con
     <section className="hero-card" id="contracts" aria-labelledby="contracts-title">
       <div>
         <span className="status-dot" /> Consulta de sólo lectura
-        <h2 id="contracts-title">{productName} · {customerName || 'Consulta de contratos'}</h2>
+        <h2 id="contracts-title">Consulta de contratos</h2>
         <p>Consulta la información operativa disponible para el alcance autorizado de tu tenant.</p>
       </div>
 
@@ -112,7 +112,7 @@ export function ContractsView({ productName, customerName, onUnauthorized }: Con
       </form>
 
       {message && <div className="notice notice-error" role="alert">{message}</div>}
-      {detail && <ContractDetailCard detail={detail} productName={productName} customerName={customerName} searchCount={searchCount} />}
+      {detail && <ContractDetailCard detail={detail} searchCount={searchCount} />}
       {amortization && detail && <AmortizationScheduleCard detail={detail} schedule={amortization} />}
       {detail && amortizationNotFound && (
         <div className="notice" role="status">No hay una tabla de amortización tipo 1 disponible para este contrato.</div>
@@ -121,14 +121,14 @@ export function ContractsView({ productName, customerName, onUnauthorized }: Con
   )
 }
 
-function ContractDetailCard({ detail, productName, customerName, searchCount }: { detail: ContractDetail; productName: string; customerName: string; searchCount: number | null }) {
+function ContractDetailCard({ detail, searchCount }: { detail: ContractDetail; searchCount: number | null }) {
   const operationType = detail.operationType?.description ?? detail.operationType?.code
 
   return (
     <article className="contract-detail" aria-labelledby="contract-detail-title">
       <header className="contract-detail-header">
         <div>
-          <span className="eyebrow">{productName} · {customerName || 'Resultado protegido'}</span>
+          <span className="eyebrow">Resultado protegido</span>
           <h3 id="contract-detail-title">Contrato {detail.contractNumber}</h3>
         </div>
         {searchCount !== null && <span className="detail-match">Coincidencias exactas: {searchCount}</span>}

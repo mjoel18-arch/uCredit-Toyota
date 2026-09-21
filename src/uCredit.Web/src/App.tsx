@@ -201,7 +201,7 @@ function ApplicationView({
         <header className="topbar">
           <div>
             <span className="eyebrow">Primer vertical</span>
-            <h1>{theme.productName} · {theme.customerName || session.tenant?.tenantCode || 'Sesión activa'}</h1>
+            <h1>{theme.productName}</h1>
           </div>
           <div className="session-actions">
             <span className="user-chip" aria-label={'Usuario actual: ' + session.userName}>{initials(session.userName)}</span>
@@ -226,24 +226,6 @@ function ApplicationView({
           </section>
         )}
 
-        <section className="metrics" aria-label="Resumen del módulo">
-          <article><span>Arquitectura</span><strong>Modular</strong><small>Separación por capacidades</small></article>
-          <article><span>Acceso</span><strong>Lectura</strong><small>Sin cambios en Legacy</small></article>
-          <article><span>Seguridad</span><strong>Cookie segura</strong><small>Sesión protegida por Identity</small></article>
-        </section>
-
-        <section className="future-modules" aria-label="Módulos próximos">
-          <article className="future-module-card" id="customers">
-            <span className="eyebrow">{theme.productName} · {theme.customerName || 'uCredit'}</span>
-            <h2>Cliente / Prospecto</h2>
-            <p>Vista inicial preparada para el siguiente módulo.</p>
-          </article>
-          <article className="future-module-card" id="contract-entry">
-            <span className="eyebrow">{theme.productName} · {theme.customerName || 'uCredit'}</span>
-            <h2>Captura de contrato</h2>
-            <p>Espacio reservado para la captura controlada del contrato.</p>
-          </article>
-        </section>
       </main>
     </div>
   )
