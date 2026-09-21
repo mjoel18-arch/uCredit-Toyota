@@ -15,7 +15,7 @@ Las altas, modificaciones, propuestas y contratos quedan fuera de esta etapa. No
 
 `su_MtoPersona.aspx` → evento de consulta → `sn_clsPersona` / `sd_clsPersona` → `CPERSONA`, `CPFISICA`, `CPMORAL`, `CPTIPO` y tablas relacionadas.
 
-El repositorio moderno encapsula el SQL Dapper en `LegacyCustomerReadRepository`; el módulo `Customers` sólo conoce contratos y modelos de lectura.
+El repositorio moderno encapsula el SQL Dapper en `LegacyCustomerReadRepository`; el módulo `Customers` sólo conoce contratos y modelos de lectura. La elegibilidad para contratos se consulta aparte mediante `GET /api/v1/customers/{personId}/readiness`; usa `EXISTS` para verificar únicamente estatus activo de persona, domicilio, teléfono y `CPCUENTA`, sin devolver cuentas, CLABE ni PII adicional.
 
 ## Mapeo confirmado
 

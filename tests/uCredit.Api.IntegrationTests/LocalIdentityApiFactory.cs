@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using UCredit.Application.Execution;
 using UCredit.Infrastructure.Identity;
 using UCredit.Infrastructure.Identity.Models;
 using UCredit.Infrastructure.Identity.Tenants;
@@ -31,6 +32,7 @@ public sealed class LocalIdentityApiFactory : WebApplicationFactory<Program>
             services.AddDbContext<IdentityDbContext>(options =>
                 options.UseInMemoryDatabase(databaseName));
             services.AddScoped<ITenantMembershipStore, EfTenantMembershipStore>();
+            services.AddScoped<IExecutionTenantContext, IdentityExecutionTenantContext>();
             services.AddSingleton<IDeploymentTenantPolicy>(serviceProvider =>
                 new DeploymentTenantPolicy(serviceProvider.GetRequiredService<IConfiguration>()));
             services.AddScoped<IdentityCookieEvents>();

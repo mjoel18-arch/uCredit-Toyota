@@ -1,14 +1,17 @@
 using System.Security.Claims;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using UCredit.Infrastructure.Identity.Models;
 using UCredit.Infrastructure.Identity.Tenants;
+using UCredit.Application.Execution;
 using UCredit.Modules.Contracts.Contracts;
 using UCredit.Modules.Customers.Customers;
 
@@ -16,9 +19,12 @@ namespace UCredit.Api.IntegrationTests;
 
 public sealed class TestApiFactory : WebApplicationFactory<Program>
 {
+    internal const string DeploymentTenantCode = "TENANT-A";
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
+        builder.UseSetting("Deployment:TenantCode", DeploymentTenantCode);
         builder.ConfigureServices(services =>
         {
             services.AddAuthentication(options =>
@@ -34,8 +40,12 @@ public sealed class TestApiFactory : WebApplicationFactory<Program>
             services.AddSingleton<IContractAmortizationReadRepository, FakeContractAmortizationReadRepository>();
             services.RemoveAll<ICustomerReadRepository>();
             services.AddSingleton<ICustomerReadRepository, FakeCustomerReadRepository>();
+            services.RemoveAll<ICustomerProfileReadinessRepository>();
+            services.AddSingleton<ICustomerProfileReadinessRepository, FakeCustomerProfileReadinessRepository>();
+            services.RemoveAll<IExecutionTenantContext>();
+            services.AddScoped<IExecutionTenantContext, FakeExecutionTenantContext>();
             services.AddSingleton<ITenantMembershipStore, FakeTenantMembershipStore>();
-            services.AddSingleton<IDeploymentTenantPolicy>(new DeploymentTenantPolicy("TENANT-A"));
+            services.AddSingleton<IDeploymentTenantPolicy>(new DeploymentTenantPolicy(DeploymentTenantCode));
             services.AddSingleton<FakeTenantCookieIssuer>();
             services.AddSingleton<ITenantCookieIssuer>(
                 serviceProvider => serviceProvider.GetRequiredService<FakeTenantCookieIssuer>());
@@ -72,9 +82,16 @@ internal sealed class TestAuthenticationHandler(
             claims.Add(new Claim("permission", "contracts.read"));
         }
 
-        if (string.Equals(mode, "customers-with-permission", StringComparison.Ordinal))
+        if (string.Equals(mode, "customers-with-permission", StringComparison.Ordinal) ||
+            string.Equals(mode, "customers-without-tenant", StringComparison.Ordinal))
         {
             claims.Add(new Claim("permission", "customers.read"));
+        }
+
+        if (string.Equals(mode, "customers-with-permission", StringComparison.Ordinal))
+        {
+            claims.Add(new Claim(TenantClaimTypes.Id, TestIdentityData.DeploymentTenantId.ToString("D")));
+            claims.Add(new Claim(TenantClaimTypes.Code, "TENANT-A"));
         }
 
         if (string.Equals(mode, "toyota", StringComparison.Ordinal))
@@ -161,6 +178,44 @@ internal sealed class FakeCustomerReadRepository : ICustomerReadRepository
     {
         cancellationToken.ThrowIfCancellationRequested();
         return Task.FromResult<Customer?>(personId == KnownCustomer.PersonId ? KnownCustomer : null);
+    }
+}
+
+internal sealed class FakeCustomerProfileReadinessRepository : ICustomerProfileReadinessRepository
+{
+    public Task<CustomerProfileReadiness?> GetAsync(int personId, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult<CustomerProfileReadiness?>(personId switch
+        {
+            42 => new CustomerProfileReadiness(42, true, true, true, true),
+            43 => new CustomerProfileReadiness(43, true, false, true, true),
+            44 => new CustomerProfileReadiness(44, true, true, false, true),
+            45 => new CustomerProfileReadiness(45, true, true, true, false),
+            46 => new CustomerProfileReadiness(46, true, false, false, false),
+            _ => null,
+        });
+    }
+}
+
+internal sealed class FakeExecutionTenantContext(
+    IHttpContextAccessor httpContextAccessor,
+    IConfiguration configuration) : IExecutionTenantContext
+{
+    public Task<ExecutionTenant?> GetAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var principal = httpContextAccessor.HttpContext?.User;
+        var tenantId = principal?.FindFirstValue(TenantClaimTypes.Id);
+        var selectedTenantCode = principal?.FindFirstValue(TenantClaimTypes.Code);
+        var tenantCode = configuration["Deployment:TenantCode"]
+            ?? throw new InvalidOperationException(
+                "Deployment:TenantCode must be configured for integration tests.");
+        return Task.FromResult<ExecutionTenant?>(
+            Guid.TryParse(tenantId, out var parsedId) &&
+            string.Equals(selectedTenantCode, tenantCode, StringComparison.Ordinal)
+                ? new ExecutionTenant(parsedId, tenantCode, [101])
+                : null);
     }
 }
 

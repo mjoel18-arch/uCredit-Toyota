@@ -68,6 +68,73 @@ public sealed class CustomerEndpointsIntegrationTests(TestApiFactory factory)
         Assert.Single(body.ActiveEmails);
     }
 
+    [Fact]
+    public async Task CustomerReadinessReturnsCompleteProfileWithoutAccountData()
+    {
+        using var client = CreateClient("customers-with-permission");
+        var response = await client.GetAsync("/api/v1/customers/42/readiness", TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadFromJsonAsync<CustomerReadiness>(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(body);
+        Assert.True(body.CanCreateContract);
+        Assert.Empty(body.MissingRequirements);
+        Assert.DoesNotContain("accountNumber", await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken), StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("clabe", await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData(43, "address")]
+    [InlineData(44, "phone")]
+    [InlineData(45, "account")]
+    public async Task CustomerReadinessReturnsMissingRequirement(int personId, string missing)
+    {
+        using var client = CreateClient("customers-with-permission");
+        var response = await client.GetAsync($"/api/v1/customers/{personId}/readiness", TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadFromJsonAsync<CustomerReadiness>(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(body);
+        Assert.False(body.CanCreateContract);
+        Assert.Equal([missing], body.MissingRequirements);
+    }
+
+    [Fact]
+    public async Task CustomerReadinessReturnsMultipleMissingRequirements()
+    {
+        using var client = CreateClient("customers-with-permission");
+        var response = await client.GetAsync("/api/v1/customers/46/readiness", TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadFromJsonAsync<CustomerReadiness>(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(body);
+        Assert.Equal(["address", "phone", "account"], body.MissingRequirements);
+    }
+
+    [Fact]
+    public async Task CustomerReadinessRequiresTenantSelection()
+    {
+        using var client = CreateClient("customers-without-tenant");
+        var response = await client.GetAsync("/api/v1/customers/42/readiness", TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task CustomerReadinessRequiresPermission()
+    {
+        using var client = CreateClient("with-permission");
+        var response = await client.GetAsync("/api/v1/customers/42/readiness", TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task CustomerReadinessMissingPersonReturnsNotFound()
+    {
+        using var client = CreateClient("customers-with-permission");
+        var response = await client.GetAsync("/api/v1/customers/999/readiness", TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
     private HttpClient CreateClient(string mode)
     {
         var client = factory.CreateClient();
@@ -82,4 +149,5 @@ public sealed class CustomerEndpointsIntegrationTests(TestApiFactory factory)
     private sealed record CustomerDetail(string? Rfc, CustomerPhone? PrimaryPhone, CustomerPhone[] ActivePhones, CustomerEmail[] ActiveEmails);
     private sealed record CustomerPhone(int PhoneId, string? AreaCode, string? PhoneNumber, string? Extension, bool IsDefault);
     private sealed record CustomerEmail(int EmailId, string? Contact, string? Email);
+    private sealed record CustomerReadiness(int PersonId, bool HasGeneralData, bool HasAddress, bool HasPhone, bool HasAccount, bool CanCreateContract, string[] MissingRequirements);
 }
