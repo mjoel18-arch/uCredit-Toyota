@@ -2,6 +2,10 @@
 
 ## Estado de esta etapa
 
+### Alta inicial sin domicilio
+
+El alta de persona es independiente de `CDOMICILIO`: `POST /api/v1/customers` no recibe ni crea datos de domicilio. Un cliente recién creado puede aparecer en búsqueda y detalle con `hasAddress = false`, `canCreateContract = false` y `address` en `missingRequirements`. El usuario debe utilizar la acción **Agregar domicilio** del módulo independiente; readiness se recalcula después de esa operación. Teléfono, cuenta y datos generales se evalúan por separado y no se considera que alguno satisfaga el requisito de domicilio.
+
 La primera fase de lectura está implementada. La elegibilidad se calcula en
 cada consulta a Legacy y no se persiste en Identity, `CPERSONA` ni otra tabla
 auxiliar. No se agregan escrituras Legacy.

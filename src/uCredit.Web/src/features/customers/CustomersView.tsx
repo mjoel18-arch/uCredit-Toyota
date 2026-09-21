@@ -19,7 +19,7 @@ export function CustomersView({ onUnauthorized, canCreate = false, onCreated = (
   const [busy, setBusy] = useState(false)
   const [creating, setCreating] = useState(false)
   const [pepNotice, setPepNotice] = useState(false)
-  if (creating) return <CustomerCreateView onBack={() => setCreating(false)} onCreated={(personId, pepValidationStatus) => { setCreating(false); setPepNotice(pepValidationStatus === 'NotExecuted'); onCreated(personId, pepValidationStatus) }} />
+  if (creating) return <CustomerCreateView onBack={() => setCreating(false)} onCreated={(createdPersonId, pepValidationStatus) => { setCreating(false); setPepNotice(pepValidationStatus === 'NotExecuted'); setPersonId(String(createdPersonId)); setRfc(''); setName(''); setItems([]); void loadDetail(createdPersonId); onCreated(createdPersonId, pepValidationStatus) }} />
 
   async function submit(event: FormEvent<HTMLFormElement>, requestedPage = 1) {
     event.preventDefault()
@@ -41,18 +41,22 @@ export function CustomersView({ onUnauthorized, canCreate = false, onCreated = (
     } finally { setBusy(false) }
   }
 
-  async function openDetail(item: CustomerListItem) {
+  async function loadDetail(personIdToLoad: number) {
     try {
       const [customer, profileReadiness, customerAddresses, customerPhones, customerAccounts] = await Promise.all([
-        getCustomerByPersonId(item.personId),
-        getCustomerProfileReadiness(item.personId),
-        getCustomerAddresses(item.personId),
-        getCustomerPhones(item.personId),
-        getCustomerAccounts(item.personId).catch(error => { if (error instanceof ApiError && error.status === 401) onUnauthorized(); return [] }),
+        getCustomerByPersonId(personIdToLoad),
+        getCustomerProfileReadiness(personIdToLoad),
+        getCustomerAddresses(personIdToLoad),
+        getCustomerPhones(personIdToLoad),
+        getCustomerAccounts(personIdToLoad).catch(error => { if (error instanceof ApiError && error.status === 401) onUnauthorized(); return [] }),
       ])
       setDetail(customer); setReadiness(profileReadiness); setAddresses(customerAddresses); setPhones(customerPhones); setAccounts(customerAccounts); setMessage('')
     }
     catch (error) { if (error instanceof ApiError && error.status === 401) onUnauthorized(); else setMessage(error instanceof ApiError && error.status === 404 ? 'No se encontró el cliente.' : apiErrorMessage(error, 'No fue posible consultar el cliente.')) }
+  }
+
+  async function openDetail(item: CustomerListItem) {
+    await loadDetail(item.personId)
   }
 
   return <section className="hero-card customer-search" aria-labelledby="customers-title">

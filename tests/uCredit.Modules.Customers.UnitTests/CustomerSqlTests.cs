@@ -72,39 +72,12 @@ public sealed class CustomerSqlTests
     }
 
     [Fact]
-    public void OptionalInteriorNumberUsesLegacyEmptyStringAndSchemaSize()
+    public void CustomerCreationDoesNotWriteOrReserveAnAddress()
     {
-        Assert.Equal(string.Empty, LegacyCustomerWriteRepository.NormalizeOptionalLegacyString(null, 100));
-        Assert.Equal(string.Empty, LegacyCustomerWriteRepository.NormalizeOptionalLegacyString("   ", 100));
-        Assert.Equal("12-B", LegacyCustomerWriteRepository.NormalizeOptionalLegacyString(" 12-B ", 100));
-        Assert.Contains("@InteriorNumber", LegacyCustomerWriteRepository.CreateAddressInsertSql, StringComparison.Ordinal);
-        Assert.Contains("PAI_FL_CVE", LegacyCustomerWriteRepository.CreateAddressInsertSql, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void AddressInsertHasEveryConfirmedRequiredColumnAndNoConcatenatedValues()
-    {
-        var sql = LegacyCustomerWriteRepository.CreateAddressInsertSql;
-        foreach (var column in new[]
-        {
-            "DMO_FL_CVE", "PNA_FL_PERSONA", "DMO_CL_CPOSTAL", "DMO_DS_NUMEXT", "DMO_DS_NUMINT",
-            "DMO_FG_TDIRECCION", "DMO_FG_STATUS", "DMO_FG_FACTURA", "DMO_FG_EDOCTA", "DMO_FG_REGDEFAULT",
-            "DMO_FG_OTROS", "DMO_FE_ULTMOD", "PAI_FL_CVE"
-        })
-        {
-            Assert.Contains(column, sql, StringComparison.Ordinal);
-        }
-
-        Assert.DoesNotContain("VALUES ('", sql, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("@Rfc", sql, StringComparison.Ordinal);
-        Assert.Contains("Stage=", "Customer creation failed. ExceptionType={ExceptionType} Stage={Stage} CorrelationId={CorrelationId}", StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void AddressFailuresAreAssignedAddressStageByOperationBoundary()
-    {
-        Assert.Equal("address", LegacyCustomerWriteRepository.AddressStage);
-        Assert.Contains("@InteriorNumber", LegacyCustomerWriteRepository.CreateAddressInsertSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("CDOMICILIO", LegacyCustomerWriteRepository.CreatePhoneInsertSql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("@AddressId", LegacyCustomerWriteRepository.CreatePhoneInsertSql, StringComparison.Ordinal);
+        Assert.Contains("@UnassociatedAddressId", LegacyCustomerWriteRepository.CreatePhoneInsertSql, StringComparison.Ordinal);
+        Assert.Contains("DMO_FL_CVE", LegacyCustomerWriteRepository.CreatePhoneInsertSql, StringComparison.Ordinal);
     }
 
     [Fact]

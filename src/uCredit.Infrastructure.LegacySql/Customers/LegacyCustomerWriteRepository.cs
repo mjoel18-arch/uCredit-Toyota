@@ -100,7 +100,6 @@ public sealed partial class LegacyCustomerWriteRepository(
             await EnsureRfcAvailableAsync(connection, transaction, command.Rfc.Trim(), cancellationToken);
             stage = "consecutive";
             var personId = await NextIdAsync(connection, transaction, "CPERSONA", cancellationToken);
-            var addressId = await NextIdAsync(connection, transaction, "CDOMICILIO", cancellationToken);
             var phoneId = await NextIdAsync(connection, transaction, "CTELEFONO", cancellationToken);
             var emailId = await NextIdAsync(connection, transaction, "CPERSONA_EMAIL", cancellationToken);
             var bitacoraId = await NextIdAsync(connection, transaction, "KBITACORA", cancellationToken);
@@ -115,8 +114,7 @@ public sealed partial class LegacyCustomerWriteRepository(
             parameters.Add("LegalName", command.LegalName, DbType.String, size: 200); parameters.Add("CapitalRegime", command.CapitalRegime, DbType.String, size: 200); parameters.Add("Email", command.Email.Trim(), DbType.String, size: 250);
             parameters.Add("ContactForm", command.ContactFormCode, DbType.Int32); parameters.Add("GroupCode", command.GroupCode, DbType.Int32); parameters.Add("RiskCode", command.RiskCode, DbType.Int32); parameters.Add("TaxRegime", taxRegime, DbType.Int32); parameters.Add("CountryCode", command.CountryCode, DbType.Int32);
             parameters.Add("OperationDate", operationDate, DbType.DateTime); parameters.Add("ConstitutionOrBirthDate", command.ConstitutionOrBirthDate.ToDateTime(TimeOnly.MinValue), DbType.Date); parameters.Add("LegacyUserCode", legacyUserCode.Trim(), DbType.String, size: 8);
-            parameters.Add("AddressId", addressId, DbType.Int32); parameters.Add("AddressType", command.AddressTypeCode, DbType.Int32); parameters.Add("PostalCode", command.PostalCode.Trim(), DbType.String, size: 10); parameters.Add("State", command.State.Trim(), DbType.String, size: 70); parameters.Add("City", command.City.Trim(), DbType.String, size: 70); parameters.Add("Municipality", command.Municipality.Trim(), DbType.String, size: 70); parameters.Add("Neighborhood", command.Neighborhood.Trim(), DbType.String, size: 70); parameters.Add("StreetAndNumber", command.StreetAndNumber.Trim(), DbType.String, size: 200); parameters.Add("ExteriorNumber", command.ExteriorNumber.Trim(), DbType.String, size: 100); parameters.Add("InteriorNumber", NormalizeOptionalLegacyString(command.InteriorNumber, 100), DbType.String, size: 100); parameters.Add("AddressReference", command.AddressReference, DbType.String, size: 100); parameters.Add("AddressSchedule", command.AddressSchedule, DbType.String, size: 100); parameters.Add("AddressStatus", command.AddressStatusCode, DbType.Int32);
-            parameters.Add("PhoneId", phoneId, DbType.Int32); parameters.Add("PhoneType", command.PhoneTypeCode, DbType.Int32); parameters.Add("AreaCode", command.AreaCode.Trim(), DbType.String, size: 10); parameters.Add("PhoneNumber", command.PhoneNumber.Trim(), DbType.String, size: 30); parameters.Add("PhoneExtension", command.PhoneExtension, DbType.String, size: 10); parameters.Add("PhoneContact", command.PhoneContact, DbType.String, size: 200);
+            parameters.Add("PhoneId", phoneId, DbType.Int32); parameters.Add("PhoneType", command.PhoneTypeCode, DbType.Int32); parameters.Add("UnassociatedAddressId", 0, DbType.Int32); parameters.Add("AreaCode", command.AreaCode.Trim(), DbType.String, size: 10); parameters.Add("PhoneNumber", command.PhoneNumber.Trim(), DbType.String, size: 30); parameters.Add("PhoneExtension", command.PhoneExtension, DbType.String, size: 10); parameters.Add("PhoneContact", command.PhoneContact, DbType.String, size: 200);
             parameters.Add("EmailId", emailId, DbType.Int32); parameters.Add("EmailContact", command.EmailContact.Trim(), DbType.String, size: 250); parameters.Add("BitacoraId", bitacoraId, DbType.Int32);
 
             stage = "person";
@@ -125,8 +123,6 @@ public sealed partial class LegacyCustomerWriteRepository(
             await connection.ExecuteAsync(new CommandDefinition(command.LegalPersonality == CustomerCreatePersonality.Moral ? CreateMoralInsertSql : CreatePhysicalInsertSql, parameters, transaction, _options.CommandTimeoutSeconds, CommandType.Text, cancellationToken: cancellationToken));
             stage = "role";
             await connection.ExecuteAsync(new CommandDefinition(CreateRoleInsertSql, parameters, transaction, _options.CommandTimeoutSeconds, CommandType.Text, cancellationToken: cancellationToken));
-            stage = AddressStage;
-            await connection.ExecuteAsync(new CommandDefinition(CreateAddressInsertSql, parameters, transaction, _options.CommandTimeoutSeconds, CommandType.Text, cancellationToken: cancellationToken));
             stage = "phone";
             await connection.ExecuteAsync(new CommandDefinition(CreatePhoneInsertSql, parameters, transaction, _options.CommandTimeoutSeconds, CommandType.Text, cancellationToken: cancellationToken));
             stage = "email";
@@ -176,14 +172,9 @@ public sealed partial class LegacyCustomerWriteRepository(
         VALUES (@PersonId, 1, @OperationDate, @LegacyUserCode);
         """;
 
-    internal const string CreateAddressInsertSql = """
-        INSERT INTO dbo.CDOMICILIO (DMO_FL_CVE, PNA_FL_PERSONA, DMO_CL_CPOSTAL, DMO_DS_EFEDERATIVA, DMO_DS_MUNICIPIO, DMO_DS_CIUDAD, DMO_DS_COLONIA, DMO_DS_CALLE_NUM, DMO_DS_NUMEXT, DMO_DS_NUMINT, DMO_DS_REFERENCIA, DMO_DS_HORARIO, DMO_FG_TDIRECCION, DMO_FG_STATUS, DMO_FG_REGDEFAULT, DMO_FG_FACTURA, DMO_FG_EDOCTA, DMO_FG_OTROS, DMO_FE_ULTMOD, USR_CL_CVE, PAI_FL_CVE)
-        VALUES (@AddressId, @PersonId, @PostalCode, @State, @Municipality, @City, @Neighborhood, @StreetAndNumber, @ExteriorNumber, @InteriorNumber, @AddressReference, @AddressSchedule, @AddressType, @AddressStatus, 1, CASE WHEN @AddressType IN (1,2) THEN 1 ELSE 0 END, CASE WHEN @AddressType = 1 THEN 1 ELSE 0 END, CASE WHEN @AddressType = 1 THEN 1 ELSE 0 END, @OperationDate, @LegacyUserCode, @CountryCode);
-        """;
-
     internal const string CreatePhoneInsertSql = """
         INSERT INTO dbo.CTELEFONO (TFN_FL_CVE, PNA_FL_PERSONA, TTL_FL_CVE, DMO_FL_CVE, TFN_CL_LARGA_DISTANCIA, TFN_CL_TELEFONO, TFN_CL_EXTENSION, TFN_FG_STATUS, TFN_FG_REGDEFAULT, TFN_FE_ULTMOD, USR_CL_CVE, TFN_CL_LADA, TFN_DS_CONTACTO)
-        VALUES (@PhoneId, @PersonId, @PhoneType, @AddressId, '', @PhoneNumber, @PhoneExtension, 1, 1, @OperationDate, @LegacyUserCode, @AreaCode, @PhoneContact);
+        VALUES (@PhoneId, @PersonId, @PhoneType, @UnassociatedAddressId, '', @PhoneNumber, @PhoneExtension, 1, 1, @OperationDate, @LegacyUserCode, @AreaCode, @PhoneContact);
         """;
 
     internal const string CreateEmailInsertSql = """

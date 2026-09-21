@@ -2,7 +2,15 @@
 
 ## Estado
 
-La investigación del alta Legacy quedó documentada. Esta etapa no implementa comandos ni ejecuta SQL de escritura.
+### Contrato vigente: alta de persona sin domicilio
+
+Desde `feature/customer-create-without-address`, `POST /api/v1/customers` crea únicamente la persona y sus datos explícitos de teléfono y correo. El request HTTP, `CustomerCreateCommand`, el validador y el formulario ya no aceptan propiedades de domicilio. La administración de `CDOMICILIO` permanece exclusivamente en sus endpoints y panel independientes.
+
+El alta no reserva `CCATCONSEC` para `CDOMICILIO`, no ejecuta `INSERT`, `UPDATE` ni `DELETE` sobre esa tabla y no crea domicilios vacíos o provisionales. Tras `201 Created`, la aplicación abre el detalle del cliente; readiness informa `hasAddress = false`, muestra que falta domicilio y mantiene deshabilitada la captura de contrato. La acción **Agregar domicilio** usa el módulo independiente.
+
+La matriz histórica de `CDOMICILIO` que aparece más abajo documenta el flujo anterior y no forma parte del contrato vigente de creación. Sus reglas siguen aplicando únicamente a la administración independiente de domicilios.
+
+La investigación del alta Legacy quedó documentada. La implementación moderna conserva la transacción y las guardas de escritura; no se ejecutaron SQL Server ni pruebas POST manuales durante esta tarea.
 
 Trazabilidad: `su_MtoPersona.aspx` -> `cmdGuardar_Click` -> `sn_clsPersona.ActualizaPersona` -> `sd_clsPersona.ActualizaPersona`.
 
@@ -42,7 +50,7 @@ Mientras no exista catálogo y regla funcional aprobada para `PMO_DS_REGIMEN_CAP
 
 Las claves confirmadas en el catálogo incluyen `601`, `603`, `605`, `606`, `612`, `616`, `621`, `625` y `626`, entre otras. La compatibilidad se determina por `RFI_CL_PJURIDICA`, no por el texto visible ni por la frecuencia histórica.
 
-### Matriz de `CDOMICILIO` confirmada
+### Matriz histórica de `CDOMICILIO` (no usada por el alta vigente)
 
 La evidencia de esquema confirma que las siguientes columnas son `NOT NULL` y no tienen default SQL utilizable por este alta. Las columnas nullable no se incluyen como obligación de entrada; cuando el formulario no las captura pueden conservar `NULL`.
 
@@ -113,7 +121,7 @@ La inserción se ejecuta por etapas separadas (`person`, `subtype`, `role`, `add
 
 - `PNA_NO_CODE` es `DealerCode`: blanco se convierte en `0`, se valida que no esté asignado a otra persona y sólo es obligatorio para roles dealer, planta o sucursal.
 - La integración PEP del alta queda desacoplada mediante `IPersonPepChecker`; el flujo moderno no consulta directamente ninguna tabla Legacy PEP ni registra un resultado negativo simulado. El proveedor representa `NoMatch`, `Match` o `Unavailable`. Una coincidencia exige `pepConfirmed=true` en una segunda solicitud explícita; sin confirmación devuelve 422 y `pep_confirmation_required`, mientras que `Unavailable` devuelve 503. En Development, `CustomerCreation__RequirePepCheck=false` permite la demostración, ignora `pepConfirmed` y expone el estado `NotExecuted`; esa configuración no está permitida en Production.
-- El primer domicilio y el primer teléfono quedan predeterminados aunque el formulario no envíe la marca; una nueva selección default desmarca los existentes.
+- El primer domicilio y el primer teléfono quedan predeterminados aunque sus módulos independientes no envíen la marca; una nueva selección default desmarca los existentes. El alta de persona ya no crea el primer domicilio.
 - Los usos de correo son múltiples. El alta crea una fila por uso seleccionado; la actualización elimina usos anteriores y los vuelve a crear.
 - `CPERSONA_EMAIL` recibe la fecha de modificación proporcionada; `KEMAIL_USO` recibe la fecha/hora del servidor Legacy.
 - `KEMAIL_USO` tiene FK física confirmada de `MAI_FL_CVE` a `CPERSONA_EMAIL`; no se confirmó PK física.
@@ -159,7 +167,7 @@ No se ejecutaron SQL Server, escrituras Legacy, migraciones, IdentityAdmin, comm
 - La comprobación PEP ocurre antes de cualquier inserción. Una coincidencia exige confirmación explícita; ausencia de confirmación devuelve 422 y una falla del servicio devuelve 503. La notificación queda detrás de una interfaz separada y no participa en el commit.
 - La escritura moderna de `KBITACORA` se realiza dentro de la misma transacción de cliente. Usa `ATV_FL_CVE = 4`, `BIT_TOP_CVE` vacío compatible con la columna, `BIT_FE_FECHA` generado por SQL Server, `LegacyUserCode` como actor y la referencia funcional Legacy sin RFC ni datos de contacto. Esta es una diferencia deliberada frente a Legacy, donde la bitácora se guarda después: si la auditoría moderna falla, todo el alta hace rollback.
 - La conexión de escritura es distinta de la de lectura y está cerrada por defecto. Las pruebas de escritura sólo se habilitan en `Development`, con `UCREDIT_ALLOW_LEGACY_WRITE_TESTS=true`, `UCREDIT_LEGACY_WRITE_TEST_DATABASE=pr_t`, conexión separada y verificación efectiva de `DB_NAME() = pr_t` antes de abrir la transacción.
-- `CCATCONSEC` se bloquea dentro de la transacción para obtener los consecutivos de persona, domicilio, teléfono, correo y bitácora. No se usa `MAX + 1`.
+- `CCATCONSEC` se bloquea dentro de la transacción para obtener los consecutivos de persona, teléfono, correo y bitácora. El consecutivo de domicilio se reserva únicamente desde la administración independiente de domicilios. No se usa `MAX + 1`.
 - Se añadió el contrato `POST /api/v1/customers`, permiso `customers.write`, DTO HTTP explícito, antiforgery y actor `LegacyUserCode`. La migración `AddLegacyUserCodeToUserTenantMembership` sólo se generó para revisión y no fue aplicada.
 
 `IdentityAdmin` ahora aprovisiona idempotentemente `contracts.read`, `customers.read` y `customers.write` sólo en la membresía activa del tenant indicado, y carga `LegacyUserCode` desde `UCREDIT_BOOTSTRAP_LEGACY_USER_CODE`. La herramienta no se ejecutó. El código se valida contra la membresía del tenant activo y rechaza cambiar un valor existente distinto.

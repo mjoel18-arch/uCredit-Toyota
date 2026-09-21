@@ -42,6 +42,21 @@ describe('CustomerCreateView email usages', () => {
     expect(createMock.mock.calls[0][0].taxRegimeCode).toBe('612')
   })
 
+  it('creates the person without domicile fields in the form or payload', async () => {
+    createMock.mockResolvedValue({ personId: 42, pepValidationStatus: 'NotExecuted' })
+    render(<CustomerCreateView onBack={vi.fn()} onCreated={vi.fn()} />)
+
+    expect(screen.queryByLabelText('Código postal')).toBeNull()
+    expect(screen.queryByLabelText('Estado')).toBeNull()
+    expect(screen.queryByLabelText('Municipio')).toBeNull()
+    expect(screen.queryByLabelText('Tipo de domicilio')).toBeNull()
+
+    fireEvent.submit(document.querySelector('form.customer-create-form') as HTMLFormElement)
+    await waitFor(() => expect(createMock).toHaveBeenCalledTimes(1))
+    const payload = createMock.mock.calls[0][0] as unknown as Record<string, unknown>
+    expect(Object.keys(payload).some(key => key.toLowerCase().includes('address') || key.toLowerCase().includes('postal') || key === 'state' || key === 'city')).toBe(false)
+  })
+
   it('selects invoice delivery initially', () => {
     render(<CustomerCreateView onBack={vi.fn()} onCreated={vi.fn()} />)
 

@@ -5,11 +5,10 @@ namespace UCredit.Modules.Customers.UnitTests;
 public sealed class CustomerCreateValidatorTests
 {
     [Fact]
-    public void RejectsUnsupportedAddressTypesAndDuplicateUsages()
+    public void RejectsDuplicateEmailUsagesWithoutRequiringAddressData()
     {
-        var command = Valid() with { AddressTypeCode = 7, EmailUsageCodes = [1, 1] };
+        var command = Valid() with { EmailUsageCodes = [1, 1] };
         var errors = CustomerCreateValidator.Validate(command);
-        Assert.Contains("addressTypeCode", errors.Keys);
         Assert.Contains("emailUsageCodes", errors.Keys);
     }
 
@@ -57,6 +56,6 @@ public sealed class CustomerCreateValidatorTests
 
     private static CustomerCreateCommand Valid() => new(
         CustomerCreatePersonality.Individual, "AAA010101AAA", "Synthetic", "Person", "Test", null, null,
-        new DateOnly(1980, 1, 1), 1, 1, 1, 1, "605", 1, "00000", "State", "City", "Municipality", "Neighborhood", "Street", "1", null, null, null, 1,
+        new DateOnly(1980, 1, 1), 1, 1, 1, 1, "605",
         1, "55", "5555555555", null, null, "Test Contact", "test@example.invalid", [1, 2]);
 }
