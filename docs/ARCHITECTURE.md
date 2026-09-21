@@ -91,3 +91,7 @@ concurrencia por `TFN_FE_ULTMOD` y auditoría. No se depende de FK físicas ni
 triggers de `CTELEFONO`; persona, domicilio y tipo se validan en aplicación.
 Los logs no contienen números telefónicos, lada, extensión, contacto ni
 payload.
+
+El vertical de cuentas valida persona y catálogos en Legacy, no usa
+`AllowedCompanyIds` para Customers y ejecuta sus mutaciones con Dapper,
+transacción, auditoría y guardas `Development`/`pr_t`.

@@ -82,7 +82,7 @@ debe validarse en la aplicación antes de cualquier escritura futura.
 | Moneda | La pantalla carga `CPARAMETRO` con catálogo `4` | Valores vigentes confirmados: 1, 2 y 3 |
 | Tipo de cuenta | La pantalla carga `CPARAMETRO` con catálogo `71` | Valores vigentes confirmados: 1, 2 y 3 |
 | Medio de pago | `PCT_CL_MPAGO` es nullable y no aparece como selección | Alta `NULL`; edición conserva histórico; no se expone |
-| País | La UI puede iniciar con México (`PAI_FL_CVE = 1`); el backend valida existencia en `CPAIS` | No restringir exclusivamente a México |
+| País | Fuera del contrato de cuentas | `CPCUENTA` no tiene columna ni relación persistente confirmada; no se acepta, valida ni devuelve |
 | Sucursal | `PCT_NO_SUCURSAL` es `smallint NOT NULL`; no se confirmó tabla `CSUCURSAL` | Valor numérico obligatorio; no es texto ni catálogo |
 | `CBCO_CTAS` | Contiene cuentas bancarias operativas de empresa, con `EMP_FL_CVE` | No asumir que representa cuentas del cliente |
 
@@ -327,6 +327,25 @@ La segunda consulta sólo devuelve completitud agregada. No se deben
 seleccionar ni imprimir los valores de las columnas sensibles.
 
 ## UX y protección de datos
+
+### Catálogo de bancos
+
+La UI obtiene los bancos mediante `GET /api/v1/catalogs/banks`, protegido por
+autenticación, tenant seleccionado coincidente con el despliegue y
+`customers.read`. El repositorio sólo selecciona `BCO_FL_CVE` y
+`BCO_DS_NOMBRE` de `CBANCO`, filtrando `BCO_FG_STATUS = 1` y
+`BCO_FG_REAL = 1`, y ordenando por nombre y luego identificador. No se
+exponen columnas de cuentas, CLABE ni otros datos de `CBANCO`.
+
+El alta usa un selector obligatorio con una opción inicial no seleccionable.
+Los identificadores no se capturan manualmente ni se codifican en frontend.
+Si una cuenta histórica referencia un banco que ya no cumple el filtro, el
+selector de edición conserva la referencia como “no disponible”, sin
+permitir asignarla a una cuenta nueva ni cambiarla accidentalmente.
+
+La carga, el error y el catálogo vacío bloquean Guardar y se anuncian con
+mensajes accesibles. No se almacena el catálogo ni información financiera en
+`localStorage` o `sessionStorage`.
 
 La ficha mostrará cuentas activas e inactivas con banco, sucursal, moneda,
 tipo, medio de pago y estado. Número de cuenta y CLABE sólo se representarían
@@ -579,11 +598,12 @@ El rango observado no sustituye la validación del rango de `short`, pero
 confirma que no hay negativos ni valores fuera de ese dominio en la muestra
 agregada autorizada.
 
-Para país, la UI podrá proponer México (`PAI_FL_CVE = 1`) como valor inicial.
-El backend validará la existencia del identificador en `CPAIS`, sin aplicar
-un estatus que no fue confirmado y sin restringir la selección exclusivamente
-a México. El repositorio no hardcodeará `1` como única opción ni aceptará el
-valor de la UI sin esa validación.
+País queda fuera del alcance de cuentas. `CPCUENTA` no tiene columna ni
+relación persistente confirmada con `CPAIS`; por ello no forma parte de
+requests, responses, modelos de aplicación o frontend, no se valida contra
+`CPAIS`, no se acepta para descartarlo y no se devuelve como `null`. No se
+inventa una tabla puente. Esta decisión queda pendiente hasta confirmar una
+relación persistente del país.
 
 Para banco, el catálogo activo será obligatorio: la UI enviará únicamente el
 identificador, y la respuesta autorizada podrá devolver identificador y
@@ -650,12 +670,9 @@ DTOs de escritura: la API deberá obtenerlos de un catálogo Legacy vigente.
 
 ### País
 
-La evidencia recibida identifica a México como país predeterminado:
-`PAI_FL_CVE = 1`, código `MX` y `PAI_FG_REGDEFAULT = 1`. La consulta no
-incluyó una columna de estatus para los países, por lo que no se puede
-afirmar que el predeterminado equivalga por sí solo a “activo”. El backend
-debe validar el país contra la fuente vigente confirmada; el repositorio no
-hardcodeará `1` ni aceptará sin validación el valor inicial de la UI.
+La evidencia de `CPAIS` identifica a México como predeterminado, pero no
+confirma que `CPCUENTA` persista país ni cómo se relacionaría con esa tabla.
+Ese dato no se incorpora al contrato de cuentas ni se usa para validación.
 
 No se confirmó una relación funcional de `CPCUENTA` con `CPAIS_CUENTA`.
 Mientras no exista esa evidencia, país no forma parte del DTO de cuentas ni
@@ -731,9 +748,7 @@ escrituras y la auditoría se revertirán juntas ante cualquier error.
 
 ### Plan definitivo listo para implementación
 
-1. Validar la existencia del país en `CPAIS`; México (`1`) sólo será el
-   valor inicial de UI y no la única opción.
-2. Consultar bancos con `BCO_FG_STATUS = 1` y `BCO_FG_REAL = 1`,
+1. Consultar bancos con `BCO_FG_STATUS = 1` y `BCO_FG_REAL = 1`,
    distinguiendo el catálogo de mantenimiento de los filtros de
    contrato/pago.
 3. Mantener `PCT_CL_MPAGO = NULL` en altas y conservarlo en ediciones; no
@@ -741,9 +756,25 @@ escrituras y la auditoría se revertirán juntas ante cualquier error.
 4. Aplicar actividades funcionales 4/5; `23/24/25` permanecen como
    controles Legacy y no se interpretan como actividades.
 
-El plan no tiene contradicciones físicas o funcionales pendientes: la
-sucursal se modela como `short`, el país se valida por existencia en `CPAIS`
-sin limitarlo a México, y el medio de pago no se expone.
+El plan no tiene contradicciones físicas o funcionales pendientes dentro del
+alcance aprobado: la sucursal se modela como `short`, país queda fuera del
+contrato por falta de relación persistente confirmada y el medio de pago no se
+expone.
 
 No se implementó código productivo ni se ejecutaron SQL, POST, migraciones,
 IdentityAdmin, commit o push como parte de esta revisión.
+
+## Implementación autorizada
+
+La administración usa contratos del módulo, adaptadores Dapper separados y
+endpoints bajo `/api/v1/customers/{personId}/accounts`. Las respuestas sólo
+contienen identificadores, catálogos, estado, fecha y terminaciones
+enmascaradas. Los valores completos de cuenta y CLABE se usan únicamente
+dentro del alcance de la operación y no se escriben en logs, URLs,
+almacenamiento del navegador ni DTOs de respuesta.
+
+La semántica de PUT conserva una cuenta o CLABE cuando la propiedad está
+ausente o es `null`; una cadena vacía o de espacios responde `400`; un valor
+no vacío reemplaza individualmente el secreto correspondiente. En altas el
+estado es `1`, `PCT_CL_MPAGO` queda `NULL`, y el identificador se reserva sólo
+mediante `CCATCONSEC`.

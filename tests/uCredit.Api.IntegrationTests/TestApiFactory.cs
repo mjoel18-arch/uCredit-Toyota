@@ -14,6 +14,7 @@ using UCredit.Infrastructure.Identity.Tenants;
 using UCredit.Application.Execution;
 using UCredit.Modules.Contracts.Contracts;
 using UCredit.Modules.Customers.Customers;
+using UCredit.Infrastructure.LegacySql.Customers;
 
 namespace UCredit.Api.IntegrationTests;
 
@@ -44,6 +45,12 @@ public sealed class TestApiFactory : WebApplicationFactory<Program>
             services.AddSingleton<ICustomerProfileReadinessRepository, FakeCustomerProfileReadinessRepository>();
             services.RemoveAll<ICustomerPhoneReadRepository>();
             services.AddSingleton<ICustomerPhoneReadRepository, FakeCustomerPhoneReadRepository>();
+            services.RemoveAll<ICustomerAccountReadRepository>();
+            services.AddSingleton<ICustomerAccountReadRepository, FakeCustomerAccountReadRepository>();
+            services.RemoveAll<ICustomerBankReadRepository>();
+            services.AddSingleton<ICustomerBankReadRepository, FakeCustomerBankReadRepository>();
+            services.RemoveAll<ICustomerAccountWriteRepository>();
+            services.AddSingleton<ICustomerAccountWriteRepository, FakeCustomerAccountWriteRepository>();
             services.RemoveAll<IExecutionTenantContext>();
             services.AddScoped<IExecutionTenantContext, FakeExecutionTenantContext>();
             services.AddSingleton<ITenantMembershipStore, FakeTenantMembershipStore>();
@@ -88,6 +95,15 @@ internal sealed class TestAuthenticationHandler(
             string.Equals(mode, "customers-without-tenant", StringComparison.Ordinal))
         {
             claims.Add(new Claim("permission", "customers.read"));
+        }
+
+        if (string.Equals(mode, "customers-write", StringComparison.Ordinal))
+        {
+            claims.Add(new Claim("permission", "contracts.read"));
+            claims.Add(new Claim("permission", "customers.read"));
+            claims.Add(new Claim("permission", "customers.write"));
+            claims.Add(new Claim(TenantClaimTypes.Id, TestIdentityData.DeploymentTenantId.ToString("D")));
+            claims.Add(new Claim(TenantClaimTypes.Code, "TENANT-A"));
         }
 
         if (string.Equals(mode, "customers-with-permission", StringComparison.Ordinal))
@@ -214,6 +230,55 @@ internal sealed class FakeCustomerPhoneReadRepository : ICustomerPhoneReadReposi
     }
 }
 
+internal sealed class FakeCustomerAccountReadRepository : ICustomerAccountReadRepository
+{
+    private static readonly ManagedCustomerAccount First = new(7001, 42, 2, "Banco de prueba", 12, 1, "Pesos", 1, "Cheques", null, 1, "••••0001", "••••0002", new DateTime(2025, 1, 1));
+    private static readonly ManagedCustomerAccount Second = new(7002, 42, 3, "Banco alterno", 13, 1, "Pesos", 2, "Tarjeta de credito", null, 2, "••••0003", "••••0004", new DateTime(2025, 1, 2));
+
+    public Task<IReadOnlyList<ManagedCustomerAccount>?> GetByPersonIdAsync(int personId, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult<IReadOnlyList<ManagedCustomerAccount>?>(personId switch
+        {
+            42 => [First, Second],
+            47 => [],
+            999 => null,
+            _ => [],
+        });
+    }
+}
+
+internal sealed class FakeCustomerBankReadRepository : ICustomerBankReadRepository
+{
+    public Task<IReadOnlyList<CustomerBank>> GetActiveRealAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<CustomerBank>>([new(2, "Banco Alfa"), new(4, "Banco Beta")]);
+}
+
+internal sealed class FakeCustomerAccountWriteRepository : ICustomerAccountWriteRepository
+{
+    private static ManagedCustomerAccount Result(int personId, int accountId, byte status = 1) =>
+        new(accountId, personId, 2, "Banco de prueba", 12, 1, "Pesos", 1, "Cheques", null, status, "••••0001", "••••0002", new DateTime(2025, 1, 3));
+
+    public Task<ManagedCustomerAccount> CreateAsync(CustomerAccountCreateCommand command, string legacyUserCode, string correlationId, CancellationToken cancellationToken = default)
+    {
+        return command.PersonId switch
+        {
+            48 => Task.FromException<ManagedCustomerAccount>(new CustomerAccountConflictException("account_duplicate", "Duplicate account.")),
+            50 => Task.FromException<ManagedCustomerAccount>(new LegacyWriteNotConfiguredException("Not configured.", "configuration", LegacyWriteConfigurationReason.MissingWriteConnection)),
+            _ => Task.FromResult(Result(command.PersonId, 8001)),
+        };
+    }
+
+    public Task<ManagedCustomerAccount> UpdateAsync(CustomerAccountUpdateCommand command, string legacyUserCode, string correlationId, CancellationToken cancellationToken = default) =>
+        command.PersonId == 49
+            ? Task.FromException<ManagedCustomerAccount>(new CustomerAccountConflictException("account_modified", "Modified."))
+            : Task.FromResult(Result(command.PersonId, command.AccountId));
+
+    public Task<ManagedCustomerAccount> ActivateAsync(CustomerAccountStateChangeCommand command, string legacyUserCode, string correlationId, CancellationToken cancellationToken = default) => Task.FromResult(Result(command.PersonId, command.AccountId));
+
+    public Task<ManagedCustomerAccount> DeactivateAsync(CustomerAccountStateChangeCommand command, string legacyUserCode, string correlationId, CancellationToken cancellationToken = default) => Task.FromResult(Result(command.PersonId, command.AccountId, 2));
+}
+
 internal sealed class FakeExecutionTenantContext(
     IHttpContextAccessor httpContextAccessor,
     IConfiguration configuration) : IExecutionTenantContext
@@ -333,11 +398,12 @@ internal static class TestIdentityData
 internal sealed class FakeTenantMembershipStore : ITenantMembershipStore
 {
     private static readonly ActiveTenantMembership TenantA = new(
-        Guid.Parse("10000000-0000-0000-0000-000000000001"),
+        TestIdentityData.DeploymentTenantId,
         "TENANT-A",
         "Tenant A",
         ["contracts.read"],
-        [101]);
+        [101],
+        "TESTUSR");
 
     private static readonly ActiveTenantMembership TenantB = new(
         Guid.Parse("10000000-0000-0000-0000-000000000002"),

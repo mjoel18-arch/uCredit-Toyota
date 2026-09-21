@@ -584,6 +584,10 @@ rollback, concurrencia, reglas de predeterminado, códigos 400/401/403/404/
 
 La matriz funcional queda aprobada, pero el código productivo permanece sin
 cambios en esta etapa, conforme a la instrucción de revisión previa.
+
+La administración de cuentas recalcula `hasAccount` desde
+`CPCUENTA.PCT_FG_STATUS = 1` después de cada mutación; no persiste una
+bandera de elegibilidad en Identity ni en Legacy.
 # Administración de teléfonos
 
 La administración de teléfonos mantiene el requisito `phone` calculado en
