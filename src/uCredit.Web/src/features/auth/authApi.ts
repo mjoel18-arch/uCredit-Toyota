@@ -369,18 +369,6 @@ export type CustomerCreatePayload = {
   riskCode: number
   contactFormCode: number
   taxRegimeCode: string
-  addressTypeCode: number
-  postalCode: string
-  state: string
-  city: string
-  municipality: string
-  neighborhood: string
-  streetAndNumber: string
-  exteriorNumber: string
-  interiorNumber?: string
-  addressReference?: string
-  addressSchedule?: string
-  addressStatusCode: number
   phoneTypeCode: number
   areaCode: string
   phoneNumber: string

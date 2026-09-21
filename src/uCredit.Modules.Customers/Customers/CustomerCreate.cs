@@ -23,18 +23,6 @@ public sealed record CustomerCreateCommand(
     int RiskCode,
     int ContactFormCode,
     string TaxRegimeCode,
-    int AddressTypeCode,
-    string PostalCode,
-    string State,
-    string City,
-    string Municipality,
-    string Neighborhood,
-    string StreetAndNumber,
-    string ExteriorNumber,
-    string? InteriorNumber,
-    string? AddressReference,
-    string? AddressSchedule,
-    int AddressStatusCode,
     int PhoneTypeCode,
     string AreaCode,
     string PhoneNumber,
@@ -98,16 +86,6 @@ public static class CustomerCreateValidator
         if (command.RiskCode <= 0) Add("riskCode", "Risk is required.");
         if (command.ContactFormCode <= 0) Add("contactFormCode", "Contact form is required.");
         if (string.IsNullOrWhiteSpace(command.TaxRegimeCode) || command.TaxRegimeCode.Trim().Length > 20 || !int.TryParse(command.TaxRegimeCode.Trim(), out _)) Add("taxRegimeCode", "Tax regime must be a valid SAT key of at most 20 characters.");
-        if (command.AddressTypeCode is < 1 or > 4) Add("addressTypeCode", "Only address types 1 through 4 are supported in version 1.");
-        Require(command.PostalCode, 10, "postalCode", Add);
-        Require(command.State, 70, "state", Add);
-        Require(command.City, 70, "city", Add);
-        Require(command.Municipality, 70, "municipality", Add);
-        Require(command.Neighborhood, 70, "neighborhood", Add);
-        Require(command.StreetAndNumber, 200, "streetAndNumber", Add);
-        Require(command.ExteriorNumber, 100, "exteriorNumber", Add);
-        RequireOptional(command.InteriorNumber, 100, "interiorNumber", Add);
-        if (command.AddressStatusCode <= 0) Add("addressStatusCode", "Address status is required.");
         if (command.PhoneTypeCode <= 0) Add("phoneTypeCode", "Phone type is required.");
         Require(command.AreaCode, 10, "areaCode", Add);
         Require(command.PhoneNumber, 30, "phoneNumber", Add);
