@@ -116,4 +116,29 @@ public sealed class CustomerSqlTests
         Assert.Contains("RFI_FG_STATUS = 1", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("RFI_FL_CVE", sql, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void AddressManagementSqlUsesRouteKeysAndExpectedTimestamp()
+    {
+        Assert.Contains("DMO_FL_CVE = @AddressId", LegacyCustomerWriteRepository.AddressUpdateSql, StringComparison.Ordinal);
+        Assert.Contains("PNA_FL_PERSONA = @PersonId", LegacyCustomerWriteRepository.AddressUpdateSql, StringComparison.Ordinal);
+        Assert.Contains("DMO_FE_ULTMOD = @ExpectedModifiedAt", LegacyCustomerWriteRepository.AddressUpdateSql, StringComparison.Ordinal);
+        Assert.Contains("@Billing", LegacyCustomerWriteRepository.AddressInsertSql, StringComparison.Ordinal);
+        Assert.Contains("@Statements", LegacyCustomerWriteRepository.AddressInsertSql, StringComparison.Ordinal);
+        Assert.Contains("@Other", LegacyCustomerWriteRepository.AddressInsertSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("PCT_NO_CUENTA", LegacyCustomerWriteRepository.AddressInsertSql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("PCT_NO_CLABE", LegacyCustomerWriteRepository.AddressInsertSql, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void AddressReadSqlDoesNotExposeAccountDataAndUsesControlledTypeCatalog()
+    {
+        Assert.Contains("P.PAR_FL_CVE = 7", LegacyCustomerWriteRepository.AddressSelectSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("PCT_NO_CUENTA", LegacyCustomerAddressReadRepository.ReadSql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("PCT_NO_CLABE", LegacyCustomerAddressReadRepository.ReadSql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("SELECT *", LegacyCustomerAddressReadRepository.ReadSql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("INSERT", LegacyCustomerAddressReadRepository.ReadSql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("UPDATE", LegacyCustomerAddressReadRepository.ReadSql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("DELETE", LegacyCustomerAddressReadRepository.ReadSql, StringComparison.OrdinalIgnoreCase);
+    }
 }

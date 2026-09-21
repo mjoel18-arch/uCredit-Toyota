@@ -430,11 +430,157 @@ No se habilitarán escrituras Legacy, migraciones, IdentityAdmin ni cambios de e
 
 ## Riesgos y decisiones pendientes
 
-1. **Validez de la cuenta:** falta confirmar si una fila activa con `PCT_NO_CUENTA` y `PCT_NO_CLABE` ambos nulos es válida o debe excluirse; no se asumirá una regla por frecuencia.
-2. **Banco y catálogos:** falta confirmar FK física y reglas de banco, moneda, tipo de cuenta y medio de pago.
-3. **Regla Legacy:** falta localizar el código que define una cuenta válida para captura de contrato.
-4. **Cuenta predeterminada:** `CPCUENTA` no muestra un indicador predeterminado; la regla aprobada sólo exige una cuenta activa.
-5. **Alcance tenant:** queda resuelto por despliegue/tenant, sin filtro `AllowedCompanyIds` para Customers mientras no exista relación empresa-persona confirmada.
-6. **Correos:** se muestran como información del expediente, pero no forman parte de la regla funcional aprobada.
+1. **Banco y catálogos:** la regla de readiness no requiere validar banco, moneda, tipo de cuenta ni medio de pago; esos catálogos quedan pendientes para una futura administración de cuentas.
+2. **Cuenta predeterminada:** `CPCUENTA` no muestra un indicador predeterminado; la regla aprobada sólo exige una cuenta activa.
+3. **Alcance tenant:** queda resuelto por despliegue/tenant, sin filtro `AllowedCompanyIds` para Customers mientras no exista relación empresa-persona confirmada.
+4. **Correos:** se muestran como información del expediente, pero no forman parte de la regla funcional aprobada.
 
-Hasta resolver los puntos 1 y 2, el endpoint y la acción “Capturar contrato” permanecen bloqueados para implementación.
+## Decisiones aprobadas para administración de domicilios
+
+La evidencia agregada de `CDOMICILIO` y la revisión de `RevisarCboTD` en
+`su_MtoDireccion.aspx.vb`, junto con `ActualizaDomicilio` en
+`sd_clsPersona.vb`, confirman las siguientes reglas:
+
+- toda persona que tenga domicilios debe conservar exactamente un domicilio
+  activo con `DMO_FG_REGDEFAULT = 1`;
+- el primer domicilio se crea activo y predeterminado;
+- al seleccionar un nuevo predeterminado se desmarcan los anteriores dentro
+  de la misma transacción;
+- no se permite desactivar el predeterminado sin proporcionar un domicilio
+  activo de reemplazo; la respuesta será `409` con código
+  `address_default_required`;
+- `DMO_FE_ULTMOD` será el control de concurrencia optimista;
+- PUT, activación y desactivación recibirán `expectedModifiedAt`;
+- el `UPDATE` incluirá la fecha esperada y una actualización de cero filas
+  responderá `409` con código `address_modified`;
+- el alta usará actividad `4`; modificación, activación, desactivación y
+  cambio de predeterminado usarán actividad `5`;
+- la bitácora reutilizará el mecanismo existente y nunca incluirá domicilio,
+  código postal, referencias ni payload.
+
+### Banderas de uso del domicilio
+
+La pantalla Legacy no trata las tres banderas como un catálogo simple cuyo
+valor pueda obtenerse solamente de `DMO_FG_TDIRECCION`. `RevisarCboTD` fija
+algunas opciones y deja otras habilitadas; además, al editar un registro
+recupera usos existentes antes de aplicar las restricciones del tipo. La
+distribución agregada confirma que existen múltiples combinaciones dentro de
+un mismo tipo, por lo que la frecuencia no se usa como regla.
+
+| Tipo | `DMO_FG_FACTURA` | `DMO_FG_EDOCTA` | `DMO_FG_OTROS` | Contrato funcional | Estado |
+|---:|---:|---:|---:|---|---|
+| 1, Dirección única | `1` | `1` | `1` | `billing`, `statements` y `other`, seleccionados y bloqueados | Aprobado |
+| 2, Dirección fiscal | `1` | Según `statements` | Según `other` | `billing` obligatorio y bloqueado; los otros dos son opcionales | Aprobado |
+| 3, Dirección administrativa | `0` | Según `statements` | Según `other` | `billing` no disponible; los otros dos son opcionales | Aprobado |
+| 4, Dirección social | `0` | Según `statements` | Según `other` | `billing` no disponible; los otros dos son opcionales | Aprobado |
+
+La distribución recibida respalda esta lectura: tipo 1 concentra la
+combinación `1/1/1`; tipo 2 contiene combinaciones distintas de Estado de
+Cuenta y Otros; y tipos 3 y 4 contienen combinaciones distintas de esas dos
+banderas. Esto demuestra que no es correcto implementar una función que
+derive las tres banderas exclusivamente desde el tipo.
+
+El contrato moderno representa usos funcionales y no columnas Legacy. El
+request llevará únicamente:
+
+```json
+{ "uses": ["billing", "statements", "other"] }
+```
+
+El backend aceptará solamente esos tres valores, normalizará espacios y
+duplicados, rechazará valores desconocidos y derivará internamente las
+columnas Legacy. Nunca aceptará `DMO_FG_FACTURA`, `DMO_FG_EDOCTA` ni
+`DMO_FG_OTROS` desde el request.
+
+Las reglas de derivación son:
+
+- tipo 1 siempre produce `1/1/1` y exige los tres usos;
+- tipo 2 siempre produce Factura `1`, exige `billing` y permite seleccionar
+  `statements` y `other`;
+- tipos 3 y 4 siempre producen Factura `0`, rechazan `billing` y permiten
+  guardar sin usos adicionales; `statements` y `other` son opcionales.
+
+La respuesta tampoco expondrá nombres de columnas Legacy; cuando sea
+necesario representar usos, utilizará los valores funcionales controlados.
+
+### Contrato de concurrencia
+
+Las respuestas de lectura expondrán `modifiedAt` únicamente como token
+técnico para una mutación autorizada. Las mutaciones deberán comparar
+`expectedModifiedAt` con `DMO_FE_ULTMOD` dentro de la misma transacción y
+revisar el número de filas afectadas. La conversión deberá respetar la
+precisión real de `datetime` y no asumir UTC mientras no se confirme que el
+servidor Legacy almacena esa columna en UTC.
+
+Al cambiar el predeterminado, la desactivación del anterior y la activación
+del nuevo formarán una sola unidad transaccional. Si el domicilio esperado ya
+fue modificado, se hará rollback y se devolverá `address_modified`. Si se
+intenta dejar sin predeterminado activo a la persona, se hará rollback y se
+devolverá `address_default_required`.
+
+### Plan final condicionado
+
+Con la matriz aprobada, la implementación seguirá estas fases:
+
+1. agregar el contrato de aplicación y DTOs explícitos para la colección de
+   domicilios;
+2. implementar la consulta parametrizada sin joins multiplicadores;
+3. implementar alta, edición y acciones de estado con `CCATCONSEC` sólo en
+   altas;
+4. aplicar las reglas de predeterminado y `expectedModifiedAt` dentro de la
+   transacción;
+5. escribir la bitácora con actividad 4 o 5 sin PII;
+6. recalcular readiness después de cada mutación;
+7. integrar la tarjeta y panel accesible en el expediente;
+8. cubrir autorización, antiforgery, tenant, rollback, concurrencia y doble
+   envío.
+
+### Contrato de endpoints
+
+```text
+GET  /api/v1/customers/{personId}/addresses
+POST /api/v1/customers/{personId}/addresses
+PUT  /api/v1/customers/{personId}/addresses/{addressId}
+POST /api/v1/customers/{personId}/addresses/{addressId}/activate
+POST /api/v1/customers/{personId}/addresses/{addressId}/deactivate
+```
+
+GET requiere `customers.read`. Las mutaciones requieren `customers.write`,
+antiforgery, tenant seleccionado, tenant coincidente con el despliegue,
+`LegacyUserCode` de la membresía activa, entorno Development, conexión de
+escritura y guardas explícitas de `pr_t`.
+
+Los payloads de alta y edición incluirán `uses`, no las tres banderas. El
+servidor validará el tipo, resolverá los usos y ejecutará la derivación antes
+de abrir la operación Legacy.
+
+### Transacciones
+
+Cada mutación se ejecutará en una única transacción Legacy. El alta reservará
+el consecutivo de `CDOMICILIO` mediante `CCATCONSEC`; PUT, activación,
+desactivación y cambio de predeterminado no reservarán uno nuevo. El cambio
+de predeterminado desmarcará el anterior y marcará el nuevo dentro de la
+misma transacción.
+
+Todas las actualizaciones incluirán `PNA_FL_PERSONA`, `DMO_FL_CVE` y
+`expectedModifiedAt` en la condición. Cero filas afectadas producirá
+`409 address_modified`. Desactivar el único predeterminado sin reemplazo
+producirá `409 address_default_required`. La bitácora utilizará actividad 4
+en altas y actividad 5 en las demás mutaciones, sin domicilio ni payload.
+
+### UI y pruebas
+
+El panel accesible mostrará “Facturación”, “Estado de cuenta” y “Otros”.
+Cambiar el tipo recalculará la disponibilidad y selección: tipo 1 bloqueará
+los tres; tipo 2 bloqueará Facturación; tipos 3 y 4 ocultarán o deshabilitarán
+Facturación y permitirán guardar sin usos adicionales. El frontend impedirá
+doble envío y refrescará domicilios y readiness después de guardar.
+
+Las pruebas cubrirán derivación exacta por tipo, usos duplicados o
+desconocidos, `billing` inválido para tipos 3 y 4, alta sin usos para tipos 3
+y 4, antiforgery, permisos, tenant, consecutivo sólo en alta, bitácora,
+rollback, concurrencia, reglas de predeterminado, códigos 400/401/403/404/
+409/503, ausencia de PII en logs y prevención de doble envío.
+
+La matriz funcional queda aprobada, pero el código productivo permanece sin
+cambios en esta etapa, conforme a la instrucción de revisión previa.

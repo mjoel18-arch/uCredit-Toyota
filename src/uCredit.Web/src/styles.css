@@ -132,3 +132,21 @@ h1 { margin: 5px 0 0; font-size: clamp(26px, 4vw, 36px); }
 .customer-create-form .form-actions { grid-column: 1 / -1; display: flex; gap: .75rem; flex-wrap: wrap; }
 .pep-confirmation { grid-column: 1 / -1; padding: .75rem; border: 1px solid var(--warning-color, #b7791f); }
 @media (max-width: 720px) { .customer-create-form { grid-template-columns: 1fr; } .customer-create-form .form-actions, .pep-confirmation { grid-column: auto; } }
+/* Customer address management */
+.customer-addresses { margin-top: 1.5rem; border-top: 1px solid #eaecf0; padding-top: 1rem; }
+.section-heading, .address-card, .side-panel-actions { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.address-list { display: grid; gap: .75rem; }
+.address-card { align-items: flex-start; border: 1px solid #eaecf0; border-radius: .75rem; padding: 1rem; }
+.address-card p { margin: .35rem 0; }
+.address-card small { color: var(--color-secondary); }
+.address-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.side-panel-backdrop { position: fixed; inset: 0; z-index: 10; display: flex; justify-content: flex-end; background: rgb(0 0 0 / 45%); }
+.side-panel { width: min(100%, 34rem); height: 100%; overflow-y: auto; padding: 1.5rem; background: var(--color-surface); box-shadow: -0.5rem 0 2rem rgb(0 0 0 / 20%); }
+.side-panel form, .side-panel fieldset { display: grid; gap: .75rem; }
+.side-panel fieldset { margin: 1rem 0; border: 1px solid #eaecf0; border-radius: .5rem; }
+.side-panel-actions { justify-content: flex-end; margin-top: 1rem; }
+.notice-status { margin: .75rem 0; }
+@media (max-width: 700px) {
+  .address-card, .section-heading { flex-direction: column; align-items: stretch; }
+  .side-panel { width: 100%; }
+}
