@@ -42,6 +42,8 @@ public sealed class TestApiFactory : WebApplicationFactory<Program>
             services.AddSingleton<ICustomerReadRepository, FakeCustomerReadRepository>();
             services.RemoveAll<ICustomerProfileReadinessRepository>();
             services.AddSingleton<ICustomerProfileReadinessRepository, FakeCustomerProfileReadinessRepository>();
+            services.RemoveAll<ICustomerPhoneReadRepository>();
+            services.AddSingleton<ICustomerPhoneReadRepository, FakeCustomerPhoneReadRepository>();
             services.RemoveAll<IExecutionTenantContext>();
             services.AddScoped<IExecutionTenantContext, FakeExecutionTenantContext>();
             services.AddSingleton<ITenantMembershipStore, FakeTenantMembershipStore>();
@@ -195,6 +197,20 @@ internal sealed class FakeCustomerProfileReadinessRepository : ICustomerProfileR
             46 => new CustomerProfileReadiness(46, true, false, false, false),
             _ => null,
         });
+    }
+}
+
+internal sealed class FakeCustomerPhoneReadRepository : ICustomerPhoneReadRepository
+{
+    public Task<IReadOnlyList<ManagedCustomerPhone>?> GetByPersonIdAsync(int personId, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult<IReadOnlyList<ManagedCustomerPhone>?>(personId == 42
+            ? [
+                new ManagedCustomerPhone(2, 42, 3, 10, null, "00", "0000000000", null, 1, null, true, new DateTime(2025, 1, 1), null),
+                new ManagedCustomerPhone(3, 42, 2, 10, null, "00", "0000000001", "10", 0, "Histórico", false, new DateTime(2025, 1, 2), null)
+            ]
+            : null);
     }
 }
 

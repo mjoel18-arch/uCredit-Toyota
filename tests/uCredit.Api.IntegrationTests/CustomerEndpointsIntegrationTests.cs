@@ -69,6 +69,35 @@ public sealed class CustomerEndpointsIntegrationTests(TestApiFactory factory)
     }
 
     [Fact]
+    public async Task AnonymousPhoneListReturnsUnauthorized()
+    {
+        var response = await factory.CreateClient().GetAsync("/api/v1/customers/42/phones", TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task PhoneListWithoutPermissionReturnsForbidden()
+    {
+        using var client = CreateClient("with-permission");
+        var response = await client.GetAsync("/api/v1/customers/42/phones", TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task PhoneListWithPermissionReturnsHistoricalAndActivePhones()
+    {
+        using var client = CreateClient("customers-with-permission");
+        var response = await client.GetAsync("/api/v1/customers/42/phones", TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadFromJsonAsync<PhoneResponse[]>(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(body);
+        Assert.Equal(2, body.Length);
+        Assert.Equal("Active", body[0].Status);
+        Assert.Equal("InheritedInactive", body[1].Status);
+    }
+
+    [Fact]
     public async Task CustomerReadinessReturnsCompleteProfileWithoutAccountData()
     {
         using var client = CreateClient("customers-with-permission");
@@ -150,4 +179,5 @@ public sealed class CustomerEndpointsIntegrationTests(TestApiFactory factory)
     private sealed record CustomerPhone(int PhoneId, string? AreaCode, string? PhoneNumber, string? Extension, bool IsDefault);
     private sealed record CustomerEmail(int EmailId, string? Contact, string? Email);
     private sealed record CustomerReadiness(int PersonId, bool HasGeneralData, bool HasAddress, bool HasPhone, bool HasAccount, bool CanCreateContract, string[] MissingRequirements);
+    private sealed record PhoneResponse(int PhoneId, string Status, bool IsDefault);
 }

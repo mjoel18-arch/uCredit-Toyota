@@ -584,3 +584,15 @@ rollback, concurrencia, reglas de predeterminado, códigos 400/401/403/404/
 
 La matriz funcional queda aprobada, pero el código productivo permanece sin
 cambios en esta etapa, conforme a la instrucción de revisión previa.
+# Administración de teléfonos
+
+La administración de teléfonos mantiene el requisito `phone` calculado en
+tiempo de consulta. Después de cada alta, edición, activación o
+desactivación, el expediente debe refrescar readiness; no se persiste una
+bandera duplicada en Identity ni en Legacy.
+
+Las nuevas operaciones usan estado activo `1`, inactivo `2` e histórico `0`
+(`Inactivo heredado`). El estado `0` sólo puede activarse. La operación de
+desactivación conserva el requisito de un predeterminado activo y devuelve
+`409 phone_default_required` si no se proporciona un reemplazo. La
+concurrencia usa `TFN_FE_ULTMOD` y devuelve `409 phone_modified`.

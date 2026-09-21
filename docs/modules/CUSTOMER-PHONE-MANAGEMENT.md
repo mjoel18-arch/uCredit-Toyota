@@ -368,11 +368,12 @@ La PK física es el índice clustered único
 `TTL_FL_CVE`, `PNA_FL_PERSONA` y `DMO_FL_CVE`; son evidencia de acceso, no
 prueba suficiente de una restricción FK.
 
-Con los resultados recibidos no se entregó una fila de
-`sys.foreign_keys`. Por tanto, la relación física FK con `CPERSONA`,
-`CDOMICILIO` o `CTTELEFONO` permanece sin confirmar. La relación funcional
-`PNA_FL_PERSONA` con `CPERSONA` y la asociación con `DMO_FL_CVE` sí están
-confirmadas por las consultas y el código Legacy.
+Las consultas de `sys.foreign_keys` regresaron vacías. No existen FK físicas
+confirmadas entre `CTELEFONO` y `CPERSONA`, `CDOMICILIO` o `CTTELEFONO`. Las
+relaciones `PNA_FL_PERSONA`, `DMO_FL_CVE` y `TTL_FL_CVE` son relaciones
+lógicas y deben validarse obligatoriamente en la aplicación antes de cada
+escritura. La relación funcional de persona y la asociación de domicilio sí
+están confirmadas por las consultas y el código Legacy.
 
 ### Tipos autorizados y consecutivo
 
@@ -441,11 +442,13 @@ viable como token de concurrencia optimista:
 - cero filas afectadas producirá `409 phone_modified`;
 - el valor nuevo será generado por el servidor dentro de la transacción.
 
-No se recibió evidencia de `sys.triggers` para `CTELEFONO`. La existencia de
-triggers queda sin confirmar y debe verificarse antes de implementar, sin
-suponer que la actualización de `TFN_FE_ULTMOD` sea automática.
+La consulta de `sys.triggers` regresó vacía: no existen triggers en
+`CTELEFONO`. Por tanto, todas las reglas de estado y predeterminado, la
+auditoría y la actualización de `TFN_FE_ULTMOD` dependerán explícitamente de
+la transacción de uCredit; no se delegarán a comportamiento implícito de
+Legacy.
 
-Consulta pendiente, sólo de metadatos:
+Consulta de evidencia utilizada, sólo de metadatos:
 
 ```sql
 SELECT tr.name AS TriggerName, tr.is_disabled,
@@ -454,8 +457,8 @@ FROM sys.triggers AS tr
 WHERE tr.parent_id = OBJECT_ID('dbo.CTELEFONO');
 ```
 
-Si se ejecuta, la definición debe revisarse localmente y no copiarse a
-documentación pública si contiene lógica propietaria.
+El resultado vacío se conserva como evidencia de que no hay triggers en
+`CTELEFONO`; no se copia lógica propietaria a esta documentación.
 
 ## Matriz definitiva propuesta para el DTO
 
@@ -516,15 +519,189 @@ payload.
 
 Para cerrar los únicos bloqueos restantes se requieren, sin PII:
 
-1. `sys.foreign_keys` para confirmar las FK físicas de las tres relaciones;
-2. `sys.triggers` para confirmar triggers de `CTELEFONO`;
-3. código exacto de `RevisaFirma` y `sd_clsSeguridad.Bitacora`, o una
+1. código exacto de `RevisaFirma` y `sd_clsSeguridad.Bitacora`, o una
    caracterización segura de `KACCION`, para resolver `ATV_FL_CVE`;
-4. catálogo funcional de estados para decidir cómo representar los valores
-   `0` y `2` en mutaciones.
+2. confirmación del formato de referencia de bitácora sin PII.
 
-Con los metadatos actuales ya no están bloqueados PK, longitudes,
-nulabilidad, tipos activos, consecutivo ni la viabilidad técnica de
-`TFN_FE_ULTMOD`. La implementación queda bloqueada únicamente por FK/triggers,
-actividad de bitácora, estados de mutación y la regla funcional para
-desactivar el predeterminado.
+Con los metadatos y decisiones aprobadas ya no están bloqueados PK,
+longitudes, nulabilidad, tipos activos, consecutivo, estados de mutación,
+regla de predeterminado ni la viabilidad técnica de `TFN_FE_ULTMOD`. Las FK
+físicas y los triggers no existen según las consultas vacías; por eso la
+validación de persona, tipo y domicilio, las reglas, la auditoría y las
+fechas quedan bajo control de la transacción de uCredit. Sólo permanece por
+cerrar el detalle exacto del formato de referencia de bitácora.
+
+## Decisiones aprobadas y plan final de implementación
+
+Las siguientes reglas sustituyen cualquier propuesta preliminar anterior y
+son el contrato funcional de la siguiente etapa.
+
+### Estados administrables
+
+| Código | Significado | Tratamiento |
+|---:|---|---|
+| `1` | Activo | Estado usado por altas y activación |
+| `2` | Inactivo | Estado usado por desactivación |
+| `0` | Histórico no administrable directamente | Sólo se muestra como `Inactivo heredado`; puede activarse, pero nunca se crea ni se asigna |
+
+Las altas siempre escriben `TFN_FG_STATUS = 1`; activar escribe `1` y
+desactivar escribe `2`. Ninguna operación nueva crea o asigna `0`. Los
+registros con `0` no se eliminan físicamente y no se editan como si fueran
+registros modernos; la única transición permitida para ellos es activarlos,
+sujeta a las mismas validaciones de persona, tipo y concurrencia.
+
+### Predeterminado
+
+- El primer teléfono se crea activo y predeterminado.
+- Las operaciones nuevas mantienen exactamente un predeterminado activo por
+  persona.
+- Elegir un teléfono como nuevo predeterminado desmarca todos los anteriores
+  de esa persona dentro de la misma transacción.
+- No se corregirán masivamente los tres casos históricos con más de un
+  predeterminado activo.
+- La lectura conserva la selección defensiva por menor `TFN_FL_CVE` y la UI
+  marca cada fila que Legacy reporta como predeterminada.
+- No se permite desactivar el predeterminado sin proporcionar otro teléfono
+  activo como reemplazo. La respuesta es `409 phone_default_required`.
+- La normalización de duplicados se limita a la persona que el usuario está
+  modificando y ocurre al seleccionar un nuevo predeterminado.
+
+La regla anterior no se implementará mediante una restricción física nueva.
+El backend validará y normalizará dentro de la transacción, después de
+validar que la persona y el teléfono pertenecen al despliegue Legacy actual.
+
+### Concurrencia y bitácora aprobadas
+
+`TFN_FE_ULTMOD` será el token de concurrencia para PUT, activación,
+desactivación y cambio de predeterminado. El UPDATE incluirá persona,
+identificador de teléfono y la fecha esperada; cero filas afectadas produce
+`409 phone_modified`. La fecha nueva la asignará el servidor.
+
+La actividad funcional queda fijada así:
+
+| Operación | Actividad |
+|---|---:|
+| Alta | `4` |
+| Modificación | `5` |
+| Activación | `5` |
+| Desactivación | `5` |
+| Cambio de predeterminado | `5` |
+
+`CommandArgumentControl = 14` sigue siendo únicamente el control de
+autorización del botón Legacy. No representa `ATV_FL_CVE` ni se usará como
+actividad de bitácora. La bitácora moderna se escribirá dentro de la misma
+transacción y sólo incluirá etapa, actividad, actor interno y correlation ID;
+no contendrá número, lada, extensión, contacto, domicilio ni payload.
+
+### Evidencia de FK, triggers y distribución
+
+Las consultas entregadas regresaron vacías tanto para `sys.foreign_keys`
+como para `sys.triggers`. Por ello:
+
+- no existen FK físicas confirmadas; persona, tipo de teléfono y domicilio
+  deben validarse en la aplicación antes de escribir;
+- no existen triggers en `CTELEFONO`;
+- todas las reglas de estado y predeterminado, la auditoría y la actualización
+  de fechas dependen de la transacción de uCredit;
+- no se agregará una FK ni se modificará el esquema Legacy.
+
+La distribución recibida confirma que el estado activo es `1`, que existen
+registros históricos `0` e inactivos `2`, que no hay fechas de modificación
+nulas y que sólo tres personas presentan dos predeterminados activos. Estos
+conteos no incluyen identificadores ni datos personales.
+
+### DTOs definitivos
+
+Los nombres HTTP serán funcionales y no expondrán nombres de columnas
+Legacy:
+
+| DTO | Propiedades | Reglas |
+|---|---|---|
+| `CustomerPhoneResponse` | `phoneId`, `personId`, `phoneTypeCode`, `addressId`, `longDistanceCode`, `areaCode`, `phoneNumber`, `extension`, `status`, `inactiveReason`, `isDefault`, `modifiedAt`, `contactName` | Sólo para usuarios autorizados; `status` será `Active`, `Inactive` o `InheritedInactive`; `modifiedAt` es ISO 8601 |
+| `CreateCustomerPhoneRequest` | `phoneTypeCode`, `addressId`, `longDistanceCode`, `areaCode`, `phoneNumber`, `extension`, `isDefault`, `contactName` | No recibe estado, actor, consecutivo ni banderas Legacy |
+| `UpdateCustomerPhoneRequest` | campos editables del alta, `expectedModifiedAt` | No recibe `phoneId`, estado Legacy ni `TFN_FG_REGDEFAULT` directo |
+| `ChangeCustomerPhoneStatusRequest` | `expectedModifiedAt`, y `replacementPhoneId` al desactivar el predeterminado | El reemplazo es obligatorio en ese caso |
+
+Los strings se recortan con `Trim()`. Los opcionales vacíos se normalizan a
+`null`; los límites son 10 para larga distancia y lada, 20 para número, 10
+para extensión, 255 para razón de inactividad y 150 para contacto. El
+número es obligatorio funcionalmente en altas aunque la columna Legacy sea
+nullable. El backend valida que no se excedan los límites físicos y usa
+parámetros Dapper tipados con tamaño explícito.
+
+### Endpoints finales
+
+```text
+GET  /api/v1/customers/{personId}/phones
+POST /api/v1/customers/{personId}/phones
+PUT  /api/v1/customers/{personId}/phones/{phoneId}
+POST /api/v1/customers/{personId}/phones/{phoneId}/activate
+POST /api/v1/customers/{personId}/phones/{phoneId}/deactivate
+```
+
+GET requiere `customers.read`. Las mutaciones requieren autenticación,
+`customers.write`, antiforgery, tenant seleccionado coincidente con
+`Deployment__TenantCode`, membresía activa con `LegacyUserCode`, entorno
+Development, conexión Legacy de escritura y guardas explícitas de `pr_t`.
+Customers sigue delimitado por despliegue; no se usará `AllowedCompanyIds`.
+
+Las respuestas serán `401` para anónimo, `403` para permiso o tenant
+inválido, `404` para persona/teléfono/domicilio inexistente, `400` para
+payload o catálogo inválido, `409 phone_default_required` para desactivar
+sin reemplazo, `409 phone_modified` para concurrencia y `503` únicamente
+para escritura Legacy no configurada o base distinta de `pr_t`.
+
+### Transacción, normalización y reversa
+
+Cada mutación abrirá una transacción Dapper después de las validaciones de
+seguridad y catálogo:
+
+1. validar persona, teléfono, domicilio, tipo, actor y configuración;
+2. reservar `TFN_FL_CVE` sólo en alta;
+3. bloquear la fila objetivo y comprobar `TFN_FE_ULTMOD`;
+4. comprobar el reemplazo cuando se desactive el predeterminado;
+5. desmarcar predeterminados anteriores si se selecciona uno nuevo;
+6. escribir con parámetros tipados y estado `1` o `2`;
+7. registrar actividad 4 o 5 en `KBITACORA`;
+8. confirmar; ante cualquier error, rollback completo.
+
+Activar un histórico `0` lo convierte a `1`; ninguna ruta lo convierte a
+`2` sin la operación explícita de desactivar. No se harán cargas ni
+actualizaciones masivas de duplicados.
+
+### UI y seguridad de PII
+
+El expediente mostrará una lista responsive de teléfonos activos, inactivos
+e históricos heredados, con distintivos de estado y predeterminado. El panel
+lateral de alta/edición sólo mostrará tipos activos del catálogo; ofrecerá
+activar, desactivar y elegir predeterminado según permisos. Desactivar el
+predeterminado exigirá seleccionar un reemplazo activo. La UI bloqueará el
+doble envío, anunciará guardando/éxito/error y refrescará teléfonos y
+readiness después de cada operación.
+
+Ningún teléfono, lada, extensión o contacto se guardará en
+`localStorage`/`sessionStorage`, URL, logs, excepciones, fixtures ni
+mensajes de error. Los logs sólo contendrán etapa, tipo de excepción y
+correlation ID.
+
+### Pruebas de la implementación
+
+La siguiente fase deberá cubrir:
+
+- `401`, `403`, antiforgery, tenant incorrecto, `404`, `400` y `503`;
+- listado múltiple, lista vacía, estados `1`, `2` y `0` como histórico;
+- alta con estado `1`, consecutivo y primer predeterminado;
+- activación de histórico, desactivación a `2` y rechazo del `0` en altas;
+- cambio de predeterminado y desmarcado transaccional de anteriores;
+- `phone_default_required` y `phone_modified`;
+- actividad 4/5 y bitácora dentro de la transacción;
+- rollback ante fallos de catálogo, concurrencia o auditoría;
+- SQL parametrizado, tamaños Dapper y ausencia de escrituras no autorizadas;
+- ausencia de números telefónicos y demás PII en logs, respuestas no
+  autorizadas, fixtures y almacenamiento del navegador;
+- UI responsive, permisos, estados, replacement requerido y doble envío.
+
+El plan queda listo para implementación. Antes de la primera escritura sólo
+debe fijarse el formato exacto de referencia de bitácora; no se inventarán
+relaciones físicas, triggers ni datos de auditoría, y no se ejecutarán
+escrituras para resolver esa decisión.
