@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Mvc;
 using UCredit.Api.Contracts;
 using UCredit.Application.Execution;
 using UCredit.Modules.Customers.Customers;
@@ -51,7 +52,7 @@ public static class CustomerEndpoints
 
     private static async Task<IResult> GetReadinessAsync(
         int personId,
-        IExecutionTenantContext executionTenantContext,
+        [FromServices] IExecutionTenantContext executionTenantContext,
         ICustomerProfileReadinessService service,
         CancellationToken cancellationToken)
     {

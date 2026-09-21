@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
@@ -18,9 +19,12 @@ namespace UCredit.Api.IntegrationTests;
 
 public sealed class TestApiFactory : WebApplicationFactory<Program>
 {
+    internal const string DeploymentTenantCode = "TENANT-A";
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
+        builder.UseSetting("Deployment:TenantCode", DeploymentTenantCode);
         builder.ConfigureServices(services =>
         {
             services.AddAuthentication(options =>
@@ -39,9 +43,9 @@ public sealed class TestApiFactory : WebApplicationFactory<Program>
             services.RemoveAll<ICustomerProfileReadinessRepository>();
             services.AddSingleton<ICustomerProfileReadinessRepository, FakeCustomerProfileReadinessRepository>();
             services.RemoveAll<IExecutionTenantContext>();
-            services.AddSingleton<IExecutionTenantContext, FakeExecutionTenantContext>();
+            services.AddScoped<IExecutionTenantContext, FakeExecutionTenantContext>();
             services.AddSingleton<ITenantMembershipStore, FakeTenantMembershipStore>();
-            services.AddSingleton<IDeploymentTenantPolicy>(new DeploymentTenantPolicy("TENANT-A"));
+            services.AddSingleton<IDeploymentTenantPolicy>(new DeploymentTenantPolicy(DeploymentTenantCode));
             services.AddSingleton<FakeTenantCookieIssuer>();
             services.AddSingleton<ITenantCookieIssuer>(
                 serviceProvider => serviceProvider.GetRequiredService<FakeTenantCookieIssuer>());
@@ -194,17 +198,22 @@ internal sealed class FakeCustomerProfileReadinessRepository : ICustomerProfileR
     }
 }
 
-internal sealed class FakeExecutionTenantContext(IHttpContextAccessor httpContextAccessor) : IExecutionTenantContext
+internal sealed class FakeExecutionTenantContext(
+    IHttpContextAccessor httpContextAccessor,
+    IConfiguration configuration) : IExecutionTenantContext
 {
     public Task<ExecutionTenant?> GetAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var principal = httpContextAccessor.HttpContext?.User;
         var tenantId = principal?.FindFirstValue(TenantClaimTypes.Id);
-        var tenantCode = principal?.FindFirstValue(TenantClaimTypes.Code);
+        var selectedTenantCode = principal?.FindFirstValue(TenantClaimTypes.Code);
+        var tenantCode = configuration["Deployment:TenantCode"]
+            ?? throw new InvalidOperationException(
+                "Deployment:TenantCode must be configured for integration tests.");
         return Task.FromResult<ExecutionTenant?>(
             Guid.TryParse(tenantId, out var parsedId) &&
-            string.Equals(tenantCode, "TENANT-A", StringComparison.Ordinal)
+            string.Equals(selectedTenantCode, tenantCode, StringComparison.Ordinal)
                 ? new ExecutionTenant(parsedId, tenantCode, [101])
                 : null);
     }
