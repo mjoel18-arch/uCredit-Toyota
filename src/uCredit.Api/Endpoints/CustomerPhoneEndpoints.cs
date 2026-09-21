@@ -158,7 +158,6 @@ public static class CustomerPhoneEndpoints
 
 public sealed record CustomerPhoneRequest(
     int PhoneTypeCode,
-    int AddressId,
     string? LongDistanceCode,
     string? AreaCode,
     string PhoneNumber,
@@ -167,8 +166,8 @@ public sealed record CustomerPhoneRequest(
     bool IsDefault,
     DateTime? ExpectedModifiedAt)
 {
-    public CustomerPhoneCreateCommand ToCreateCommand(int personId) => new(personId, PhoneTypeCode, AddressId, LongDistanceCode, AreaCode, PhoneNumber, Extension, ContactName, IsDefault);
-    public CustomerPhoneUpdateCommand ToUpdateCommand(int personId, int phoneId) => new(personId, phoneId, PhoneTypeCode, AddressId, LongDistanceCode, AreaCode, PhoneNumber, Extension, ContactName, IsDefault, ExpectedModifiedAt ?? throw new CustomerPhoneValidationException("expectedModifiedAt is required."));
+    public CustomerPhoneCreateCommand ToCreateCommand(int personId) => new(personId, PhoneTypeCode, LongDistanceCode, AreaCode, PhoneNumber, Extension, ContactName, IsDefault);
+    public CustomerPhoneUpdateCommand ToUpdateCommand(int personId, int phoneId) => new(personId, phoneId, PhoneTypeCode, LongDistanceCode, AreaCode, PhoneNumber, Extension, ContactName, IsDefault, ExpectedModifiedAt ?? throw new CustomerPhoneValidationException("expectedModifiedAt is required."));
 }
 
 public sealed record PhoneStateChangeRequest(DateTime? ExpectedModifiedAt, int? ReplacementPhoneId)

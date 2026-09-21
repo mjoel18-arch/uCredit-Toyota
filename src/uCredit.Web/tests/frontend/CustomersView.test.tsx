@@ -2,12 +2,12 @@ import React from 'react'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../../src/shared/api/apiClient'
-import { activateCustomerAccount, createCustomerAccount, deactivateCustomerAccount, getCustomerAccounts, getCustomerAddresses, getCustomerBanks, getCustomerByPersonId, getCustomerPhones, getCustomerProfileReadiness, searchCustomers, updateCustomerAccount } from '../../src/features/auth/authApi'
+import { activateCustomerAccount, activateCustomerPhone, createCustomerAccount, createCustomerPhone, deactivateCustomerAccount, deactivateCustomerPhone, getCustomerAccounts, getCustomerAddresses, getCustomerBanks, getCustomerByPersonId, getCustomerPhones, getCustomerProfileReadiness, searchCustomers, updateCustomerAccount, updateCustomerPhone } from '../../src/features/auth/authApi'
 import { CustomersView } from '../../src/features/customers/CustomersView'
 
 vi.mock('../../src/features/auth/authApi', async () => {
   const actual = await vi.importActual<typeof import('../../src/features/auth/authApi')>('../../src/features/auth/authApi')
-  return { ...actual, activateCustomerAccount: vi.fn(), createCustomerAccount: vi.fn(), deactivateCustomerAccount: vi.fn(), getCustomerAccounts: vi.fn(), getCustomerAddresses: vi.fn(), getCustomerBanks: vi.fn(), getCustomerByPersonId: vi.fn(), getCustomerPhones: vi.fn(), getCustomerProfileReadiness: vi.fn(), searchCustomers: vi.fn(), updateCustomerAccount: vi.fn() }
+  return { ...actual, activateCustomerAccount: vi.fn(), activateCustomerPhone: vi.fn(), createCustomerAccount: vi.fn(), createCustomerPhone: vi.fn(), deactivateCustomerAccount: vi.fn(), deactivateCustomerPhone: vi.fn(), getCustomerAccounts: vi.fn(), getCustomerAddresses: vi.fn(), getCustomerBanks: vi.fn(), getCustomerByPersonId: vi.fn(), getCustomerPhones: vi.fn(), getCustomerProfileReadiness: vi.fn(), searchCustomers: vi.fn(), updateCustomerAccount: vi.fn(), updateCustomerPhone: vi.fn() }
 })
 
 const searchMock = vi.mocked(searchCustomers)
@@ -21,9 +21,13 @@ const createAccountMock = vi.mocked(createCustomerAccount)
 const updateAccountMock = vi.mocked(updateCustomerAccount)
 const activateAccountMock = vi.mocked(activateCustomerAccount)
 const deactivateAccountMock = vi.mocked(deactivateCustomerAccount)
+const createPhoneMock = vi.mocked(createCustomerPhone)
+const updatePhoneMock = vi.mocked(updateCustomerPhone)
+const activatePhoneMock = vi.mocked(activateCustomerPhone)
+const deactivatePhoneMock = vi.mocked(deactivateCustomerPhone)
 const unauthorized = vi.fn()
 
-beforeEach(() => { searchMock.mockReset(); detailMock.mockReset(); readinessMock.mockReset(); addressesMock.mockReset(); phonesMock.mockReset(); accountsMock.mockReset(); banksMock.mockReset(); createAccountMock.mockReset(); updateAccountMock.mockReset(); activateAccountMock.mockReset(); deactivateAccountMock.mockReset(); addressesMock.mockResolvedValue([]); phonesMock.mockResolvedValue([]); accountsMock.mockResolvedValue([]); banksMock.mockResolvedValue([{ bankId: 2, bankName: 'Banco Alfa' }, { bankId: 4, bankName: 'Banco Beta' }]); createAccountMock.mockResolvedValue({} as never); updateAccountMock.mockResolvedValue({} as never); activateAccountMock.mockResolvedValue({} as never); deactivateAccountMock.mockResolvedValue({} as never); unauthorized.mockReset() })
+beforeEach(() => { searchMock.mockReset(); detailMock.mockReset(); readinessMock.mockReset(); addressesMock.mockReset(); phonesMock.mockReset(); accountsMock.mockReset(); banksMock.mockReset(); createAccountMock.mockReset(); updateAccountMock.mockReset(); activateAccountMock.mockReset(); deactivateAccountMock.mockReset(); createPhoneMock.mockReset(); updatePhoneMock.mockReset(); activatePhoneMock.mockReset(); deactivatePhoneMock.mockReset(); addressesMock.mockResolvedValue([]); phonesMock.mockResolvedValue([]); accountsMock.mockResolvedValue([]); banksMock.mockResolvedValue([{ bankId: 2, bankName: 'Banco Alfa' }, { bankId: 4, bankName: 'Banco Beta' }]); createAccountMock.mockResolvedValue({} as never); updateAccountMock.mockResolvedValue({} as never); activateAccountMock.mockResolvedValue({} as never); deactivateAccountMock.mockResolvedValue({} as never); createPhoneMock.mockResolvedValue({} as never); updatePhoneMock.mockResolvedValue({} as never); activatePhoneMock.mockResolvedValue({} as never); deactivatePhoneMock.mockResolvedValue({} as never); unauthorized.mockReset() })
 afterEach(() => cleanup())
 
 const accountFixture = { accountId: 7001, personId: 42, bankId: 2, bankName: 'Banco de prueba', branchNumber: 12, currencyCode: 1, currencyName: 'Pesos', accountTypeCode: 1, accountTypeName: 'Cheques', paymentMethodCode: null, status: 1, maskedAccountNumber: '••••0001', maskedClabe: '••••0002', modifiedAt: '2025-01-01T00:00:00Z' }
@@ -85,6 +89,19 @@ describe('CustomersView', () => {
     expect(await screen.findByText('Este cliente todavía no puede tener contratos.')).toBeTruthy()
     expect(screen.getByText('Cuenta')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Capturar contrato · Próximamente' })).toHaveProperty('disabled', true)
+  })
+
+  it('does not expose or submit a domicile when managing a phone', async () => {
+    configureAccountDetail([])
+    phonesMock.mockResolvedValue([{ phoneId: 7, personId: 42, phoneTypeCode: 3, longDistanceCode: null, areaCode: '55', phoneNumber: '5555555555', extension: null, status: 'Active', inactiveReason: null, isDefault: true, modifiedAt: '2025-01-01T00:00:00Z', contactName: null }])
+    await openAccountDetail()
+    const phones = screen.getByRole('heading', { name: 'Teléfonos' }).closest('section') as HTMLElement
+    fireEvent.click(phones.querySelector('button') as HTMLButtonElement)
+    expect(screen.queryByLabelText('Domicilio asociado')).toBeNull()
+    fireEvent.change(screen.getByLabelText('Número'), { target: { value: '5555555555' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar teléfono' }))
+    await vi.waitFor(() => expect(createPhoneMock).toHaveBeenCalledOnce())
+    expect(createPhoneMock.mock.calls[0][1]).not.toHaveProperty('addressId')
   })
 
   it('ends the session on unauthorized response', async () => {

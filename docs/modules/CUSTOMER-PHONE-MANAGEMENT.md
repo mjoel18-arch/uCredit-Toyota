@@ -25,7 +25,7 @@ activo.
 El código Legacy revisado es `sd_clsPersona.vb`, método
 `ActualizaTelefono`, y la pantalla `su_MtoTelefono.aspx.vb`:
 
-- el alta solicita persona, domicilio asociado, tipo de teléfono, lada,
+- el alta solicita persona, tipo de teléfono, lada,
   número, extensión, razón de inactividad, estatus, predeterminado y nombre
   de contacto;
 - antes de crear, si la persona ya tiene cualquier fila en `CTELEFONO`, el
@@ -60,7 +60,7 @@ del código VB; requieren la consulta de metadatos incluida más adelante.
 | `TFN_FL_CVE` | Identificador y consecutivo | Pendiente | Pendiente | Debe confirmarse PK y columna de `CCATCONSEC` |
 | `PNA_FL_PERSONA` | Relación con Customer | Pendiente | Pendiente | Relación lógica confirmada por código |
 | `TTL_FL_CVE` | Tipo de teléfono | Pendiente | Pendiente | Catálogo `CTTELEFONO` pendiente |
-| `DMO_FL_CVE` | Domicilio asociado | Pendiente | Pendiente | Debe confirmarse obligatoriedad y FK |
+| `DMO_FL_CVE` | Asociación física histórica | `int` | No (`pr_t` efectiva) | No pertenece al contrato HTTP; la aplicación no lo lee ni lo expone |
 | `TFN_CL_LARGA_DISTANCIA` | Prefijo/larga distancia | Pendiente | Pendiente | El Legacy puede enviar cadena vacía |
 | `TFN_CL_TELEFONO` | Número telefónico | Pendiente | Pendiente | PII; no se incluirá en logs ni fixtures reales |
 | `TFN_CL_EXTENSION` | Extensión | Pendiente | Pendiente | Nulabilidad y longitud pendientes |
@@ -324,24 +324,28 @@ en actividad por frecuencia o suposición.
 
 ## Bloqueos y decisiones pendientes
 
-1. Confirmar esquema completo, PK, FK, índices, defaults y longitudes de
-   `CTELEFONO`.
-2. Confirmar valores y columnas reales de vigencia del catálogo
+1. Confirmar valores y columnas reales de vigencia del catálogo
    `CTTELEFONO`, incluidos los tipos permitidos y la regla de celular/lada.
-3. Confirmar si `DMO_FL_CVE` es obligatorio y cómo se elige el domicilio
-   asociado en la nueva UI.
-4. Confirmar si `TFN_FE_ULTMOD` permite concurrencia optimista y su precisión.
-5. Aprobar la regla de desactivación del teléfono predeterminado y sus
+2. Confirmar si `TFN_FE_ULTMOD` permite concurrencia optimista y su precisión.
+3. Aprobar la regla de desactivación del teléfono predeterminado y sus
    códigos `409`.
-6. Identificar la actividad exacta de bitácora para alta, modificación,
+4. Identificar la actividad exacta de bitácora para alta, modificación,
    activación, desactivación y cambio de predeterminado.
-7. Confirmar el formato de referencia de bitácora sin incluir PII.
+5. Confirmar el formato de referencia de bitácora sin incluir PII.
 
-No se implementará código productivo hasta resolver estos bloqueos.
+Los bloqueos anteriores son documentales; el desacoplamiento aprobado ya
+define que `DMO_FL_CVE` no participa en la administración de teléfonos.
 
 ## Actualización con metadatos autoritativos
 
 Los resultados entregados de `pr_t` cierran la siguiente parte del modelo.
+
+Para `DMO_FL_CVE`, la evidencia autoritativa confirma `int NOT NULL`, sin
+default, sin FK y sin triggers. No existen registros históricos con valor `0`;
+se identificaron 240 relaciones históricas cuyo domicilio ya no tiene
+correspondencia. uCredit usará `0` únicamente en nuevas altas como convención
+técnica de compatibilidad (“sin asociación de domicilio”), nunca como
+identificador de un domicilio y sin actualizar masivamente registros previos.
 
 ### Esquema, claves e índices
 
@@ -349,7 +353,7 @@ Los resultados entregados de `pr_t` cierran la siguiente parte del modelo.
 |---|---|---:|---|---|
 | `TFN_FL_CVE` | `int` | No | Ninguno | `phoneId`; PK y consecutivo |
 | `TTL_FL_CVE` | `tinyint` | No | Ninguno | `phoneTypeCode` |
-| `DMO_FL_CVE` | `int` | No | Ninguno | `addressId` asociado |
+| `DMO_FL_CVE` | `int` | No en `pr_t` | Sin default | Alta uCredit: `0` técnico, sin asociación real; edición conserva el valor histórico |
 | `TFN_CL_LARGA_DISTANCIA` | `varchar(10)` | Sí | Ninguno | `longDistanceCode` opcional |
 | `TFN_CL_LADA` | `varchar(10)` | Sí | Ninguno | `areaCode` opcional |
 | `TFN_CL_TELEFONO` | `varchar(20)` | Sí | Ninguno | `phoneNumber`; PII, requerido funcionalmente para alta |
@@ -369,11 +373,14 @@ La PK física es el índice clustered único
 prueba suficiente de una restricción FK.
 
 Las consultas de `sys.foreign_keys` regresaron vacías. No existen FK físicas
-confirmadas entre `CTELEFONO` y `CPERSONA`, `CDOMICILIO` o `CTTELEFONO`. Las
-relaciones `PNA_FL_PERSONA`, `DMO_FL_CVE` y `TTL_FL_CVE` son relaciones
-lógicas y deben validarse obligatoriamente en la aplicación antes de cada
-escritura. La relación funcional de persona y la asociación de domicilio sí
-están confirmadas por las consultas y el código Legacy.
+confirmadas entre `CTELEFONO` y `CPERSONA`, `CDOMICILIO` o `CTTELEFONO`. La
+única relación funcional del módulo es `PNA_FL_PERSONA`; el tipo se valida
+ contra `CTTELEFONO`. `DMO_FL_CVE` queda fuera del contrato funcional y la
+evidencia autoritativa de `pr_t` confirma que no acepta `NULL`. Las ediciones
+no modifican la columna y las altas usan el valor técnico `0`, mediante
+parámetro `DbType.Int32`. No se ejecutará una actualización masiva; los
+valores históricos pueden permanecer
+físicamente hasta que el teléfono sea editado.
 
 ### Tipos autorizados y consecutivo
 
@@ -470,7 +477,6 @@ internos. La matriz funcional propuesta es:
 | `phoneId` | `int` | No, sólo respuesta/ruta | — | `TFN_FL_CVE` | No aceptar en body de alta |
 | `personId` | `int` | Ruta | — | `PNA_FL_PERSONA` | No aceptar en body |
 | `phoneTypeCode` | `byte` | Sí | — | `TTL_FL_CVE` | Debe existir y estar activo en catálogo |
-| `addressId` | `int` | Sí | — | `DMO_FL_CVE` | Debe pertenecer a la persona; confirmar estado permitido |
 | `longDistanceCode` | `string?` | No | 10 | `TFN_CL_LARGA_DISTANCIA` | Trim; vacío se normaliza a null, sujeto a compatibilidad Legacy |
 | `areaCode` | `string?` | No | 10 | `TFN_CL_LADA` | Trim; vacío se normaliza a null |
 | `phoneNumber` | `string` | Sí funcionalmente | 20 | `TFN_CL_TELEFONO` | Trim; rechazar vacío y excedente |
@@ -598,8 +604,8 @@ no contendrá número, lada, extensión, contacto, domicilio ni payload.
 Las consultas entregadas regresaron vacías tanto para `sys.foreign_keys`
 como para `sys.triggers`. Por ello:
 
-- no existen FK físicas confirmadas; persona, tipo de teléfono y domicilio
-  deben validarse en la aplicación antes de escribir;
+- no existen FK físicas confirmadas; persona y tipo de teléfono deben
+  validarse en la aplicación antes de escribir;
 - no existen triggers en `CTELEFONO`;
 - todas las reglas de estado y predeterminado, la auditoría y la actualización
   de fechas dependen de la transacción de uCredit;
@@ -617,8 +623,8 @@ Legacy:
 
 | DTO | Propiedades | Reglas |
 |---|---|---|
-| `CustomerPhoneResponse` | `phoneId`, `personId`, `phoneTypeCode`, `addressId`, `longDistanceCode`, `areaCode`, `phoneNumber`, `extension`, `status`, `inactiveReason`, `isDefault`, `modifiedAt`, `contactName` | Sólo para usuarios autorizados; `status` será `Active`, `Inactive` o `InheritedInactive`; `modifiedAt` es ISO 8601 |
-| `CreateCustomerPhoneRequest` | `phoneTypeCode`, `addressId`, `longDistanceCode`, `areaCode`, `phoneNumber`, `extension`, `isDefault`, `contactName` | No recibe estado, actor, consecutivo ni banderas Legacy |
+| `CustomerPhoneResponse` | `phoneId`, `personId`, `phoneTypeCode`, `longDistanceCode`, `areaCode`, `phoneNumber`, `extension`, `status`, `inactiveReason`, `isDefault`, `modifiedAt`, `contactName` | Sólo para usuarios autorizados; no expone asociación con domicilio |
+| `CreateCustomerPhoneRequest` | `phoneTypeCode`, `longDistanceCode`, `areaCode`, `phoneNumber`, `extension`, `isDefault`, `contactName` | No recibe domicilio, estado, actor, consecutivo ni banderas Legacy |
 | `UpdateCustomerPhoneRequest` | campos editables del alta, `expectedModifiedAt` | No recibe `phoneId`, estado Legacy ni `TFN_FG_REGDEFAULT` directo |
 | `ChangeCustomerPhoneStatusRequest` | `expectedModifiedAt`, y `replacementPhoneId` al desactivar el predeterminado | El reemplazo es obligatorio en ese caso |
 
@@ -628,6 +634,18 @@ para extensión, 255 para razón de inactividad y 150 para contacto. El
 número es obligatorio funcionalmente en altas aunque la columna Legacy sea
 nullable. El backend valida que no se excedan los límites físicos y usa
 parámetros Dapper tipados con tamaño explícito.
+
+### Desacoplamiento de domicilios
+
+Los teléfonos pertenecen únicamente a la persona mediante `PNA_FL_PERSONA`.
+La lectura no selecciona `DMO_FL_CVE` ni hace `JOIN` con `CDOMICILIO`; las
+mutaciones no consultan ni exigen domicilios. Las altas escriben `0` mediante
+un parámetro entero tipado; `0` es una convención técnica de compatibilidad de
+uCredit y no representa un domicilio real. La edición no modifica
+`DMO_FL_CVE`, incluyendo la edición de un registro histórico previamente
+asociado. La UI no muestra selector,
+texto ni identificador de domicilio en el panel telefónico y los DTOs HTTP
+no aceptan ni devuelven `addressId`.
 
 ### Endpoints finales
 
@@ -646,7 +664,7 @@ Development, conexión Legacy de escritura y guardas explícitas de `pr_t`.
 Customers sigue delimitado por despliegue; no se usará `AllowedCompanyIds`.
 
 Las respuestas serán `401` para anónimo, `403` para permiso o tenant
-inválido, `404` para persona/teléfono/domicilio inexistente, `400` para
+inválido, `404` para persona/teléfono inexistente, `400` para
 payload o catálogo inválido, `409 phone_default_required` para desactivar
 sin reemplazo, `409 phone_modified` para concurrencia y `503` únicamente
 para escritura Legacy no configurada o base distinta de `pr_t`.
@@ -656,7 +674,7 @@ para escritura Legacy no configurada o base distinta de `pr_t`.
 Cada mutación abrirá una transacción Dapper después de las validaciones de
 seguridad y catálogo:
 
-1. validar persona, teléfono, domicilio, tipo, actor y configuración;
+1. validar persona, teléfono, tipo, actor y configuración;
 2. reservar `TFN_FL_CVE` sólo en alta;
 3. bloquear la fila objetivo y comprobar `TFN_FE_ULTMOD`;
 4. comprobar el reemplazo cuando se desactive el predeterminado;

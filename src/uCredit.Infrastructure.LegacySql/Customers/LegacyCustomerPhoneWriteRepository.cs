@@ -22,7 +22,6 @@ public sealed partial class LegacyCustomerPhoneWriteRepository(
         public int PhoneId { get; init; }
         public int PersonId { get; init; }
         public byte PhoneTypeCode { get; init; }
-        public int? AddressId { get; init; }
         public string? LongDistanceCode { get; init; }
         public string? AreaCode { get; init; }
         public string? PhoneNumber { get; init; }
@@ -30,7 +29,7 @@ public sealed partial class LegacyCustomerPhoneWriteRepository(
         public byte StatusCode { get; init; }
         public string? InactiveReason { get; init; }
         public byte IsDefault { get; init; }
-        public DateTime? ModifiedAt { get; init; }
+        public DateTime ModifiedAt { get; init; }
         public string? ContactName { get; init; }
     }
 
@@ -42,7 +41,6 @@ public sealed partial class LegacyCustomerPhoneWriteRepository(
         SELECT T.TFN_FL_CVE AS PhoneId,
                T.PNA_FL_PERSONA AS PersonId,
                T.TTL_FL_CVE AS PhoneTypeCode,
-               T.DMO_FL_CVE AS AddressId,
                T.TFN_CL_LARGA_DISTANCIA AS LongDistanceCode,
                T.TFN_CL_LADA AS AreaCode,
                T.TFN_CL_TELEFONO AS PhoneNumber,
@@ -60,13 +58,12 @@ public sealed partial class LegacyCustomerPhoneWriteRepository(
         INSERT INTO dbo.CTELEFONO
         (TFN_FL_CVE, TTL_FL_CVE, DMO_FL_CVE, TFN_CL_LARGA_DISTANCIA, TFN_CL_LADA, TFN_CL_TELEFONO, TFN_CL_EXTENSION, TFN_FG_STATUS, TFN_DS_RAZON_INACTIVO, TFN_FG_REGDEFAULT, TFN_FE_ULTMOD, USR_CL_CVE, PNA_FL_PERSONA, TFN_DS_CONTACTO)
         VALUES
-        (@PhoneId, @PhoneTypeCode, @AddressId, @LongDistanceCode, @AreaCode, @PhoneNumber, @Extension, 1, NULL, @IsDefault, @OperationDate, @LegacyUserCode, @PersonId, @ContactName);
+        (@PhoneId, @PhoneTypeCode, @UnassociatedAddressId, @LongDistanceCode, @AreaCode, @PhoneNumber, @Extension, 1, NULL, @IsDefault, @OperationDate, @LegacyUserCode, @PersonId, @ContactName);
         """;
 
     internal const string PhoneUpdateSql = """
         UPDATE dbo.CTELEFONO
         SET TTL_FL_CVE = @PhoneTypeCode,
-            DMO_FL_CVE = @AddressId,
             TFN_CL_LARGA_DISTANCIA = @LongDistanceCode,
             TFN_CL_LADA = @AreaCode,
             TFN_CL_TELEFONO = @PhoneNumber,
@@ -93,7 +90,7 @@ public sealed partial class LegacyCustomerPhoneWriteRepository(
         {
             var normalized = ValidateCreate(command);
             await EnsurePersonExistsAsync(connection, transaction, command.PersonId, cancellationToken);
-            await EnsureTypeAndAddressAsync(connection, transaction, command.PersonId, normalized.PhoneTypeCode, normalized.AddressId, cancellationToken);
+            await EnsureTypeAsync(connection, transaction, normalized.PhoneTypeCode, cancellationToken);
             var hasDefault = await HasActiveDefaultAsync(connection, transaction, command.PersonId, cancellationToken);
             var isDefault = !hasDefault || command.IsDefault;
             var phoneId = await NextIdAsync(connection, transaction, cancellationToken);
@@ -101,6 +98,7 @@ public sealed partial class LegacyCustomerPhoneWriteRepository(
                 await ClearOtherDefaultsAsync(connection, transaction, command.PersonId, phoneId, operationDate, legacyUserCode, cancellationToken);
 
             var parameters = PhoneParameters(command.PersonId, phoneId, normalized, isDefault, operationDate, legacyUserCode);
+            parameters.Add("UnassociatedAddressId", 0, DbType.Int32);
             await connection.ExecuteAsync(new CommandDefinition(PhoneInsertSql, parameters, transaction, _options.CommandTimeoutSeconds, CommandType.Text, cancellationToken: cancellationToken));
             await WriteAuditAsync(connection, transaction, 4, operationDate, legacyUserCode, cancellationToken);
             return await LoadPhoneAsync(connection, transaction, command.PersonId, phoneId, cancellationToken);
@@ -111,7 +109,7 @@ public sealed partial class LegacyCustomerPhoneWriteRepository(
         {
             var normalized = ValidateUpdate(command);
             await EnsurePersonExistsAsync(connection, transaction, command.PersonId, cancellationToken);
-            await EnsureTypeAndAddressAsync(connection, transaction, command.PersonId, normalized.PhoneTypeCode, normalized.AddressId, cancellationToken);
+            await EnsureTypeAsync(connection, transaction, normalized.PhoneTypeCode, cancellationToken);
             var current = await LoadPhoneAsync(connection, transaction, command.PersonId, command.PhoneId, cancellationToken);
             EnsureExpected(current, command.ExpectedModifiedAt);
             if (current.StatusCode == 0)
@@ -241,12 +239,10 @@ public sealed partial class LegacyCustomerPhoneWriteRepository(
         if (exists == 0) throw new CustomerPhoneNotFoundException("Customer was not found.");
     }
 
-    private static async Task EnsureTypeAndAddressAsync(SqlConnection connection, SqlTransaction transaction, int personId, int phoneTypeCode, int addressId, CancellationToken cancellationToken)
+    private static async Task EnsureTypeAsync(SqlConnection connection, SqlTransaction transaction, int phoneTypeCode, CancellationToken cancellationToken)
     {
         var typeExists = await connection.ExecuteScalarAsync<int>(new CommandDefinition("SELECT CASE WHEN EXISTS (SELECT 1 FROM dbo.CTTELEFONO WHERE TTL_FL_CVE = @PhoneTypeCode AND TTL_FG_STATUS = 1) THEN 1 ELSE 0 END;", new { PhoneTypeCode = phoneTypeCode }, transaction, cancellationToken: cancellationToken));
         if (typeExists == 0) throw new CustomerPhoneValidationException("The phone type is not active.");
-        var addressExists = await connection.ExecuteScalarAsync<int>(new CommandDefinition("SELECT CASE WHEN EXISTS (SELECT 1 FROM dbo.CDOMICILIO WHERE DMO_FL_CVE = @AddressId AND PNA_FL_PERSONA = @PersonId AND DMO_FG_STATUS = 1) THEN 1 ELSE 0 END;", new { PersonId = personId, AddressId = addressId }, transaction, cancellationToken: cancellationToken));
-        if (addressExists == 0) throw new CustomerPhoneValidationException("The selected address is not active for the customer.");
     }
 
     private static async Task<ManagedCustomerPhone> LoadPhoneAsync(SqlConnection connection, SqlTransaction transaction, int personId, int phoneId, CancellationToken cancellationToken)
@@ -259,7 +255,6 @@ public sealed partial class LegacyCustomerPhoneWriteRepository(
         row.PhoneId,
         row.PersonId,
         row.PhoneTypeCode,
-        row.AddressId ?? throw new InvalidOperationException("Legacy phone address was unexpectedly null."),
         NormalizeLegacyString(row.LongDistanceCode),
         NormalizeLegacyString(row.AreaCode),
         NormalizeLegacyString(row.PhoneNumber),
@@ -267,7 +262,7 @@ public sealed partial class LegacyCustomerPhoneWriteRepository(
         row.StatusCode,
         NormalizeLegacyString(row.InactiveReason),
         row.IsDefault == 1,
-        row.ModifiedAt ?? throw new InvalidOperationException("Legacy phone modified date was unexpectedly null."),
+        row.ModifiedAt,
         NormalizeLegacyString(row.ContactName));
 
     private static string? NormalizeLegacyString(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
@@ -290,13 +285,12 @@ public sealed partial class LegacyCustomerPhoneWriteRepository(
             throw new CustomerPhoneConflictException("phone_modified", "The phone was modified by another operation.");
     }
 
-    private static DynamicParameters PhoneParameters(int personId, int phoneId, CustomerPhoneCreateCommand command, bool isDefault, DateTime operationDate, string legacyUserCode)
+    internal static DynamicParameters PhoneParameters(int personId, int phoneId, CustomerPhoneCreateCommand command, bool isDefault, DateTime operationDate, string legacyUserCode)
     {
         var parameters = new DynamicParameters();
         parameters.Add("PhoneId", phoneId, DbType.Int32);
         parameters.Add("PersonId", personId, DbType.Int32);
         parameters.Add("PhoneTypeCode", command.PhoneTypeCode, DbType.Byte);
-        parameters.Add("AddressId", command.AddressId, DbType.Int32);
         parameters.Add("LongDistanceCode", command.LongDistanceCode, DbType.String, size: 10);
         parameters.Add("AreaCode", command.AreaCode, DbType.String, size: 10);
         parameters.Add("PhoneNumber", command.PhoneNumber, DbType.String, size: 20);
@@ -311,12 +305,11 @@ public sealed partial class LegacyCustomerPhoneWriteRepository(
 
     private static CustomerPhoneCreateCommand ValidateCreate(CustomerPhoneCreateCommand command) => Normalize(command);
 
-    private static CustomerPhoneCreateCommand ValidateUpdate(CustomerPhoneUpdateCommand command) => Normalize(new CustomerPhoneCreateCommand(command.PersonId, command.PhoneTypeCode, command.AddressId, command.LongDistanceCode, command.AreaCode, command.PhoneNumber, command.Extension, command.ContactName, command.IsDefault));
+    private static CustomerPhoneCreateCommand ValidateUpdate(CustomerPhoneUpdateCommand command) => Normalize(new CustomerPhoneCreateCommand(command.PersonId, command.PhoneTypeCode, command.LongDistanceCode, command.AreaCode, command.PhoneNumber, command.Extension, command.ContactName, command.IsDefault));
 
     private static CustomerPhoneCreateCommand Normalize(CustomerPhoneCreateCommand command)
     {
         CustomerPhoneRules.ValidateType(command.PhoneTypeCode);
-        if (command.AddressId <= 0) throw new CustomerPhoneValidationException("A valid address is required.");
         return command with
         {
             LongDistanceCode = CustomerPhoneRules.NormalizeOptional(command.LongDistanceCode, 10, nameof(command.LongDistanceCode)),

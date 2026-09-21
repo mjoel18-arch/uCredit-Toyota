@@ -4,7 +4,6 @@ public sealed record ManagedCustomerPhone(
     int PhoneId,
     int PersonId,
     int PhoneTypeCode,
-    int AddressId,
     string? LongDistanceCode,
     string? AreaCode,
     string? PhoneNumber,
@@ -27,7 +26,6 @@ public sealed record ManagedCustomerPhone(
 public sealed record CustomerPhoneCreateCommand(
     int PersonId,
     int PhoneTypeCode,
-    int AddressId,
     string? LongDistanceCode,
     string? AreaCode,
     string PhoneNumber,
@@ -39,7 +37,6 @@ public sealed record CustomerPhoneUpdateCommand(
     int PersonId,
     int PhoneId,
     int PhoneTypeCode,
-    int AddressId,
     string? LongDistanceCode,
     string? AreaCode,
     string PhoneNumber,

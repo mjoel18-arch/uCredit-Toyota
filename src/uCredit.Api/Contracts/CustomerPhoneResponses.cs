@@ -6,7 +6,6 @@ public sealed record ManagedCustomerPhoneResponse(
     int PhoneId,
     int PersonId,
     int PhoneTypeCode,
-    int AddressId,
     string? LongDistanceCode,
     string? AreaCode,
     string? PhoneNumber,
@@ -18,7 +17,7 @@ public sealed record ManagedCustomerPhoneResponse(
     string? ContactName)
 {
     public static ManagedCustomerPhoneResponse FromModel(ManagedCustomerPhone phone) => new(
-        phone.PhoneId, phone.PersonId, phone.PhoneTypeCode, phone.AddressId,
+        phone.PhoneId, phone.PersonId, phone.PhoneTypeCode,
         phone.LongDistanceCode, phone.AreaCode, phone.PhoneNumber,
         phone.Extension, phone.Status, phone.InactiveReason, phone.IsDefault,
         phone.ModifiedAt, phone.ContactName);

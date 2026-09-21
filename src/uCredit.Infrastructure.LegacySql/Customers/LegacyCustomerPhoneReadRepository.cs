@@ -12,7 +12,6 @@ internal sealed class ManagedCustomerPhoneReadRow
     public int? PhoneId { get; set; }
     public int? PersonId { get; set; }
     public int? PhoneTypeCode { get; set; }
-    public int? AddressId { get; set; }
     public string? LongDistanceCode { get; set; }
     public string? AreaCode { get; set; }
     public string? PhoneNumber { get; set; }
@@ -36,7 +35,6 @@ public sealed class LegacyCustomerPhoneReadRepository(
         SELECT T.TFN_FL_CVE AS PhoneId,
                T.PNA_FL_PERSONA AS PersonId,
                T.TTL_FL_CVE AS PhoneTypeCode,
-               T.DMO_FL_CVE AS AddressId,
                T.TFN_CL_LARGA_DISTANCIA AS LongDistanceCode,
                T.TFN_CL_LADA AS AreaCode,
                T.TFN_CL_TELEFONO AS PhoneNumber,
@@ -75,7 +73,6 @@ public sealed class LegacyCustomerPhoneReadRepository(
         Require(row.PhoneId, nameof(row.PhoneId)),
         Require(row.PersonId, nameof(row.PersonId)),
         Require(row.PhoneTypeCode, nameof(row.PhoneTypeCode)),
-        Require(row.AddressId, nameof(row.AddressId)),
         row.LongDistanceCode,
         row.AreaCode,
         row.PhoneNumber,

@@ -59,7 +59,7 @@ El catálogo del tipo de domicilio se resuelve mediante `CPARAMETRO` con `PAR_FL
 
 ### Teléfono
 
-La consulta existente carga teléfonos de `dbo.CTELEFONO` con `TFN_FG_STATUS = 1`. La selección del principal se hace en el módulo con `TFN_FG_REGDEFAULT = 1` y el menor `TFN_FL_CVE` como desempate defensivo.
+La consulta existente carga teléfonos de `dbo.CTELEFONO` con `TFN_FG_STATUS = 1`. La selección del principal se hace en el módulo con `TFN_FG_REGDEFAULT = 1` y el menor `TFN_FL_CVE` como desempate defensivo. El teléfono se relaciona funcionalmente sólo mediante `PNA_FL_PERSONA`; `DMO_FL_CVE` no forma parte del contrato, no se lee y no se usa para determinar la elegibilidad. La evidencia efectiva de `pr_t` confirma que esa columna es `NOT NULL`; las ediciones la conservan y las altas de teléfonos permanecen bloqueadas hasta confirmar su valor técnico requerido.
 
 Para readiness, el requisito es la existencia de al menos un teléfono activo válido; no es necesario que exista un teléfono predeterminado. Los campos de contacto no deben aparecer en logs de diagnóstico.
 
@@ -594,6 +594,13 @@ La administración de teléfonos mantiene el requisito `phone` calculado en
 tiempo de consulta. Después de cada alta, edición, activación o
 desactivación, el expediente debe refrescar readiness; no se persiste una
 bandera duplicada en Identity ni en Legacy.
+
+La administración de teléfonos está desacoplada de domicilios. `HasPhone`
+depende exclusivamente de `CTELEFONO.TFN_FG_STATUS = 1`, mientras que
+`HasAddress` depende exclusivamente de `CDOMICILIO.DMO_FG_STATUS = 1`.
+Ningún teléfono satisface el requisito de domicilio y ningún domicilio
+satisface el requisito de teléfono; ambas expresiones `EXISTS` se calculan
+por separado.
 
 Las nuevas operaciones usan estado activo `1`, inactivo `2` e histórico `0`
 (`Inactivo heredado`). El estado `0` sólo puede activarse. La operación de
