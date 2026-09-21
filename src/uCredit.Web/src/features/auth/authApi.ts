@@ -213,7 +213,6 @@ export type ManagedCustomerPhone = {
   phoneId: number
   personId: number
   phoneTypeCode: number
-  addressId: number
   longDistanceCode: string | null
   areaCode: string | null
   phoneNumber: string | null
@@ -227,7 +226,6 @@ export type ManagedCustomerPhone = {
 
 export type CustomerPhonePayload = {
   phoneTypeCode: number
-  addressId: number
   longDistanceCode?: string
   areaCode?: string
   phoneNumber: string

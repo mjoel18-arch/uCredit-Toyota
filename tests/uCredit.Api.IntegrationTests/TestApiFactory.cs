@@ -223,8 +223,8 @@ internal sealed class FakeCustomerPhoneReadRepository : ICustomerPhoneReadReposi
         cancellationToken.ThrowIfCancellationRequested();
         return Task.FromResult<IReadOnlyList<ManagedCustomerPhone>?>(personId == 42
             ? [
-                new ManagedCustomerPhone(2, 42, 3, 10, null, "00", "0000000000", null, 1, null, true, new DateTime(2025, 1, 1), null),
-                new ManagedCustomerPhone(3, 42, 2, 10, null, "00", "0000000001", "10", 0, "Histórico", false, new DateTime(2025, 1, 2), null)
+                new ManagedCustomerPhone(2, 42, 3, null, "00", "0000000000", null, 1, null, true, new DateTime(2025, 1, 1), null),
+                new ManagedCustomerPhone(3, 42, 2, null, "00", "0000000001", "10", 0, "Histórico", false, new DateTime(2025, 1, 2), null)
             ]
             : null);
     }
