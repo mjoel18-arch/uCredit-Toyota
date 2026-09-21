@@ -2,20 +2,21 @@ import React from 'react'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../../src/shared/api/apiClient'
-import { getCustomerByPersonId, getCustomerProfileReadiness, searchCustomers } from '../../src/features/auth/authApi'
+import { getCustomerAddresses, getCustomerByPersonId, getCustomerProfileReadiness, searchCustomers } from '../../src/features/auth/authApi'
 import { CustomersView } from '../../src/features/customers/CustomersView'
 
 vi.mock('../../src/features/auth/authApi', async () => {
   const actual = await vi.importActual<typeof import('../../src/features/auth/authApi')>('../../src/features/auth/authApi')
-  return { ...actual, getCustomerByPersonId: vi.fn(), getCustomerProfileReadiness: vi.fn(), searchCustomers: vi.fn() }
+  return { ...actual, getCustomerAddresses: vi.fn(), getCustomerByPersonId: vi.fn(), getCustomerProfileReadiness: vi.fn(), searchCustomers: vi.fn() }
 })
 
 const searchMock = vi.mocked(searchCustomers)
 const detailMock = vi.mocked(getCustomerByPersonId)
 const readinessMock = vi.mocked(getCustomerProfileReadiness)
+const addressesMock = vi.mocked(getCustomerAddresses)
 const unauthorized = vi.fn()
 
-beforeEach(() => { searchMock.mockReset(); detailMock.mockReset(); readinessMock.mockReset(); unauthorized.mockReset() })
+beforeEach(() => { searchMock.mockReset(); detailMock.mockReset(); readinessMock.mockReset(); addressesMock.mockReset(); addressesMock.mockResolvedValue([]); unauthorized.mockReset() })
 afterEach(() => cleanup())
 
 describe('CustomersView', () => {

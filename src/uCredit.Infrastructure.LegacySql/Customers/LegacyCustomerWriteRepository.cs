@@ -1,6 +1,7 @@
 using System.Data;
 using Dapper;
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -40,13 +41,15 @@ public sealed partial class LegacyCustomerWriteRepository(
     IOptions<LegacySqlOptions> options,
     IExecutionTenantContext tenantContext,
     IHostEnvironment hostEnvironment,
-    ILogger<LegacyCustomerWriteRepository> logger) : ICustomerWriteRepository
+    IConfiguration configuration,
+    ILogger<LegacyCustomerWriteRepository> logger) : ICustomerWriteRepository, ICustomerAddressWriteRepository
 {
     internal const string AddressStage = "address";
     internal const string TaxRegimeLookupSql = "SELECT TOP (1) RFI_CL_CLAVE FROM dbo.CREGIMEN_FISCAL WHERE RFI_CL_CLAVE = @TaxRegimeCode AND RFI_CL_PJURIDICA = @FiscalPersonality AND RFI_FG_STATUS = 1;";
     private readonly LegacySqlOptions _options = options.Value;
     private readonly IExecutionTenantContext _tenantContext = tenantContext;
     private readonly IHostEnvironment _hostEnvironment = hostEnvironment;
+    private readonly IConfiguration _configuration = configuration;
     private readonly ILogger<LegacyCustomerWriteRepository> _logger = logger;
 
     public static LegacyWriteConfigurationReason? GetConfigurationReason(LegacySqlOptions options, bool isDevelopment)

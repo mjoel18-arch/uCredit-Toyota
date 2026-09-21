@@ -105,6 +105,7 @@ app.MapAuthEndpoints();
 app.MapBrandingEndpoints();
 app.MapContractEndpoints();
 app.MapCustomerEndpoints();
+app.MapCustomerAddressEndpoints();
 app.MapCustomerCreateEndpoints();
 app.Run();
 

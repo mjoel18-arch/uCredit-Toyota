@@ -169,6 +169,66 @@ export type CustomerDetail = Omit<CustomerListItem, 'rfcMasked'> & {
   activeEmails: CustomerEmail[]
 }
 
+export type ManagedCustomerAddress = {
+  addressId: number
+  personId: number
+  postalCode: string | null
+  state: string | null
+  municipality: string | null
+  city: string | null
+  neighborhood: string | null
+  streetAndNumber: string | null
+  exteriorNumber: string | null
+  interiorNumber: string | null
+  addressTypeCode: number
+  addressTypeDescription: string | null
+  uses: string[]
+  isActive: boolean
+  isDefault: boolean
+  modifiedAt: string
+  countryCode: number
+}
+
+export type CustomerAddressPayload = {
+  postalCode: string
+  state: string
+  municipality: string
+  city: string
+  neighborhood: string
+  streetAndNumber: string
+  exteriorNumber: string
+  interiorNumber?: string
+  reference?: string
+  schedule?: string
+  addressTypeCode: number
+  uses: string[]
+  isDefault: boolean
+  expectedModifiedAt?: string
+  countryCode: number
+}
+
+export type AddressStatePayload = { expectedModifiedAt: string; replacementAddressId?: number }
+
+export function getCustomerAddresses(personId: number): Promise<ManagedCustomerAddress[]> {
+  return apiRequest<ManagedCustomerAddress[]>(`/api/v1/customers/${encodeURIComponent(personId)}/addresses`)
+}
+
+export function createCustomerAddress(personId: number, payload: CustomerAddressPayload): Promise<ManagedCustomerAddress> {
+  return withCsrf<ManagedCustomerAddress>(`/api/v1/customers/${encodeURIComponent(personId)}/addresses`, { method: 'POST', body: JSON.stringify(payload) })
+}
+
+export function updateCustomerAddress(personId: number, addressId: number, payload: CustomerAddressPayload & { expectedModifiedAt: string }): Promise<ManagedCustomerAddress> {
+  return withCsrf<ManagedCustomerAddress>(`/api/v1/customers/${encodeURIComponent(personId)}/addresses/${encodeURIComponent(addressId)}`, { method: 'PUT', body: JSON.stringify(payload) })
+}
+
+export function activateCustomerAddress(personId: number, addressId: number, payload: AddressStatePayload): Promise<ManagedCustomerAddress> {
+  return withCsrf<ManagedCustomerAddress>(`/api/v1/customers/${encodeURIComponent(personId)}/addresses/${encodeURIComponent(addressId)}/activate`, { method: 'POST', body: JSON.stringify(payload) })
+}
+
+export function deactivateCustomerAddress(personId: number, addressId: number, payload: AddressStatePayload): Promise<ManagedCustomerAddress> {
+  return withCsrf<ManagedCustomerAddress>(`/api/v1/customers/${encodeURIComponent(personId)}/addresses/${encodeURIComponent(addressId)}/deactivate`, { method: 'POST', body: JSON.stringify(payload) })
+}
+
 export function searchCustomers(criteria: { personId?: number; rfc?: string; name?: string; legalPersonality?: number; page?: number; pageSize?: number }): Promise<CustomerPage> {
   const query = new URLSearchParams()
   if (criteria.personId) query.set('personId', String(criteria.personId))
