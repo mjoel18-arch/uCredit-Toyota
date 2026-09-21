@@ -209,6 +209,56 @@ export type CustomerAddressPayload = {
 
 export type AddressStatePayload = { expectedModifiedAt: string; replacementAddressId?: number }
 
+export type ManagedCustomerPhone = {
+  phoneId: number
+  personId: number
+  phoneTypeCode: number
+  addressId: number
+  longDistanceCode: string | null
+  areaCode: string | null
+  phoneNumber: string | null
+  extension: string | null
+  status: 'Active' | 'Inactive' | 'InheritedInactive' | 'Unknown'
+  inactiveReason: string | null
+  isDefault: boolean
+  modifiedAt: string
+  contactName: string | null
+}
+
+export type CustomerPhonePayload = {
+  phoneTypeCode: number
+  addressId: number
+  longDistanceCode?: string
+  areaCode?: string
+  phoneNumber: string
+  extension?: string
+  contactName?: string
+  isDefault: boolean
+  expectedModifiedAt?: string
+}
+
+export type PhoneStatePayload = { expectedModifiedAt: string; replacementPhoneId?: number }
+
+export function getCustomerPhones(personId: number): Promise<ManagedCustomerPhone[]> {
+  return apiRequest<ManagedCustomerPhone[]>(`/api/v1/customers/${encodeURIComponent(personId)}/phones`)
+}
+
+export function createCustomerPhone(personId: number, payload: CustomerPhonePayload): Promise<ManagedCustomerPhone> {
+  return withCsrf<ManagedCustomerPhone>(`/api/v1/customers/${encodeURIComponent(personId)}/phones`, { method: 'POST', body: JSON.stringify(payload) })
+}
+
+export function updateCustomerPhone(personId: number, phoneId: number, payload: CustomerPhonePayload & { expectedModifiedAt: string }): Promise<ManagedCustomerPhone> {
+  return withCsrf<ManagedCustomerPhone>(`/api/v1/customers/${encodeURIComponent(personId)}/phones/${encodeURIComponent(phoneId)}`, { method: 'PUT', body: JSON.stringify(payload) })
+}
+
+export function activateCustomerPhone(personId: number, phoneId: number, payload: PhoneStatePayload): Promise<ManagedCustomerPhone> {
+  return withCsrf<ManagedCustomerPhone>(`/api/v1/customers/${encodeURIComponent(personId)}/phones/${encodeURIComponent(phoneId)}/activate`, { method: 'POST', body: JSON.stringify(payload) })
+}
+
+export function deactivateCustomerPhone(personId: number, phoneId: number, payload: PhoneStatePayload): Promise<ManagedCustomerPhone> {
+  return withCsrf<ManagedCustomerPhone>(`/api/v1/customers/${encodeURIComponent(personId)}/phones/${encodeURIComponent(phoneId)}/deactivate`, { method: 'POST', body: JSON.stringify(payload) })
+}
+
 export function getCustomerAddresses(personId: number): Promise<ManagedCustomerAddress[]> {
   return apiRequest<ManagedCustomerAddress[]>(`/api/v1/customers/${encodeURIComponent(personId)}/addresses`)
 }

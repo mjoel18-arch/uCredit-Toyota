@@ -77,3 +77,17 @@ El tenant de demostración `TOYOTA` usa `uCredit-auto` como nombre comercial y `
 ## Consulta de clientes
 
 El módulo `Customers` representa la entidad funcional `Customer`; “Prospecto” permanece sólo como título Legacy. `GET /api/v1/customers`, `GET /api/v1/customers/{personId}` y `GET /api/v1/customers/{personId}/readiness` son consultas de sólo lectura protegidas por `customers.read`. `LegacySql` carga `CPERSONA` y las colecciones de roles, domicilios, teléfonos y correos por separado para evitar multiplicar clientes. Readiness usa consultas `EXISTS` sobre `CPERSONA`, `CDOMICILIO`, `CTELEFONO` y `CPCUENTA`, sin seleccionar PII ni números de cuenta/CLABE. El estado no se persiste en Identity ni Legacy; el futuro alta de contrato debe recalcularlo en backend. Las altas y modificaciones de clientes, propuestas y contratos requieren autorización posterior para escritura Legacy.
+# Administración de teléfonos de Customers
+
+El vertical de teléfonos conserva la separación modular: los contratos de
+aplicación viven en `uCredit.Modules.Customers`, la lectura y escritura SQL
+en `uCredit.Infrastructure.LegacySql`, los DTOs y endpoints en API y la
+experiencia en `uCredit.Web`.
+
+Las mutaciones requieren `customers.write`, antiforgery, tenant de despliegue,
+`LegacyUserCode` de la membresía activa y las guardas de Development/pr_t.
+Cada operación usa una transacción Dapper, `CCATCONSEC` sólo para altas,
+concurrencia por `TFN_FE_ULTMOD` y auditoría. No se depende de FK físicas ni
+triggers de `CTELEFONO`; persona, domicilio y tipo se validan en aplicación.
+Los logs no contienen números telefónicos, lada, extensión, contacto ni
+payload.

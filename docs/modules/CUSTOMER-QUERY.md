@@ -39,3 +39,9 @@ La política es `customers.read`. El tenant se resuelve mediante la cookie firma
 ## Pendiente
 
 La creación y mantenimiento de Customer, la creación de propuestas, el alta directa de contratos y la conversión explícita de propuesta autorizada a contrato requieren autorización funcional y de escritura Legacy posterior.
+# Teléfonos del expediente
+
+El detalle de Customer obtiene la colección de teléfonos desde el endpoint
+de administración de teléfonos. La selección del principal sigue siendo
+defensiva: teléfonos activos predeterminados ordenados por `TFN_FL_CVE ASC`.
+Los valores Legacy se validan en el adaptador y no se registran como PII.

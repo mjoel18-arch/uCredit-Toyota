@@ -146,6 +146,13 @@ h1 { margin: 5px 0 0; font-size: clamp(26px, 4vw, 36px); }
 .side-panel fieldset { margin: 1rem 0; border: 1px solid #eaecf0; border-radius: .5rem; }
 .side-panel-actions { justify-content: flex-end; margin-top: 1rem; }
 .notice-status { margin: .75rem 0; }
+.customer-phones { margin-top: 1.5rem; border-top: 1px solid #eaecf0; padding-top: 1rem; }
+.phone-list { display: grid; gap: .75rem; }
+.phone-card { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; border: 1px solid #eaecf0; border-radius: .75rem; padding: 1rem; }
+.phone-card p { margin: .35rem 0; }
+.phone-card small { color: var(--color-secondary); }
+.phone-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+@media (max-width: 700px) { .phone-card { flex-direction: column; } }
 @media (max-width: 700px) {
   .address-card, .section-heading { flex-direction: column; align-items: stretch; }
   .side-panel { width: 100%; }

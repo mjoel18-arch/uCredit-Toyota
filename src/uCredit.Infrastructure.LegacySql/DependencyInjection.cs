@@ -26,11 +26,13 @@ public static class DependencyInjection
         services.AddScoped<IContractAmortizationReadRepository, LegacyContractAmortizationReadRepository>();
         services.AddScoped<ICustomerReadRepository, LegacyCustomerReadRepository>();
         services.AddScoped<ICustomerAddressReadRepository, LegacyCustomerAddressReadRepository>();
+        services.AddScoped<ICustomerPhoneReadRepository, LegacyCustomerPhoneReadRepository>();
         services.AddScoped<ICustomerProfileReadinessRepository, LegacyCustomerProfileReadinessRepository>();
         services.AddScoped<ICustomerProfileReadinessService, CustomerProfileReadinessService>();
         services.AddScoped<LegacyCustomerWriteRepository>();
         services.AddScoped<ICustomerWriteRepository>(provider => provider.GetRequiredService<LegacyCustomerWriteRepository>());
         services.AddScoped<ICustomerAddressWriteRepository>(provider => provider.GetRequiredService<LegacyCustomerWriteRepository>());
+        services.AddScoped<ICustomerPhoneWriteRepository, LegacyCustomerPhoneWriteRepository>();
         return services;
     }
 }

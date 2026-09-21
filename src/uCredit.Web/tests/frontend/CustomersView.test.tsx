@@ -2,21 +2,22 @@ import React from 'react'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../../src/shared/api/apiClient'
-import { getCustomerAddresses, getCustomerByPersonId, getCustomerProfileReadiness, searchCustomers } from '../../src/features/auth/authApi'
+import { getCustomerAddresses, getCustomerByPersonId, getCustomerPhones, getCustomerProfileReadiness, searchCustomers } from '../../src/features/auth/authApi'
 import { CustomersView } from '../../src/features/customers/CustomersView'
 
 vi.mock('../../src/features/auth/authApi', async () => {
   const actual = await vi.importActual<typeof import('../../src/features/auth/authApi')>('../../src/features/auth/authApi')
-  return { ...actual, getCustomerAddresses: vi.fn(), getCustomerByPersonId: vi.fn(), getCustomerProfileReadiness: vi.fn(), searchCustomers: vi.fn() }
+  return { ...actual, getCustomerAddresses: vi.fn(), getCustomerByPersonId: vi.fn(), getCustomerPhones: vi.fn(), getCustomerProfileReadiness: vi.fn(), searchCustomers: vi.fn() }
 })
 
 const searchMock = vi.mocked(searchCustomers)
 const detailMock = vi.mocked(getCustomerByPersonId)
 const readinessMock = vi.mocked(getCustomerProfileReadiness)
 const addressesMock = vi.mocked(getCustomerAddresses)
+const phonesMock = vi.mocked(getCustomerPhones)
 const unauthorized = vi.fn()
 
-beforeEach(() => { searchMock.mockReset(); detailMock.mockReset(); readinessMock.mockReset(); addressesMock.mockReset(); addressesMock.mockResolvedValue([]); unauthorized.mockReset() })
+beforeEach(() => { searchMock.mockReset(); detailMock.mockReset(); readinessMock.mockReset(); addressesMock.mockReset(); phonesMock.mockReset(); addressesMock.mockResolvedValue([]); phonesMock.mockResolvedValue([]); unauthorized.mockReset() })
 afterEach(() => cleanup())
 
 describe('CustomersView', () => {
@@ -40,7 +41,7 @@ describe('CustomersView', () => {
     fireEvent.change(screen.getByLabelText('Identificador'), { target: { value: '42' } })
     fireEvent.click(screen.getByRole('button', { name: 'Buscar clientes' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Ver detalle' }))
-    expect((await screen.findAllByText('55 5555555555')).length).toBeGreaterThanOrEqual(2)
+    expect((await screen.findAllByText('55 5555555555')).length).toBeGreaterThanOrEqual(1)
     expect(screen.getAllByText('cliente@example.test').length).toBeGreaterThanOrEqual(2)
     expect(screen.getByText('Cliente habilitado para contratos.')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Capturar contrato · Próximamente' })).toHaveProperty('disabled', true)
