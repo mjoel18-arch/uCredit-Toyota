@@ -141,4 +141,54 @@ public sealed class CustomerSqlTests
         Assert.DoesNotContain("UPDATE", LegacyCustomerAddressReadRepository.ReadSql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("DELETE", LegacyCustomerAddressReadRepository.ReadSql, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public void AccountSqlIsParameterizedAndNeverWritesSensitiveValuesToLogs()
+    {
+        Assert.Contains("@AccountNumber", LegacyCustomerAccountWriteRepository.InsertSql, StringComparison.Ordinal);
+        Assert.Contains("@Clabe", LegacyCustomerAccountWriteRepository.InsertSql, StringComparison.Ordinal);
+        Assert.Contains("PCT_FE_ULTMOD = @ExpectedModifiedAt", LegacyCustomerAccountWriteRepository.UpdateSql, StringComparison.Ordinal);
+        Assert.Contains("PCT_FG_STATUS = @Status", LegacyCustomerAccountWriteRepository.StateUpdateSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("SELECT *", LegacyCustomerAccountReadRepository.ReadSql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("INSERT", LegacyCustomerAccountReadRepository.ReadSql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("UPDATE", LegacyCustomerAccountReadRepository.ReadSql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("DELETE", LegacyCustomerAccountReadRepository.ReadSql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("PCT_NO_CUENTA", "Customer account mutation failed. ExceptionType={ExceptionType} SqlNumber={SqlNumber} Stage={Stage} CorrelationId={CorrelationId}", StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void BankCatalogSqlIsReadOnlyAndUsesOnlyApprovedColumns()
+    {
+        var sql = LegacyCustomerBankReadRepository.ReadSql;
+        Assert.Contains("BCO_FL_CVE", sql, StringComparison.Ordinal);
+        Assert.Contains("BCO_DS_NOMBRE", sql, StringComparison.Ordinal);
+        Assert.Contains("BCO_FG_STATUS = 1", sql, StringComparison.Ordinal);
+        Assert.Contains("BCO_FG_REAL = 1", sql, StringComparison.Ordinal);
+        Assert.Contains("ORDER BY BCO_DS_NOMBRE ASC, BCO_FL_CVE ASC", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("PCT_NO_CUENTA", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("PCT_NO_CLABE", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("INSERT", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("UPDATE", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("DELETE", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("SELECT *", sql, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("1234567890", "123456789012345678")]
+    public void AccountRulesAcceptSyntheticNumericValues(string accountNumber, string clabe)
+    {
+        Assert.Equal(accountNumber, CustomerAccountRules.RequiredSensitive(accountNumber, 20, "Account number"));
+        Assert.Equal(clabe, CustomerAccountRules.RequiredClabe(clabe));
+        CustomerAccountRules.ValidateBranch(0);
+        CustomerAccountRules.ValidateBranch(short.MaxValue);
+    }
+
+    [Fact]
+    public void AccountRulesRejectInvalidSensitiveValuesAndNegativeBranch()
+    {
+        Assert.Throws<CustomerAccountValidationException>(() => CustomerAccountRules.RequiredSensitive(" ", 20, "Account number"));
+        Assert.Throws<CustomerAccountValidationException>(() => CustomerAccountRules.RequiredClabe("123"));
+        Assert.Throws<CustomerAccountValidationException>(() => CustomerAccountRules.RequiredClabe("12345678901234567A"));
+        Assert.Throws<CustomerAccountValidationException>(() => CustomerAccountRules.ValidateBranch(-1));
+    }
 }

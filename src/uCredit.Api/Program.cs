@@ -107,6 +107,8 @@ app.MapContractEndpoints();
 app.MapCustomerEndpoints();
 app.MapCustomerAddressEndpoints();
 app.MapCustomerPhoneEndpoints();
+app.MapCustomerAccountEndpoints();
+app.MapCustomerBankEndpoints();
 app.MapCustomerCreateEndpoints();
 app.Run();
 

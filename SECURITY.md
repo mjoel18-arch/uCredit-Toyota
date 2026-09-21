@@ -72,3 +72,10 @@ Cada instalación tiene una única base Legacy y una única base Identity. `Lega
 Identity almacena únicamente el alcance lógico de empresas mediante `TenantLegacyCompanyScopes`: `TenantId`, `CompanyId` (el valor de `KCONTRATO.EMP_FL_CVE`), nombre opcional y estado activo. El servidor obtiene los CompanyId activos desde Identity. El frontend no puede enviar una lista, query string, cabecera o conexión para ampliar el alcance.
 
 `SearchAsync` y `GetByNumberAsync` agregan `C.EMP_FL_CVE IN @AllowedCompanyIds` con parámetros Dapper. La consulta no crea una conexión Legacy si no existe tenant seleccionado, el tenant no corresponde a `Deployment__TenantCode` o no hay empresas activas.
+
+La administración de cuentas nunca devuelve cuentas o CLABEs completas. Las
+respuestas sólo incluyen terminaciones enmascaradas; los valores sensibles
+no se registran, no se colocan en URLs ni se almacenan en `localStorage` o
+`sessionStorage`. Las mutaciones requieren `customers.write`, antiforgery,
+tenant de despliegue, `LegacyUserCode` de la membresía activa y las guardas
+de Development/base `pr_t`.

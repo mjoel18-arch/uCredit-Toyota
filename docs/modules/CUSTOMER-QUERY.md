@@ -39,6 +39,9 @@ La política es `customers.read`. El tenant se resuelve mediante la cookie firma
 ## Pendiente
 
 La creación y mantenimiento de Customer, la creación de propuestas, el alta directa de contratos y la conversión explícita de propuesta autorizada a contrato requieren autorización funcional y de escritura Legacy posterior.
+
+La consulta de cuentas sólo expone terminaciones enmascaradas de cuenta y
+CLABE. Los valores completos no se devuelven ni se conservan en el navegador.
 # Teléfonos del expediente
 
 El detalle de Customer obtiene la colección de teléfonos desde el endpoint
