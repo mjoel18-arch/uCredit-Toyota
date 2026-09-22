@@ -2,12 +2,12 @@ import React from 'react'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../../src/shared/api/apiClient'
-import { activateCustomerAccount, activateCustomerEmail, activateCustomerPhone, createCustomerAccount, createCustomerEmail, createCustomerPhone, deactivateCustomerAccount, deactivateCustomerEmail, deactivateCustomerPhone, getCustomerAccounts, getCustomerAddresses, getCustomerBanks, getCustomerByPersonId, getCustomerEmailUsages, getCustomerEmails, getCustomerPhones, getCustomerProfileReadiness, searchCustomers, updateCustomerAccount, updateCustomerEmail, updateCustomerPhone } from '../../src/features/auth/authApi'
+import { activateCustomerAccount, activateCustomerEmail, activateCustomerPhone, createCustomerAccount, createCustomerEmail, createCustomerPhone, deactivateCustomerAccount, deactivateCustomerEmail, deactivateCustomerPhone, getCustomerAccounts, getCustomerAddresses, getCustomerBanks, getCustomerByPersonId, getCustomerEmailUsages, getCustomerEmails, getCustomerGeneral, getCustomerPhones, getCustomerProfileReadiness, searchCustomers, updateCustomerAccount, updateCustomerEmail, updateCustomerGeneral, updateCustomerPhone } from '../../src/features/auth/authApi'
 import { CustomersView } from '../../src/features/customers/CustomersView'
 
 vi.mock('../../src/features/auth/authApi', async () => {
   const actual = await vi.importActual<typeof import('../../src/features/auth/authApi')>('../../src/features/auth/authApi')
-  return { ...actual, activateCustomerAccount: vi.fn(), activateCustomerEmail: vi.fn(), activateCustomerPhone: vi.fn(), createCustomerAccount: vi.fn(), createCustomerEmail: vi.fn(), createCustomerPhone: vi.fn(), deactivateCustomerAccount: vi.fn(), deactivateCustomerEmail: vi.fn(), deactivateCustomerPhone: vi.fn(), getCustomerAccounts: vi.fn(), getCustomerAddresses: vi.fn(), getCustomerBanks: vi.fn(), getCustomerByPersonId: vi.fn(), getCustomerEmailUsages: vi.fn(), getCustomerEmails: vi.fn(), getCustomerPhones: vi.fn(), getCustomerProfileReadiness: vi.fn(), searchCustomers: vi.fn(), updateCustomerAccount: vi.fn(), updateCustomerEmail: vi.fn(), updateCustomerPhone: vi.fn() }
+  return { ...actual, activateCustomerAccount: vi.fn(), activateCustomerEmail: vi.fn(), activateCustomerPhone: vi.fn(), createCustomerAccount: vi.fn(), createCustomerEmail: vi.fn(), createCustomerPhone: vi.fn(), deactivateCustomerAccount: vi.fn(), deactivateCustomerEmail: vi.fn(), deactivateCustomerPhone: vi.fn(), getCustomerAccounts: vi.fn(), getCustomerAddresses: vi.fn(), getCustomerBanks: vi.fn(), getCustomerByPersonId: vi.fn(), getCustomerEmailUsages: vi.fn(), getCustomerEmails: vi.fn(), getCustomerGeneral: vi.fn(), getCustomerPhones: vi.fn(), getCustomerProfileReadiness: vi.fn(), searchCustomers: vi.fn(), updateCustomerAccount: vi.fn(), updateCustomerEmail: vi.fn(), updateCustomerGeneral: vi.fn(), updateCustomerPhone: vi.fn() }
 })
 
 const searchMock = vi.mocked(searchCustomers)
@@ -17,6 +17,8 @@ const addressesMock = vi.mocked(getCustomerAddresses)
 const phonesMock = vi.mocked(getCustomerPhones)
 const accountsMock = vi.mocked(getCustomerAccounts)
 const banksMock = vi.mocked(getCustomerBanks)
+const generalMock = vi.mocked(getCustomerGeneral)
+const updateGeneralMock = vi.mocked(updateCustomerGeneral)
 const createAccountMock = vi.mocked(createCustomerAccount)
 const updateAccountMock = vi.mocked(updateCustomerAccount)
 const activateAccountMock = vi.mocked(activateCustomerAccount)
@@ -33,7 +35,7 @@ const activatePhoneMock = vi.mocked(activateCustomerPhone)
 const deactivatePhoneMock = vi.mocked(deactivateCustomerPhone)
 const unauthorized = vi.fn()
 
-beforeEach(() => { searchMock.mockReset(); detailMock.mockReset(); readinessMock.mockReset(); addressesMock.mockReset(); phonesMock.mockReset(); accountsMock.mockReset(); banksMock.mockReset(); createAccountMock.mockReset(); updateAccountMock.mockReset(); activateAccountMock.mockReset(); deactivateAccountMock.mockReset(); createPhoneMock.mockReset(); updatePhoneMock.mockReset(); activatePhoneMock.mockReset(); deactivatePhoneMock.mockReset(); emailsMock.mockReset(); emailUsagesMock.mockReset(); createEmailMock.mockReset(); updateEmailMock.mockReset(); activateEmailMock.mockReset(); deactivateEmailMock.mockReset(); addressesMock.mockResolvedValue([]); phonesMock.mockResolvedValue([]); accountsMock.mockResolvedValue([]); emailsMock.mockResolvedValue([]); emailUsagesMock.mockResolvedValue([{ code: 1, description: 'Envío de facturas' }, { code: 2, description: 'Envío de estado de cuenta' }, { code: 3, description: 'Salesforce' }]); banksMock.mockResolvedValue([{ bankId: 2, bankName: 'Banco Alfa' }, { bankId: 4, bankName: 'Banco Beta' }]); createAccountMock.mockResolvedValue({} as never); updateAccountMock.mockResolvedValue({} as never); activateAccountMock.mockResolvedValue({} as never); deactivateAccountMock.mockResolvedValue({} as never); createPhoneMock.mockResolvedValue({} as never); updatePhoneMock.mockResolvedValue({} as never); activatePhoneMock.mockResolvedValue({} as never); deactivatePhoneMock.mockResolvedValue({} as never); createEmailMock.mockResolvedValue({} as never); updateEmailMock.mockResolvedValue({} as never); activateEmailMock.mockResolvedValue({} as never); deactivateEmailMock.mockResolvedValue({} as never); unauthorized.mockReset() })
+beforeEach(() => { searchMock.mockReset(); detailMock.mockReset(); readinessMock.mockReset(); addressesMock.mockReset(); phonesMock.mockReset(); accountsMock.mockReset(); banksMock.mockReset(); generalMock.mockReset(); updateGeneralMock.mockReset(); createAccountMock.mockReset(); updateAccountMock.mockReset(); activateAccountMock.mockReset(); deactivateAccountMock.mockReset(); createPhoneMock.mockReset(); updatePhoneMock.mockReset(); activatePhoneMock.mockReset(); deactivatePhoneMock.mockReset(); emailsMock.mockReset(); emailUsagesMock.mockReset(); createEmailMock.mockReset(); updateEmailMock.mockReset(); activateEmailMock.mockReset(); deactivateEmailMock.mockReset(); addressesMock.mockResolvedValue([]); phonesMock.mockResolvedValue([]); accountsMock.mockResolvedValue([]); emailsMock.mockResolvedValue([]); emailUsagesMock.mockResolvedValue([{ code: 1, description: 'Envío de facturas' }, { code: 2, description: 'Envío de estado de cuenta' }, { code: 3, description: 'Salesforce' }]); banksMock.mockResolvedValue([{ bankId: 2, bankName: 'Banco Alfa' }, { bankId: 4, bankName: 'Banco Beta' }]); generalMock.mockResolvedValue({ personId: 42, legalPersonalityCode: 1, rfc: 'ABC010203AB1', firstName: 'Nombre', paternalSurname: 'Apellido', maternalSurname: null, birthDate: '1980-01-01T00:00:00Z', legalName: null, contactName: null, contactPosition: null, statusCode: 1, personModifiedAt: '2025-01-01T00:00:00Z', subtypeModifiedAt: '2025-01-02T00:00:00Z', roles: [{ roleCode: 1, roleName: 'CLIENTE', isActive: true, isEditable: true }, { roleCode: 2, roleName: 'Histórico', isActive: false, isEditable: false }] }); updateGeneralMock.mockResolvedValue({} as never); createAccountMock.mockResolvedValue({} as never); updateAccountMock.mockResolvedValue({} as never); activateAccountMock.mockResolvedValue({} as never); deactivateAccountMock.mockResolvedValue({} as never); createPhoneMock.mockResolvedValue({} as never); updatePhoneMock.mockResolvedValue({} as never); activatePhoneMock.mockResolvedValue({} as never); deactivatePhoneMock.mockResolvedValue({} as never); createEmailMock.mockResolvedValue({} as never); updateEmailMock.mockResolvedValue({} as never); activateEmailMock.mockResolvedValue({} as never); deactivateEmailMock.mockResolvedValue({} as never); unauthorized.mockReset() })
 afterEach(() => cleanup())
 
 const accountFixture = { accountId: 7001, personId: 42, bankId: 2, bankName: 'Banco de prueba', branchNumber: 12, currencyCode: 1, currencyName: 'Pesos', accountTypeCode: 1, accountTypeName: 'Cheques', paymentMethodCode: null, status: 1, maskedAccountNumber: '••••0001', maskedClabe: '••••0002', modifiedAt: '2025-01-01T00:00:00Z' }
@@ -129,7 +131,7 @@ describe('CustomersView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Buscar clientes' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Ver detalle' }))
     expect(await screen.findByText(/0001/)).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Editar' }))
+    fireEvent.click(accountSection().querySelectorAll('button')[1] as HTMLButtonElement)
     await screen.findByRole('option', { name: 'Banco Alfa' })
     expect(screen.getAllByPlaceholderText('Dejar vacío para conservar')).toHaveLength(2)
     expect(screen.getByLabelText('Número de cuenta')).toHaveProperty('value', '')
@@ -175,7 +177,7 @@ describe('CustomersView', () => {
   it('edits while preserving omitted sensitive values and can replace only one value', async () => {
     configureAccountDetail()
     await openAccountDetail()
-    fireEvent.click(screen.getByRole('button', { name: 'Editar' }))
+    fireEvent.click(accountSection().querySelectorAll('button')[1] as HTMLButtonElement)
     await screen.findByRole('option', { name: 'Banco Alfa' })
     expect(screen.getAllByPlaceholderText('Dejar vacío para conservar')).toHaveLength(2)
     fireEvent.change(screen.getByLabelText('CLABE'), { target: { value: 'SYNTHETIC-NEW-CLABE' } })
@@ -219,7 +221,7 @@ describe('CustomersView', () => {
   it('preserves an historical unavailable bank only while editing the existing account', async () => {
     configureAccountDetail([{ ...accountFixture, bankId: 9, bankName: 'Banco histórico' }])
     await openAccountDetail()
-    fireEvent.click(screen.getByRole('button', { name: 'Editar' }))
+    fireEvent.click(accountSection().querySelectorAll('button')[1] as HTMLButtonElement)
     await screen.findByRole('option', { name: 'Banco Alfa' })
     const historical = await screen.findByRole('option', { name: 'Banco histórico (no disponible)' })
     expect(historical).toHaveProperty('disabled', true)
@@ -273,7 +275,7 @@ describe('CustomersView', () => {
     await vi.waitFor(() => expect(screen.getAllByRole('status').some(item => item.textContent?.includes('Ya existe una cuenta'))).toBe(true))
     expect(createAccountMock).toHaveBeenCalledOnce()
     fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Editar' }))
+    fireEvent.click(accountSection().querySelectorAll('button')[1] as HTMLButtonElement)
     await screen.findByRole('option', { name: 'Banco Alfa' })
     fireEvent.click(screen.getByRole('button', { name: 'Guardar cuenta' }))
     await vi.waitFor(() => expect(screen.getAllByRole('status').some(item => item.textContent?.includes('La cuenta cambió'))).toBe(true))
@@ -362,7 +364,7 @@ describe('CustomersView', () => {
     emailsMock.mockResolvedValue([{ emailId: 8, personId: 42, contact: null, email: 'existente@example.invalid', status: 'Active', usageCodes: [1], modifiedAt: '2025-01-01T00:00:00Z' }])
     updateEmailMock.mockRejectedValue(new ApiError(409, 'email_modified'))
     await openAccountDetail()
-    fireEvent.click(screen.getByRole('button', { name: 'Editar' }))
+    fireEvent.click((screen.getByRole('heading', { name: 'Correos' }).closest('section') as HTMLElement).querySelectorAll('button')[1] as HTMLButtonElement)
     await screen.findByPlaceholderText('Dejar vacío para conservar')
     fireEvent.click(screen.getByRole('button', { name: 'Guardar correo' }))
     await vi.waitFor(() => expect(screen.getAllByRole('status').some(item => item.textContent?.includes('El correo cambió'))).toBe(true))
@@ -379,7 +381,7 @@ describe('CustomersView', () => {
     fireEvent.change(screen.getByLabelText('Correo electrónico'), { target: { value: 'error@example.invalid' } })
     fireEvent.click(screen.getByRole('button', { name: 'Guardar correo' }))
     expect(await screen.findByRole('status')).toBeTruthy()
-    expect(createEmailMock).toHaveBeenCalledOnce()
+    await vi.waitFor(() => expect(createEmailMock).toHaveBeenCalledOnce())
   })
 
   it('returns to login on email 401 and reports catalog failure or emptiness', async () => {
@@ -407,7 +409,7 @@ describe('CustomersView', () => {
     emailsMock.mockResolvedValue([{ emailId: 8, personId: 42, contact: 'Contacto', email: 'existente@example.invalid', status: 'Active', usageCodes: [1], modifiedAt: '2025-01-01T00:00:00Z' }])
     await openAccountDetail()
     const section = screen.getByRole('heading', { name: 'Correos' }).closest('section') as HTMLElement
-    fireEvent.click(screen.getByRole('button', { name: 'Editar' }))
+    fireEvent.click((screen.getByRole('heading', { name: 'Correos' }).closest('section') as HTMLElement).querySelectorAll('button')[1] as HTMLButtonElement)
     expect(await screen.findByPlaceholderText('Dejar vacío para conservar')).toHaveProperty('value', '')
     expect(section.textContent).toContain('existente@example.invalid')
   })
@@ -423,5 +425,46 @@ describe('CustomersView', () => {
     await vi.waitFor(() => expect(deactivateEmailMock).toHaveBeenCalledOnce())
     await vi.waitFor(() => expect(readinessMock).toHaveBeenCalledTimes(2))
     vi.restoreAllMocks()
+  })
+
+  it('opens and cancels general editing without changing other expediente sections', async () => {
+    configureAccountDetail([])
+    await openAccountDetail()
+    const section = screen.getByRole('heading', { name: 'Datos generales' }).closest('section') as HTMLElement
+    fireEvent.click(section.querySelector('button') as HTMLButtonElement)
+    expect(await screen.findByLabelText('Nombre')).toHaveProperty('value', 'Nombre')
+    expect(section.textContent).toContain('ABC010203AB1')
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+    expect(screen.queryByLabelText('Nombre')).toBeNull()
+    expect(screen.getByRole('heading', { name: 'Cuentas' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Correos' })).toBeTruthy()
+  })
+
+  it('edits names and roles once, confirms removal, and keeps inactive roles unavailable', async () => {
+    configureAccountDetail([])
+    await openAccountDetail()
+    const section = screen.getByRole('heading', { name: 'Datos generales' }).closest('section') as HTMLElement
+    fireEvent.click(section.querySelector('button') as HTMLButtonElement)
+    expect(await screen.findByLabelText('Nombre')).toBeTruthy()
+    expect(section.querySelectorAll('input[type="checkbox"]')[1]).toHaveProperty('disabled', true)
+    fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Nombre nuevo' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar datos generales' }))
+    await vi.waitFor(() => expect(updateGeneralMock).toHaveBeenCalledOnce())
+    expect(updateGeneralMock.mock.calls[0][1]).not.toHaveProperty('rfc')
+    expect(updateGeneralMock.mock.calls[0][1]).not.toHaveProperty('statusCode')
+  })
+
+  it('shows controlled customer_modified and prevents a second general update', async () => {
+    configureAccountDetail([])
+    updateGeneralMock.mockRejectedValue(new ApiError(409, 'customer_modified'))
+    await openAccountDetail()
+    const section = screen.getByRole('heading', { name: 'Datos generales' }).closest('section') as HTMLElement
+    fireEvent.click(section.querySelector('button') as HTMLButtonElement)
+    await screen.findByLabelText('Nombre')
+    const save = screen.getByRole('button', { name: 'Guardar datos generales' })
+    fireEvent.click(save)
+    fireEvent.click(save)
+    await vi.waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Los datos cambiaron'))
+    expect(updateGeneralMock).toHaveBeenCalledOnce()
   })
 })

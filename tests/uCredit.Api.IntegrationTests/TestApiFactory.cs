@@ -57,6 +57,9 @@ public sealed class TestApiFactory : WebApplicationFactory<Program>
             services.AddSingleton<ICustomerEmailUsageRepository, FakeCustomerEmailUsageRepository>();
             services.RemoveAll<ICustomerEmailWriteRepository>();
             services.AddSingleton<ICustomerEmailWriteRepository, FakeCustomerEmailWriteRepository>();
+            services.RemoveAll<ICustomerGeneralRepository>();
+            services.AddSingleton<ICustomerGeneralRepository, FakeCustomerGeneralRepository>();
+            services.AddSingleton<IPersonPepChecker, FakePersonPepChecker>();
             services.RemoveAll<ICustomerAccountWriteRepository>();
             services.AddSingleton<ICustomerAccountWriteRepository, FakeCustomerAccountWriteRepository>();
             services.RemoveAll<IExecutionTenantContext>();
@@ -270,6 +273,70 @@ internal sealed class FakeCustomerRoleCatalogRepository : ICustomerRoleCatalogRe
             new(3, "APODERADO"),
             new(1, "CLIENTE")
         ]);
+}
+
+internal sealed class FakeCustomerGeneralRepository : ICustomerGeneralRepository
+{
+    private static readonly DateTime PersonModifiedAt = new(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+    private static readonly DateTime SubtypeModifiedAt = new(2025, 1, 2, 0, 0, 0, DateTimeKind.Utc);
+    private static readonly Dictionary<int, CustomerGeneralProfile> Profiles = new()
+    {
+        [42] = Profile(42, 1, [new(1, "CLIENTE", true, true), new(25, "ACCIONISTA", true, true)]),
+        [53] = Profile(53, 2, [new(3, "APODERADO", true, true)]),
+        [54] = Profile(54, 20, [new(1, "CLIENTE", true, true)]),
+        [55] = Profile(55, 1, [new(25, "ACCIONISTA", true, true), new(2, "ROL HISTORICO", false, false)]),
+        [56] = Profile(56, 1, [new(1, "CLIENTE", true, true)]),
+        [57] = Profile(57, 1, [new(1, "CLIENTE", true, true)]),
+        [58] = Profile(58, 1, [new(1, "CLIENTE", true, true)]),
+        [59] = Profile(59, 1, [new(1, "CLIENTE", true, true)]),
+        [60] = Profile(60, 1, [new(10, "ASEGURADORA", true, false)]),
+        [61] = Profile(61, 1, [new(1, "CLIENTE", true, true)], "PEP-MATCH"),
+        [62] = Profile(62, 1, [new(1, "CLIENTE", true, true)], "PEP-UNAVAILABLE")
+    };
+
+    public Task<CustomerGeneralProfile?> GetAsync(int personId, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(Profiles.TryGetValue(personId, out var profile) ? profile : null);
+    }
+
+    public Task<CustomerGeneralProfile> UpdateAsync(CustomerGeneralUpdateCommand command, string legacyUserCode, string correlationId, CancellationToken cancellationToken = default)
+    {
+        if (command.PersonId == 56) throw new CustomerGeneralConflictException("customer_modified", "Modified.");
+        if (command.PersonId == 57) throw new CustomerGeneralConflictException("customer_modified", "Modified.");
+        if (command.PersonId == 58) throw new LegacyWriteNotConfiguredException("Not configured.", "configuration", LegacyWriteConfigurationReason.MissingWriteConnection);
+        if (!Profiles.TryGetValue(command.PersonId, out var current)) throw new CustomerGeneralNotFoundException("Not found.");
+        if (command.RoleCodes is { Count: 0 }) throw new CustomerGeneralValidationException("At least one role is required.");
+        if (command.RoleCodes is not null && command.RoleCodes.Distinct().Count() != command.RoleCodes.Count)
+            throw new CustomerGeneralValidationException("Roles must be distinct.");
+        if (command.RoleCodes is not null && command.RoleCodes.Any(code => code is not (1 or 3 or 25 or 10)))
+            throw new CustomerGeneralValidationException("Role is inactive or unknown.");
+        if (current.Roles.Any(role => role.Code == 10 && role.IsActive) && command.RoleCodes is not null && !command.RoleCodes.Contains(10))
+            throw new CustomerGeneralConflictException("customer_role_required", "The insurer role cannot be removed.");
+        if (command.RoleCodes is not null && command.RoleCodes.Contains(10) && !current.Roles.Any(role => role.Code == 10 && role.IsActive))
+            throw new CustomerGeneralValidationException("The insurer role cannot be added from this screen.");
+        var roles = command.RoleCodes is null ? current.Roles : command.RoleCodes.Select(code => new CustomerGeneralRole(code, code switch { 1 => "CLIENTE", 3 => "APODERADO", 25 => "ACCIONISTA", 10 => "ASEGURADORA", _ => null }, true, code != 10)).ToArray();
+        var result = current with { FirstName = command.FirstName, PaternalSurname = command.PaternalSurname, MaternalSurname = command.MaternalSurname, BirthDate = command.BirthDate, LegalName = command.LegalName, ContactName = command.ContactName, ContactPosition = command.ContactPosition, Roles = roles };
+        Profiles[command.PersonId] = result;
+        return Task.FromResult(result);
+    }
+
+    private static CustomerGeneralProfile Profile(int personId, int personality, IReadOnlyList<CustomerGeneralRole> roles, string rfc = "ABC010203AB1") =>
+        new(personId, personality, rfc, personality == 20 ? null : "Nombre", personality == 20 ? null : "Apellido", null, new DateTime(1980, 1, 1), personality == 20 ? "Sociedad" : null, personality == 20 ? "Contacto" : null, personality == 20 ? "Puesto" : null, 1, PersonModifiedAt, SubtypeModifiedAt, roles);
+}
+
+internal sealed class FakePersonPepChecker : IPersonPepChecker
+{
+    public Task<PepCheckResult> CheckAsync(CustomerCreateCommand command, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(command.Rfc switch
+        {
+            "PEP-MATCH" => new PepCheckResult(PepCheckStatus.Match),
+            "PEP-UNAVAILABLE" => new PepCheckResult(PepCheckStatus.Unavailable),
+            _ => new PepCheckResult(PepCheckStatus.NoMatch),
+        });
+    }
 }
 
 internal sealed class FakeCustomerAccountWriteRepository : ICustomerAccountWriteRepository
