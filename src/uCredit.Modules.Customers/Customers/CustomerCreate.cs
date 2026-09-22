@@ -79,6 +79,8 @@ public static class CustomerCreateValidator
         if (string.IsNullOrWhiteSpace(command.TaxRegimeCode) || command.TaxRegimeCode.Trim().Length > 20 || !int.TryParse(command.TaxRegimeCode.Trim(), out _)) Add("taxRegimeCode", "Tax regime must be a valid SAT key of at most 20 characters.");
         if (command.RoleCodes.Count == 0 || command.RoleCodes.Any(code => code <= 0) || command.RoleCodes.Distinct().Count() != command.RoleCodes.Count)
             Add("roleCodes", "At least one distinct active person role is required.");
+        if (command.RoleCodes.Contains(10))
+            Add("roleCodes", "The insurer role is not available during customer creation.");
         if (command.LegalPersonality == CustomerCreatePersonality.Moral)
         {
             Require(command.LegalName, 200, "legalName", Add);

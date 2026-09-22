@@ -70,7 +70,7 @@ export function CustomerCreateView({ onBack, onCreated }: { onBack: () => void; 
       <label>Fecha de nacimiento o constitución<input required type="date" value={form.constitutionOrBirthDate} onChange={e => set('constitutionOrBirthDate', e.target.value)} /></label>
       <fieldset ref={roleGroupRef} tabIndex={-1} aria-describedby="role-selection-error" aria-invalid={message === 'Selecciona al menos un rol.'}>
         <legend>Roles</legend>
-        {roles.map(role => <label key={role.roleCode}><input type="checkbox" checked={form.roleCodes.includes(role.roleCode)} onChange={event => set('roleCodes', event.target.checked ? [...form.roleCodes, role.roleCode] : form.roleCodes.filter(code => code !== role.roleCode))} /> {role.roleName}</label>)}
+        {roles.map(role => <label key={role.roleCode}><input type="checkbox" checked={form.roleCodes.includes(role.roleCode)} disabled={role.roleCode === 10} onChange={event => set('roleCodes', event.target.checked ? [...form.roleCodes, role.roleCode] : form.roleCodes.filter(code => code !== role.roleCode))} /> {role.roleName}{role.roleCode === 10 && ' (No disponible en el alta)'}</label>)}
         <span id="role-selection-error" className="field-error" role="status" aria-live="polite">{message === 'Selecciona al menos un rol.' ? message : ''}</span>
       </fieldset>
       {pepConfirmationRequired && <fieldset className="pep-confirmation" aria-describedby="pep-confirmation-help">

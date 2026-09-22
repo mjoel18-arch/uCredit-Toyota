@@ -173,6 +173,37 @@ export type CustomerDetail = Omit<CustomerListItem, 'rfcMasked'> & {
   activeEmails: CustomerEmail[]
 }
 
+export type CustomerGeneralRole = { roleCode: number; roleName: string | null; isActive: boolean; isEditable: boolean }
+export type CustomerGeneralProfile = {
+  personId: number
+  legalPersonalityCode: number
+  rfc: string | null
+  firstName: string | null
+  paternalSurname: string | null
+  maternalSurname: string | null
+  birthDate: string | null
+  legalName: string | null
+  contactName: string | null
+  contactPosition: string | null
+  statusCode: number
+  personModifiedAt: string
+  subtypeModifiedAt: string
+  roles: CustomerGeneralRole[]
+}
+export type CustomerGeneralPayload = {
+  firstName?: string | null
+  paternalSurname?: string | null
+  maternalSurname?: string | null
+  birthDate?: string | null
+  legalName?: string | null
+  contactName?: string | null
+  contactPosition?: string | null
+  roleCodes?: number[]
+  expectedPersonModifiedAt: string
+  expectedSubtypeModifiedAt: string
+  pepConfirmed?: boolean
+}
+
 export type ManagedCustomerAddress = {
   addressId: number
   personId: number
@@ -367,6 +398,14 @@ export function searchCustomers(criteria: { personId?: number; rfc?: string; nam
 
 export function getCustomerByPersonId(personId: number): Promise<CustomerDetail> {
   return apiRequest<CustomerDetail>('/api/v1/customers/' + encodeURIComponent(personId))
+}
+
+export function getCustomerGeneral(personId: number): Promise<CustomerGeneralProfile> {
+  return apiRequest<CustomerGeneralProfile>('/api/v1/customers/' + encodeURIComponent(personId) + '/general')
+}
+
+export function updateCustomerGeneral(personId: number, payload: CustomerGeneralPayload): Promise<CustomerGeneralProfile> {
+  return withCsrf<CustomerGeneralProfile>('/api/v1/customers/' + encodeURIComponent(personId) + '/general', { method: 'PUT', body: JSON.stringify(payload) })
 }
 
 export type CustomerProfileRequirement = 'generalData' | 'address' | 'phone' | 'account'
