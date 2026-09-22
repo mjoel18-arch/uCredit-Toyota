@@ -1,6 +1,6 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { ApiError, apiErrorMessage } from '../../shared/api/apiClient'
-import { createCustomer, type CustomerCreatePayload } from '../auth/authApi'
+import { createCustomer, getCustomerRoleCatalog, type CustomerCreatePayload, type CustomerRoleOption } from '../auth/authApi'
 
 export function getTemporaryTaxRegimeCode(legalPersonality: number): string {
   return legalPersonality === 2 ? '612' : legalPersonality === 20 ? '601' : '605'
@@ -9,22 +9,41 @@ export function getTemporaryTaxRegimeCode(legalPersonality: number): string {
 const initial: CustomerCreatePayload = {
   legalPersonality: 1, rfc: '', firstName: '', paternalSurname: '', maternalSurname: '', constitutionOrBirthDate: '',
   countryCode: 1, groupCode: 1, riskCode: 1, contactFormCode: 1, taxRegimeCode: getTemporaryTaxRegimeCode(1),
-  phoneTypeCode: 1, areaCode: '', phoneNumber: '', pepConfirmed: false,
+  roleCodes: [], pepConfirmed: false,
 }
 
 export function CustomerCreateView({ onBack, onCreated }: { onBack: () => void; onCreated: (personId: number, pepValidationStatus: 'Executed' | 'NotExecuted') => void }) {
   const [form, setForm] = useState<CustomerCreatePayload>(initial)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
+  const [roles, setRoles] = useState<CustomerRoleOption[]>([])
+  const [rolesLoading, setRolesLoading] = useState(true)
+  const [rolesError, setRolesError] = useState('')
   const [pepConfirmationRequired, setPepConfirmationRequired] = useState(false)
   const [pepRetryUsed, setPepRetryUsed] = useState(false)
+  const roleGroupRef = useRef<HTMLFieldSetElement>(null)
   const set = (key: keyof CustomerCreatePayload, value: unknown) => setForm(current => ({ ...current, [key]: value }))
+  useEffect(() => {
+    let mounted = true
+    void getCustomerRoleCatalog().then(catalog => { if (mounted) setRoles(catalog) }).catch(error => {
+      if (!mounted) return
+      if (error instanceof ApiError && error.status === 401) onBack()
+      else setRolesError(apiErrorMessage(error, 'No fue posible cargar los roles disponibles.'))
+    }).finally(() => { if (mounted) setRolesLoading(false) })
+    return () => { mounted = false }
+  }, [onBack])
   async function submit(event: FormEvent) {
     event.preventDefault(); if (busy) return
     if (pepConfirmationRequired && form.pepConfirmed) {
       if (pepRetryUsed) return
       setPepRetryUsed(true)
     }
+    if (form.roleCodes.length === 0) {
+      setMessage('Selecciona al menos un rol.')
+      roleGroupRef.current?.focus()
+      return
+    }
+    if (rolesLoading || Boolean(rolesError) || roles.length === 0) return
     setBusy(true); setMessage('')
     try { const result = await createCustomer(form); onCreated(result.personId, result.pepValidationStatus) }
     catch (error) {
@@ -41,18 +60,25 @@ export function CustomerCreateView({ onBack, onCreated }: { onBack: () => void; 
     <span className="eyebrow">Alta controlada</span><h2 id="customer-create-title">Crear cliente</h2>
     <p>La información se valida antes de una única transacción Legacy. No se almacenan formularios localmente.</p>
     {message && <div className="notice notice-error" role="alert">{message}</div>}
+    {rolesLoading && <p role="status">Cargando roles disponibles…</p>}
+    {rolesError && <div className="notice notice-error" role="alert">{rolesError}</div>}
+    {!rolesLoading && !rolesError && roles.length === 0 && <div className="notice notice-error" role="alert">No hay roles disponibles para registrar la persona.</div>}
     <form className="customer-create-form" onSubmit={(event) => void submit(event)}>
       <label>Personalidad<select value={form.legalPersonality} onChange={e => { const legalPersonality = Number(e.target.value); setForm(current => ({ ...current, legalPersonality, taxRegimeCode: getTemporaryTaxRegimeCode(legalPersonality) })) }}><option value="1">Física</option><option value="2">Física con actividad empresarial</option><option value="20" disabled>Moral (Próximamente)</option></select></label>
       <label>RFC<input required maxLength={13} value={form.rfc} onChange={e => set('rfc', e.target.value)} /></label>
       {form.legalPersonality === 20 ? <><label>Razón social<input required value={form.legalName ?? ''} onChange={e => set('legalName', e.target.value)} /></label><label>Régimen de capital<input required value={form.capitalRegime ?? ''} onChange={e => set('capitalRegime', e.target.value)} /></label></> : <><label>Nombre<input required value={form.firstName ?? ''} onChange={e => set('firstName', e.target.value)} /></label><label>Apellido paterno<input value={form.paternalSurname ?? ''} onChange={e => set('paternalSurname', e.target.value)} /></label><label>Apellido materno<input value={form.maternalSurname ?? ''} onChange={e => set('maternalSurname', e.target.value)} /></label></>}
       <label>Fecha de nacimiento o constitución<input required type="date" value={form.constitutionOrBirthDate} onChange={e => set('constitutionOrBirthDate', e.target.value)} /></label>
-      <label>Lada<input required value={form.areaCode} onChange={e => set('areaCode', e.target.value)} /></label><label>Teléfono<input required value={form.phoneNumber} onChange={e => set('phoneNumber', e.target.value)} /></label>
+      <fieldset ref={roleGroupRef} tabIndex={-1} aria-describedby="role-selection-error" aria-invalid={message === 'Selecciona al menos un rol.'}>
+        <legend>Roles</legend>
+        {roles.map(role => <label key={role.roleCode}><input type="checkbox" checked={form.roleCodes.includes(role.roleCode)} onChange={event => set('roleCodes', event.target.checked ? [...form.roleCodes, role.roleCode] : form.roleCodes.filter(code => code !== role.roleCode))} /> {role.roleName}</label>)}
+        <span id="role-selection-error" className="field-error" role="status" aria-live="polite">{message === 'Selecciona al menos un rol.' ? message : ''}</span>
+      </fieldset>
       {pepConfirmationRequired && <fieldset className="pep-confirmation" aria-describedby="pep-confirmation-help">
         <legend>Confirmación PEP requerida</legend>
         <label><input type="checkbox" checked={form.pepConfirmed} onChange={event => set('pepConfirmed', event.target.checked)} /> Confirmo que deseo continuar después de revisar la coincidencia PEP.</label>
         <span id="pep-confirmation-help">La confirmación sólo se enviará al proveedor después de marcar esta opción.</span>
       </fieldset>}
-      <div className="form-actions"><button type="submit" disabled={busy}>{busy ? 'Validando…' : 'Revisar y crear cliente'}</button><button type="button" className="button-secondary" onClick={onBack} disabled={busy}>Cancelar</button></div>
+      <div className="form-actions"><button type="submit" disabled={busy || rolesLoading || Boolean(rolesError) || roles.length === 0}>{busy ? 'Validando…' : 'Revisar y crear cliente'}</button><button type="button" className="button-secondary" onClick={onBack} disabled={busy}>Cancelar</button></div>
     </form>
   </section>
 }

@@ -116,10 +116,9 @@ public static class CustomerCreateEndpoints
 public sealed record CustomerCreateRequest(
     CustomerCreatePersonality LegalPersonality, string Rfc, string? FirstName, string? PaternalSurname, string? MaternalSurname,
     string? LegalName, string? CapitalRegime, DateOnly ConstitutionOrBirthDate, int CountryCode, int GroupCode, int RiskCode,
-    int ContactFormCode, string TaxRegimeCode, int PhoneTypeCode, string AreaCode, string PhoneNumber, string? PhoneExtension,
-    string? PhoneContact, bool PepConfirmed)
+    int ContactFormCode, string TaxRegimeCode, IReadOnlyList<int>? RoleCodes, bool PepConfirmed)
 {
-    public CustomerCreateCommand ToCommand() => new(LegalPersonality, Rfc, FirstName, PaternalSurname, MaternalSurname, LegalName, CapitalRegime, ConstitutionOrBirthDate, CountryCode, GroupCode, RiskCode, ContactFormCode, TaxRegimeCode, PhoneTypeCode, AreaCode, PhoneNumber, PhoneExtension, PhoneContact);
+    public CustomerCreateCommand ToCommand() => new(LegalPersonality, Rfc, FirstName, PaternalSurname, MaternalSurname, LegalName, CapitalRegime, ConstitutionOrBirthDate, CountryCode, GroupCode, RiskCode, ContactFormCode, TaxRegimeCode, RoleCodes ?? []);
 }
 
 public sealed record CustomerCreateResponse(int PersonId, string PepValidationStatus);

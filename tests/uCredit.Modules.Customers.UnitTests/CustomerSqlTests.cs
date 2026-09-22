@@ -72,12 +72,12 @@ public sealed class CustomerSqlTests
     }
 
     [Fact]
-    public void CustomerCreationDoesNotWriteOrReserveAnAddress()
+    public void CustomerCreationDoesNotWriteOrReservePhoneOrAddress()
     {
-        Assert.DoesNotContain("CDOMICILIO", LegacyCustomerWriteRepository.CreatePhoneInsertSql, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("@AddressId", LegacyCustomerWriteRepository.CreatePhoneInsertSql, StringComparison.Ordinal);
-        Assert.Contains("@UnassociatedAddressId", LegacyCustomerWriteRepository.CreatePhoneInsertSql, StringComparison.Ordinal);
-        Assert.Contains("DMO_FL_CVE", LegacyCustomerWriteRepository.CreatePhoneInsertSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("CDOMICILIO", LegacyCustomerWriteRepository.CreatePersonInsertSql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("CTELEFONO", LegacyCustomerWriteRepository.CreatePersonInsertSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("@RoleCode", LegacyCustomerWriteRepository.CreateRoleInsertSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("@Phone", LegacyCustomerWriteRepository.CreateRoleInsertSql, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -144,6 +144,20 @@ public sealed class CustomerSqlTests
         Assert.DoesNotContain("UPDATE", sql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("DELETE", sql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("SELECT *", sql, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void PersonRoleCatalogSqlIsActiveParameterizedAndReadOnly()
+    {
+        var sql = LegacyCustomerRoleCatalogRepository.ReadSql;
+        Assert.Contains("PAR_FL_CVE = @CatalogCode", sql, StringComparison.Ordinal);
+        Assert.Contains("PAR_FG_STATUS = 1", sql, StringComparison.Ordinal);
+        Assert.Contains("PAR_CL_VALOR > 0", sql, StringComparison.Ordinal);
+        Assert.Contains("ORDER BY PAR_DS_DESCRIPCION ASC, PAR_CL_VALOR ASC", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("SELECT *", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("INSERT", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("UPDATE", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("DELETE", sql, StringComparison.OrdinalIgnoreCase);
     }
 
     [Theory]

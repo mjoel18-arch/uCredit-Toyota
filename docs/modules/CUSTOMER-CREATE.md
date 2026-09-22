@@ -4,7 +4,7 @@
 
 ### Contrato vigente: alta de persona sin domicilio
 
-Desde `feature/customer-create-without-address`, `POST /api/v1/customers` crea únicamente la persona y el teléfono explícitamente capturado. El request HTTP, `CustomerCreateCommand`, el validador y el formulario no aceptan propiedades de domicilio ni de correo. La administración de `CDOMICILIO` y `CPERSONA_EMAIL` permanece exclusivamente en sus endpoints y paneles independientes.
+Desde `feature/customer-create-without-address`, `POST /api/v1/customers` crea únicamente la persona y los roles seleccionados. El request HTTP, `CustomerCreateCommand`, el validador y el formulario no aceptan propiedades de domicilio, correo ni teléfono. La administración de `CDOMICILIO`, `CTELEFONO` y `CPERSONA_EMAIL` permanece exclusivamente en sus endpoints y paneles independientes.
 
 El flujo vigente es: crear la persona, obtener `PNA_FL_PERSONA` y completar posteriormente domicilios y correos desde sus secciones independientes. El alta no reserva consecutivos ni escribe `CPERSONA_EMAIL` o `KEMAIL_USO`; tampoco consulta los catálogos 244 o 248. Los correos no forman parte de readiness ni de la habilitación de contratos.
 
@@ -16,7 +16,13 @@ La investigación del alta Legacy quedó documentada. La implementación moderna
 
 Trazabilidad: `su_MtoPersona.aspx` -> `cmdGuardar_Click` -> `sn_clsPersona.ActualizaPersona` -> `sd_clsPersona.ActualizaPersona`.
 
-El alta de persona usa una transacción para `CPERSONA`, `CPFISICA` o `CPMORAL` y `CPTIPO`. La bitácora de seguridad se guarda después del retorno exitoso mediante `Seguridad.Bitacora.Guarda`, en una operación separada.
+El alta de persona usa una transacción para `CPERSONA`, `CPFISICA` o `CPMORAL` y una fila `CPTIPO` por cada rol seleccionado. El rol Cliente (`1`) no es obligatorio: basta cualquier rol activo del catálogo 5. La bitácora de seguridad se conserva dentro del flujo transaccional moderno.
+
+### Roles de persona
+
+El formulario carga `GET /api/v1/catalogs/person-roles` y presenta únicamente checkboxes de `CPARAMETRO` con `PAR_FL_CVE = 5`, `PAR_FG_STATUS = 1` y `PAR_CL_VALOR > 0`. El catálogo no está hardcodeado en el frontend; se ordena por descripción y devuelve sólo `roleCode` y `roleName`. Se exige al menos un rol, se rechazan duplicados y se valida nuevamente cada código activo dentro de la transacción de alta. Una descripción duplicada para el mismo código se trata como inconsistencia controlada, no se elige silenciosamente.
+
+Crear cliente no crea teléfono ni reserva `CCATCONSEC` para `CTELEFONO`. Después de `201`, el detalle muestra la administración de teléfonos vacía y la acción **Agregar teléfono** del módulo independiente. Readiness permanece incompleto hasta que existan domicilio, teléfono y cuenta activos.
 
 ## Matriz final de inserción
 

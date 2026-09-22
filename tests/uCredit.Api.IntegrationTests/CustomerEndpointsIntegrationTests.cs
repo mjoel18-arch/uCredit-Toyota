@@ -49,6 +49,32 @@ public sealed class CustomerEndpointsIntegrationTests(TestApiFactory factory)
     }
 
     [Fact]
+    public async Task PersonRoleCatalogReturnsOnlyActiveRoleFields()
+    {
+        using var client = CreateClient("customers-with-permission");
+        var response = await client.GetAsync("/api/v1/catalogs/person-roles", TestContext.Current.CancellationToken);
+        var json = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("roleCode", json, StringComparison.Ordinal);
+        Assert.Contains("roleName", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("PAR_FL_CVE", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("PAR_FG_STATUS", json, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+public async Task PersonRoleCatalogRequiresAuthenticationPermissionAndTenant()
+    {
+        var anonymous = await factory.CreateClient().GetAsync("/api/v1/catalogs/person-roles", TestContext.Current.CancellationToken);
+        using var noPermission = CreateClient("with-permission");
+        using var noTenant = CreateClient("customers-without-tenant");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await noPermission.GetAsync("/api/v1/catalogs/person-roles", TestContext.Current.CancellationToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await noTenant.GetAsync("/api/v1/catalogs/person-roles", TestContext.Current.CancellationToken)).StatusCode);
+    }
+
+    [Fact]
     public async Task AnonymousCustomerSearchReturnsUnauthorized()
     {
         var response = await factory.CreateClient().GetAsync("/api/v1/customers/?personId=42", TestContext.Current.CancellationToken);

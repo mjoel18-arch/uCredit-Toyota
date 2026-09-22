@@ -21,11 +21,7 @@ public sealed record CustomerCreateCommand(
     int RiskCode,
     int ContactFormCode,
     string TaxRegimeCode,
-    int PhoneTypeCode,
-    string AreaCode,
-    string PhoneNumber,
-    string? PhoneExtension,
-    string? PhoneContact);
+    IReadOnlyList<int> RoleCodes);
 
 public sealed record CustomerCreateResult(int PersonId);
 
@@ -81,9 +77,8 @@ public static class CustomerCreateValidator
         if (command.RiskCode <= 0) Add("riskCode", "Risk is required.");
         if (command.ContactFormCode <= 0) Add("contactFormCode", "Contact form is required.");
         if (string.IsNullOrWhiteSpace(command.TaxRegimeCode) || command.TaxRegimeCode.Trim().Length > 20 || !int.TryParse(command.TaxRegimeCode.Trim(), out _)) Add("taxRegimeCode", "Tax regime must be a valid SAT key of at most 20 characters.");
-        if (command.PhoneTypeCode <= 0) Add("phoneTypeCode", "Phone type is required.");
-        Require(command.AreaCode, 10, "areaCode", Add);
-        Require(command.PhoneNumber, 30, "phoneNumber", Add);
+        if (command.RoleCodes.Count == 0 || command.RoleCodes.Any(code => code <= 0) || command.RoleCodes.Distinct().Count() != command.RoleCodes.Count)
+            Add("roleCodes", "At least one distinct active person role is required.");
         if (command.LegalPersonality == CustomerCreatePersonality.Moral)
         {
             Require(command.LegalName, 200, "legalName", Add);
