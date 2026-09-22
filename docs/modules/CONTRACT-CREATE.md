@@ -553,7 +553,9 @@ por categoría sin la nulabilidad de cada una de las 100 columnas. Con la
 evidencia recibida sólo puede afirmarse:
 
 - NOT NULL identificado: 3.
-- NOT NULL con regla completa: 1, PNA_FL_PERSONA.
+- NOT NULL con regla completa inicialmente confirmada: 1, PNA_FL_PERSONA;
+  la matriz ampliada posterior agrega tres reglas derivadas y dos reglas
+  calculadas confirmadas para la ruta nueva.
 - NOT NULL sin regla completa: 2, CNB_FL_CVE y CTO_FE_SOL_DESEMBOLSO.
 - Generada por procedimiento: CTO_FL_CVE.
 - Derivadas: PNA_FL_PERSONA, CTO_FL_CVE, CTO_FE_ULTMOD, USR_CL_CVE,
@@ -653,6 +655,210 @@ Después del INSERT se observaron, según la ruta:
 
 No se debe ejecutar ninguno de estos efectos sin confirmar parámetros,
 idempotencia, rollback y ausencia de PII en auditoría.
+
+## Punto exacto de inserción Legacy
+
+La sentencia de alta localizada está en:
+
+- Archivo: E:Sitios IA CodexProleasenet_ToyotasdLsenetsd_clsContratoPropuesta.vb
+- Clase: sd_clsContratoPropuesta
+- Método: ActualizaContrato
+- Representación: SQL dinámico construido en la variable strSQL
+- Ejecución: _Tran.EjecutaQuery(strSQL)
+
+La sentencia es un INSERT directo a KCONTRATO. No se encontró un
+CommandText, SqlCommand o procedimiento almacenado que sustituya ese INSERT.
+La generación de CTO_FL_CVE sí usa dbo.spLsnetGeneraClaveContrato y debe
+ocurrir antes del INSERT dentro de la misma transacción. La cadena visible
+termina en el SQL dinámico y en _Tran.EjecutaQuery; no se encontró un
+ensamblado adicional que oculte el INSERT.
+
+El INSERT enumera las columnas de KCONTRATO en grupos: clave/persona,
+operación/empresa/plaza/tasas, producto y esquema, fechas, importes,
+anticipo/enganche, CNBV, exigibilidad/calendario, pagos, amortización,
+moratoria, pagos finales, auditoría, dirección, CFDI, facturación y EVM.
+El orden de valores es posicional respecto de esa lista y procede de la
+firma de ActualizaContrato y de literales del propio SQL. La lista completa de
+columnas ya está transcrita en la matriz de 100 columnas de este documento;
+no se reproduce aquí SQL propietario ni valores reales.
+
+## Estado técnico frente a estado funcional
+
+Para las 70 columnas NOT NULL se identificó una asignación técnica en la
+firma, en el INSERT o en una constante de la ruta Legacy. Esto significa que
+el valor que recibe la sentencia es trazable en el punto de escritura; no
+significa que uCredit tenga aprobada la regla funcional para producirlo.
+
+### Conteo técnico
+
+- Origen técnico confirmado en el punto de INSERT: 70.
+- Origen técnico no localizado en el punto de INSERT: 0.
+- Origen upstream completamente confirmado para CD: 6:
+  CTO_FL_CVE, PNA_FL_PERSONA, CTO_FE_GENERACION, CTO_FE_ULTMOD,
+  CTO_NO_SALDO y CTO_FE_ULTPAGO.
+- Valores técnicos provenientes de parámetros cuyo origen upstream para CD
+  aún debe cerrarse: 64.
+
+### Conteo funcional
+
+- Reglas funcionales confirmadas: 6.
+- Reglas funcionales parciales: 2, CNB_FL_CVE y
+  CTO_FE_SOL_DESEMBOLSO.
+- Reglas funcionales pendientes: 62.
+
+La diferencia entre ambos conteos evita declarar resuelta una columna sólo
+porque aparece en el INSERT. Las 64 columnas no resueltas técnicamente a nivel
+de CD sí tienen una variable o parámetro visible, pero falta confirmar su
+selección, default, catálogo, fórmula, aplicabilidad o valor exacto para CD.
+
+## Cadena de parámetros para contrato nuevo
+
+La secuencia observable es:
+
+su_actContratoPropuesta.aspx.vb / GuardaInfo
+→ variables de controles, ViewState, Session y valores precargados
+→ sn_clsContratoPropuesta.ActualizaContrato
+→ sd_clsContratoPropuesta.ActualizaContrato
+→ cálculo de clave y valores derivados
+→ INSERT dinámico de KCONTRATO.
+
+Los parámetros técnicos identificados incluyen:
+
+- strContrato: clave existente o vacío en alta; la clave nueva proviene del
+  generador, no del navegador.
+- intPersona: Request/CvePersona validado por el flujo Legacy; en uCredit
+  debe provenir del cliente seleccionado del servidor.
+- intPropuesta: cero para CD sin propuesta.
+- intEmpresa: valor recibido desde la selección/contexto Legacy; para el MVP
+  se solicita 1, pero la resolución moderna aún no está confirmada.
+- strTipoOper: valor del selector de operación; para el MVP es CD.
+- intLineaCred: línea seleccionada o automática; no se puede asumir NULL para
+  CD sin confirmar LineaAutomatica.
+- intPaquete, intOpcPaq, intProducto: controles de producto/paquete, con
+  NULL cuando la ruta Legacy los considera ausentes.
+- intPlaza: valor de la plaza seleccionada/preseleccionada.
+- intStatCont: estado proporcionado por el flujo; valor inicial CD pendiente.
+- intMoneda: catálogo seleccionado.
+- dblPCapital y dblMtoFinanciar: capital y cálculo financiero.
+- dblMtoAnt/dblPtjAnt: anticipo o enganche según flags del esquema.
+- dblNoRent/dblMtoRent/dblDeposito: rentas y depósito según esquema.
+- intCNB: selección CNBV compatible con operación.
+- fechas: controles, CFECHA_OPERACION o cálculos posteriores, según la fecha.
+- tasas ordinarias y moratorias: controles y catálogos de tasa.
+- pagos finales, residual y opción de compra: controles condicionados por
+  esquema.
+- strUser y strFecOper: actor y fecha operativa del contexto.
+- strCveUso/intDireccion: CFDI compatible y dirección activa del cliente.
+- FlagIVAFronterizo: resultado de la consulta de persona.
+- strEstatusFact, Monto_EVM y Porcentaje_EVM: controles/configuración aún
+  pendientes para CD.
+
+Los valores 0, 1, cadena vacía, NULL, fecha contable y fechas calculadas se
+documentan como valores técnicos Legacy cuando aparecen en la ruta. La
+decisión de conservar cada uno en uCredit sigue siendo funcional, salvo los
+seis valores ya confirmados.
+
+## Matriz CD: valor técnico esperado
+
+Escenario: TOP_CL_CVE = CD, EMP_FL_CVE = 1, contrato nuevo, sin propuesta,
+sin reestructura, sin contrato maestro, sin subsidio y sin seguro financiado.
+Los valores son simbólicos y no son datos reales.
+
+| Columna NOT NULL | Valor técnico CD | Origen en Legacy | Regla funcional |
+|---|---|---|---|
+| CTO_FL_CVE | <generatedContractKey> | spLsnetGeneraClaveContrato | Confirmada |
+| EMP_FL_CVE | 1 | intEmpresa/contexto | Pendiente |
+| TAS_FL_CVE | <selectedRateId> | selector de tasa | Pendiente |
+| LCR_FL_CVE | <selectedCreditLineId> o NULL técnico | línea/LineaAutomatica | Pendiente |
+| CTO_FE_GENERACION | <businessDate> | CFECHA_OPERACION | Confirmada |
+| CTO_FE_INICIO | <capturedStartDate> | strFecIni | Pendiente |
+| CTO_FG_REESTRUCTURA | 0 en el escenario | intFgReestructura | Parcial; aprobar constante |
+| CTO_FG_STATUS | <initialContractStatus> | intStatCont | Pendiente |
+| CTO_CL_MONEDA | <selectedCurrency> | catálogo moneda | Pendiente |
+| CTO_NO_MTO_FINANCIAR | <calculatedFinancedAmount> | cálculo financiero | Pendiente |
+| CTO_NO_MTO_ANTICIPO | <calculatedAdvanceAmount> o 0 | esquema | Pendiente |
+| CTO_NO_PRC_ANTICIPO | <calculatedAdvancePercent> o 0 | esquema | Pendiente |
+| CTO_NO_PLAZO | <term> | control plazo | Pendiente |
+| CTO_NO_MTO_ENGANCHE | <calculatedDownPayment> o 0 | esquema | Pendiente |
+| CTO_NO_PRC_ENGANCHE | <calculatedDownPaymentPercent> o 0 | esquema | Pendiente |
+| CTO_NO_DEPRENTAS | <rentCount> o 0 | esquema | Pendiente |
+| CTO_NO_MTO_DEPRENTAS | <rentAmount> o 0 | esquema | Pendiente |
+| CTO_CL_IVA | <validatedTaxRateOrCode> | cliente/régimen | Pendiente |
+| CTO_NO_MTO_DEPOSITO | <depositAmount> o 0 | esquema | Pendiente |
+| CNB_FL_CVE | <selectedCnbId> | CCNB/TOP_CL_CVE | Parcial |
+| CTO_CL_EDOEQUIPO | <equipmentStatus> | control de equipo | Pendiente |
+| CTO_NO_TASA_BASE | <baseRate> | pestaña Tasa | Pendiente |
+| CTO_NO_PUNTOS_ADIC | <additionalPoints> | pestaña Tasa | Pendiente |
+| CTO_NO_FACTOR | <rateFactor> | pestaña Tasa | Pendiente |
+| CTO_FE_PRIMER_PAGO | <capturedOrCalculatedFirstPaymentDate> | fecha/control | Pendiente |
+| CTO_FE_ULTPAGO | <calculatedLastPaymentDate> | último CTP_FE_EXIGIBILIDAD | Confirmada |
+| CTO_FE_SOL_DESEMBOLSO | <capturedOrDerivedDisbursementDate> | strFecSolDesem | Parcial |
+| CTO_FE_ACTIVACION | <activationDateOrLegacyValue> | flujo de estado | Pendiente |
+| CTO_NO_TASA_NOMINAL | <calculatedNominalRate> | cálculo de tasa | Pendiente |
+| CTO_CL_FPAGO_SEGBIEN | <insurancePaymentMethod> | seguro | Pendiente |
+| CTO_FE_BAJA | <legacyNullOrSentinelDate> | estado | Pendiente |
+| CTO_FE_FIRMA_CONTRATO | <capturedContractSignatureDate> | formulario | Pendiente |
+| CTO_FE_FIRMAANEXO | <capturedAnnexSignatureDate> | formulario | Pendiente |
+| CTO_CL_EXIGIBILIDAD | <selectedDueRule> | catálogo | Pendiente |
+| CTO_CL_CALENDARIO | <selectedCalendar> | catálogo | Pendiente |
+| CTO_CL_FPAGO | <selectedPaymentMethod> | catálogo | Pendiente |
+| PPG_FL_CVE | <selectedPaymentPeriodicity> | esquema pago | Pendiente |
+| CTO_FG_SEGVIDA | 0 en el escenario sin seguro | intAplicaSegVida | Parcial; aprobar constante |
+| CTO_NO_MTO_VRESIDUAL | <residualAmount> o 0 | esquema | Pendiente |
+| CTO_CL_ESQPAGO | <selectedPaymentScheme> | esquema | Pendiente |
+| CTO_NO_PRC_VRESIDUAL | <residualPercent> o 0 | esquema | Pendiente |
+| CTO_NO_SALDO | <calculatedFinancedAmount> | dblSaldo = dblMtoFinanciar | Confirmada |
+| CTO_CL_AMORT | <selectedAmortizationType> | catálogo | Pendiente |
+| TLO_FL_CVE | <selectedCalculationType> | catálogo | Pendiente |
+| CTO_FE_ULTMOD | <businessDate> | CFECHA_OPERACION | Confirmada |
+| CTO_FG_TASA_REGULADA | <regulatedRateFlag> | pestaña Tasa | Pendiente |
+| CTO_NO_TASA_TECHO | <rateCeiling> o 0 | pestaña Tasa | Pendiente |
+| CTO_NO_TASA_PISO | <rateFloor> o 0 | pestaña Tasa | Pendiente |
+| TAS_FL_CVEMORA | <moratoryRateId> | catálogo | Pendiente |
+| TLO_FL_CVEMORA | <moratoryCalculationType> | catálogo | Pendiente |
+| TAS_NO_BASEMORA | <moratoryBaseRate> | pestaña moratoria | Pendiente |
+| CTO_NO_PUNTOS_MORA | <moratoryPoints> | pestaña moratoria | Pendiente |
+| CTO_NO_FACTOR_MORA | <moratoryFactor> | pestaña moratoria | Pendiente |
+| CTO_NO_NOMINAL_MORA | <calculatedMoratoryNominalRate> | cálculo | Pendiente |
+| CTO_NO_MTO_OPCIONCOMPRA | <purchaseOptionAmount> o 0 | pagos finales | Pendiente |
+| CTO_NO_PRC_OPCIONCOMPRA | <purchaseOptionPercent> o 0 | pagos finales | Pendiente |
+| CTO_NO_MTO_PAGOFINAL | <finalPaymentAmount> o 0 | esquema | Pendiente |
+| CTO_NO_PRC_PAGOFINAL | <finalPaymentPercent> o 0 | esquema | Pendiente |
+| CTO_FG_CHKLIST | <legacyChecklistFlag> | flujo Legacy | Pendiente |
+| CTO_FG_MAESTRO | 0 en el escenario | intEsContMtro | Parcial; aprobar constante |
+| CTO_NO_ANEXO | <annexNumber> | flujo Legacy | Pendiente |
+| CTO_FE_ULTCALC_INTERES | <interestCalculationDate> | cálculo | Pendiente |
+| CTO_NO_GRACIA_INT | <interestGraceAmountOrRule> | esquema | Pendiente |
+| CTO_FG_CESION | 0 en el escenario | intFgCesionado | Parcial; aprobar constante |
+| CTO_FG_CV | <legacyCvFlag> | flujo Legacy | Pendiente |
+| PNA_FL_PERSONA | <selectedPersonId> | cliente seleccionado | Confirmada |
+| SCB_FL_CVE | <collectionStatusId> | cobranza/seguro | Pendiente |
+| CTO_NO_SDOANT | 0 en contrato nuevo si la regla se confirma | flujo nuevo | Pendiente |
+| CTO_NO_EVM | <evmAmount> o 0 | EVM/configuración | Pendiente |
+| CTO_NO_PORC_EVM | <evmPercent> o 0 | EVM/configuración | Pendiente |
+
+NULL sólo debe usarse si la columna y la ruta física lo permiten. Los
+marcadores entre signos angulares no son valores aceptados por Legacy ni por
+uCredit; representan el origen pendiente de resolver.
+
+## Fechas de alta CD
+
+| Columna | Origen técnico visible | Estado |
+|---|---|---|
+| CTO_FE_GENERACION | CFECHA_OPERACION | Confirmada |
+| CTO_FE_INICIO | strFecIni/campo de inicio | Pendiente |
+| CTO_FE_PRIMER_PAGO | strFecPrimerPago o ObtenFechas | Pendiente |
+| CTO_FE_ULTPAGO | último CTP_FE_EXIGIBILIDAD | Confirmada |
+| CTO_FE_SOL_DESEMBOLSO | strFecSolDesem, posible regla de primer pago | Pendiente |
+| CTO_FE_ACTIVACION | strFecActivacion | Pendiente |
+| CTO_FE_BAJA | strFecBaja o sentinel Legacy | Pendiente |
+| CTO_FE_FIRMA_CONTRATO | strFecFirmaCont | Pendiente |
+| CTO_FE_FIRMAANEXO | strFecFirmaAnexo | Pendiente |
+| CTO_FE_ULTCALC_INTERES | cálculo posterior | Pendiente |
+| CTO_FE_ULTMOD | CFECHA_OPERACION | Confirmada |
+
+No se debe sustituir ninguna fecha pendiente por DateTime.Now. Las fechas
+derivadas deben usar CFECHA_OPERACION o el cálculo Legacy equivalente.
 
 ## Bloqueos para un POST seguro
 
@@ -757,15 +963,178 @@ confirmada.
 ### Resumen cuantitativo
 
 - Columnas NOT NULL totales: 70.
-- Columnas confirmadas: 4.
+- Columnas confirmadas: 6.
 - Capturadas por usuario con regla completa: 0.
 - Derivadas confirmadas: 3, CTO_FE_GENERACION, CTO_FE_ULTMOD y
   PNA_FL_PERSONA.
 - Generadas por procedimiento: 1, CTO_FL_CVE.
 - Constantes Legacy confirmadas como regla general: 0.
-- Columnas bloqueadas: 66.
+- Columnas bloqueadas: 64.
 
 La clasificación es deliberadamente estricta: CNB_FL_CVE tiene una regla
 parcial, pero sigue bloqueada hasta cerrar catálogo, vigencia y compatibilidad;
 CTO_FE_SOL_DESEMBOLSO sigue bloqueada porque no está confirmado si procede de
 la UI, de CFECHA_OPERACION o del tipo de operación.
+
+## Rastreo adicional del alta nueva
+
+La ruta analizada es la de contrato nuevo sin propuesta, sin reestructura y
+sin contrato maestro. Se excluyeron las ramas de modificación, propuesta,
+reestructura y maestro.
+
+### Cadena común confirmada
+
+La cadena funcional observada es:
+
+su_actContratoPropuesta.aspx
+→ cmdGuardar_Click
+→ GuardaInfo
+→ ValidaCampos
+→ sn_clsContratoPropuesta.ActualizaContrato
+→ sd_clsContratoPropuesta.ActualizaContrato
+→ INSERT/UPDATE de KCONTRATO
+→ sn_clsContratoPropuesta.CalculaTPagos
+→ ObtenPeriodosPagos
+→ ActualizaFechaUltimoPago
+→ CalculaCAT
+→ cierre transaccional.
+
+La llamada a ActualizaContrato recibe empresa, operación, línea, plaza,
+moneda, producto, esquema, fechas, tasas, importes, CNBV, CFDI y dirección.
+Que un parámetro exista no prueba por sí solo el valor de alta ni su regla.
+
+Confirmaciones nuevas de cálculo:
+
+- CTO_NO_SALDO se inicializa con el monto financiado en la ruta de inserción
+  observada.
+- CTO_FE_ULTPAGO se obtiene del último CTP_FE_EXIGIBILIDAD devuelto por
+  ObtenPeriodosPagos y se aplica mediante ActualizaFechaUltimoPago.
+- La tabla de pagos se calcula mediante CalculaTPagos después de la operación
+  principal y antes del cierre del flujo.
+- CalculaCAT se ejecuta antes de terminar la transacción cuando corresponde;
+  si existe un CAT proporcionado, el flujo actualiza CTO_NO_PORC_CAT.
+- Cuando conPropuesta es cero, se obtiene la persona y se generan cargos
+  automáticos antes de finalizar el flujo.
+- La excepción en ActualizaContrato cancela la transacción; el flujo externo
+  también devuelve error y no debe permitir conservar una clave parcialmente
+  creada.
+
+### Matriz A: reglas comunes confirmadas
+
+| Columna | Cadena de valor | Valor de alta confirmado | Aplicabilidad | Estado |
+|---|---|---|---|---|
+| CTO_FL_CVE | GuardaInfo → ActualizaContrato → spLsnetGeneraClaveContrato | StrLLaveContrato, máximo 15 | Todas | Confirmada |
+| PNA_FL_PERSONA | Cliente seleccionado → intPersona → ActualizaContrato | PersonId validado | Todas | Confirmada |
+| CTO_FE_GENERACION | Fecha Legacy → fecha de operación → INSERT | CFECHA_OPERACION | Todas | Confirmada |
+| CTO_FE_ULTMOD | Fecha Legacy → fecha de operación → INSERT/UPDATE | CFECHA_OPERACION | Todas | Confirmada |
+| CTO_NO_SALDO | monto financiado → dblSaldo → INSERT | dblMtoFinanciar en alta nueva | Todas | Confirmada para la ruta |
+| CTO_FE_ULTPAGO | CalculaTPagos → ObtenPeriodosPagos → último CTP_FE_EXIGIBILIDAD | Último vencimiento calculado | Todas con pagos | Confirmada para la ruta |
+
+### Matriz B: reglas específicas o condicionales
+
+| Grupo | Condición | Evidencia | Estado para CD |
+|---|---|---|---|
+| Anticipo | ESQ_FG_ANT_RENTA | ActualizaContrato decide entre monto/porcentaje o cero | Pendiente de esquema CD |
+| Enganche | ESQ_FG_ENGANCHE | ActualizaContrato decide entre monto/porcentaje o cero | Pendiente de esquema CD |
+| Residual | ESQ_FG_APLICA_VRESIDUAL | Valor residual y porcentaje se insertan sólo si aplica | Pendiente de esquema CD |
+| Pago final | ESQ_FG_APLICA_PFINAL | Monto y porcentaje finales se insertan sólo si aplica | Pendiente de esquema CD |
+| Tasa regulada | intAplicaTasaReg | Piso/techo dependen de la marca regulada | Pendiente de operación CD |
+| Tasa moratoria | tasa, tipo de cálculo y parámetros moratorios | ObtieneTasaDefault/ActualizaContrato | Pendiente de catálogo CD |
+| Seguro | intFormaPagoSeg/intAplicaSegVida | Controles y parámetros de seguro | Excluido del MVP solicitado, pero NOT NULL requiere regla |
+| Subsidio | parámetros posteriores a ActualizaContrato | Flujo de esquema de pago adicional | Excluido del MVP; no asumir cero sin regla física |
+| CFDI | CUSO_COMPROBANTES y relación de régimen | Validación de uso compatible | Pendiente de filas activas confirmadas |
+| CNBV | CCNB y TOP_CL_CVE | status, operación y default inicial | Regla parcial; pendiente para CD |
+
+### Matriz C: reglas no confirmadas
+
+Las siguientes columnas continúan sin cadena completa de valor y validación
+para una operación CD: EMP_FL_CVE, TAS_FL_CVE, LCR_FL_CVE,
+CTO_FE_INICIO, CTO_FG_REESTRUCTURA, CTO_FG_STATUS, CTO_CL_MONEDA,
+CTO_NO_MTO_FINANCIAR, CTO_NO_MTO_ANTICIPO, CTO_NO_PRC_ANTICIPO,
+CTO_NO_PLAZO, CTO_NO_MTO_ENGANCHE, CTO_NO_PRC_ENGANCHE,
+CTO_NO_DEPRENTAS, CTO_NO_MTO_DEPRENTAS, CTO_CL_IVA, CTO_NO_MTO_DEPOSITO,
+CNB_FL_CVE, CTO_CL_EDOEQUIPO, CTO_NO_TASA_BASE, CTO_NO_PUNTOS_ADIC,
+CTO_NO_FACTOR, CTO_FE_PRIMER_PAGO, CTO_FE_SOL_DESEMBOLSO,
+CTO_FE_ACTIVACION, CTO_NO_TASA_NOMINAL, CTO_CL_FPAGO_SEGBIEN,
+CTO_FE_BAJA, CTO_FE_FIRMA_CONTRATO, CTO_FE_FIRMAANEXO,
+CTO_CL_EXIGIBILIDAD, CTO_CL_CALENDARIO, CTO_CL_FPAGO, PPG_FL_CVE,
+CTO_FG_SEGVIDA, CTO_NO_MTO_VRESIDUAL, CTO_CL_ESQPAGO,
+CTO_NO_PRC_VRESIDUAL, CTO_CL_AMORT, TLO_FL_CVE,
+CTO_FG_TASA_REGULADA, CTO_NO_TASA_TECHO, CTO_NO_TASA_PISO,
+TAS_FL_CVEMORA, TLO_FL_CVEMORA, TAS_NO_BASEMORA, CTO_NO_PUNTOS_MORA,
+CTO_NO_FACTOR_MORA, CTO_NO_NOMINAL_MORA, CTO_NO_MTO_OPCIONCOMPRA,
+CTO_NO_PRC_OPCIONCOMPRA, CTO_NO_MTO_PAGOFINAL, CTO_NO_PRC_PAGOFINAL,
+CTO_FG_CHKLIST, CTO_FG_MAESTRO, CTO_NO_ANEXO, CTO_FE_ULTCALC_INTERES,
+CTO_NO_GRACIA_INT, CTO_FG_CESION, CTO_FG_CV, SCB_FL_CVE, CTO_NO_SDOANT,
+CTO_NO_EVM y CTO_NO_PORC_EVM.
+
+En esta lista, CTO_NO_SALDO, CTO_FE_GENERACION, CTO_FE_ULTMOD,
+CTO_FE_ULTPAGO, CTO_FL_CVE y PNA_FL_PERSONA ya fueron retiradas por tener
+reglas confirmadas para la ruta analizada. La lista no afirma que todas sean
+NOT NULL adicionales: sólo enumera columnas NOT NULL cuyo valor de alta CD
+carece todavía de una regla completa.
+
+## Evaluación MVP: CD, empresa 1, contrato nuevo
+
+Supuestos de análisis: TOP_CL_CVE = CD, EMP_FL_CVE = 1, sin propuesta, sin
+reestructura, sin contrato maestro, sin subsidio y sin seguros financiados.
+
+La evaluación todavía no queda completa. Los bloqueos principales son:
+
+- no está documentado cómo se resuelven empresa 1, línea de crédito, plaza,
+  tasa, moneda, calendario, exigibilidad y forma de pago para CD;
+- no está confirmado el estado inicial de contrato;
+- no está resuelto el origen de CTO_FE_SOL_DESEMBOLSO;
+- no están cerrados capital, monto financiado, anticipo, enganche, tasas y CAT;
+- no están cerrados CNBV, CFDI, amortización y pagos finales;
+- no está confirmado qué columnas NOT NULL reciben constantes cero o uno en
+  esta operación y cuáles reciben un valor del esquema;
+- no se ha cerrado el contrato de los cargos automáticos, facturación y
+  cálculo de amortización.
+
+## Procedimientos y tablas involucrados en CD
+
+Procedimientos y métodos observados antes o durante el INSERT:
+
+- ObtenEsquemaFinanciamiento;
+- spLsnetGeneraClaveContrato;
+- SpDigitoVerificadorXPer, sólo si aplica la configuración de referencia;
+- COBM_SelBanamexR;
+- ActualizaContrato;
+- cálculos y consultas de producto/esquema.
+
+Después del INSERT o antes del cierre del flujo:
+
+- CalculaTPagos;
+- ObtenPeriodosPagos;
+- ActualizaFechaUltimoPago;
+- CalculaCAT;
+- ActualizaContratoEsquemaPagoAdicional;
+- GenerarCargosAutomaticos;
+- InsertaTipoCalculoTablaAmortizacion o actualización de
+  KCONTRATO_CALCULO_TAMORTIZACION;
+- GrabaContratoCargoInicial cuando existen cargos;
+- operaciones de reestructura sólo fuera del MVP.
+
+Tablas afectadas u observadas en estas rutas:
+
+- KCONTRATO;
+- KCONTRATO_CALCULO_TAMORTIZACION;
+- KTPAGO_CONTRATO mediante el cálculo de pagos;
+- tablas de cargos/facturación como KCTO_FACT, KPRODUCTO_FACTURA y
+  KCARAC_PROD_FACT, cuando el producto las activa;
+- tablas de cargos iniciales cuando existen cargos.
+
+La frontera exacta de cada procedimiento y su rollback debe verificarse antes
+de trasladar el flujo a Dapper. La transacción debe abarcar generación de
+clave, INSERT, cálculos, tablas relacionadas y auditoría.
+
+## Resultado de esta etapa
+
+- Columnas NOT NULL con regla confirmada para cualquier operación: 6,
+  incluyendo clave, persona, fechas de generación/última modificación,
+  saldo inicial y último pago calculado.
+- Columnas NOT NULL aún bloqueadas para cualquier operación: 64.
+- Columnas NOT NULL aún bloqueadas específicamente para CD: 64.
+- El MVP CD no tiene una matriz completa.
+- No es seguro implementar todavía un primer POST limitado a CD.
