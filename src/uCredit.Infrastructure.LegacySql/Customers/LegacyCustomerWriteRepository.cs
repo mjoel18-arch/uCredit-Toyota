@@ -97,10 +97,10 @@ public sealed partial class LegacyCustomerWriteRepository(
         {
             stage = "catalogs";
             var taxRegime = await ValidateTaxRegimeAsync(connection, transaction, command, cancellationToken);
+            await ValidateRoleCodesAsync(connection, transaction, command.RoleCodes, cancellationToken);
             await EnsureRfcAvailableAsync(connection, transaction, command.Rfc.Trim(), cancellationToken);
             stage = "consecutive";
             var personId = await NextIdAsync(connection, transaction, "CPERSONA", cancellationToken);
-            var phoneId = await NextIdAsync(connection, transaction, "CTELEFONO", cancellationToken);
             var bitacoraId = await NextIdAsync(connection, transaction, "KBITACORA", cancellationToken);
             var fullName = command.LegalPersonality == CustomerCreatePersonality.Moral
                 ? command.LegalName!.Trim()
@@ -113,7 +113,6 @@ public sealed partial class LegacyCustomerWriteRepository(
             parameters.Add("LegalName", command.LegalName, DbType.String, size: 200); parameters.Add("CapitalRegime", command.CapitalRegime, DbType.String, size: 200);
             parameters.Add("ContactForm", command.ContactFormCode, DbType.Int32); parameters.Add("GroupCode", command.GroupCode, DbType.Int32); parameters.Add("RiskCode", command.RiskCode, DbType.Int32); parameters.Add("TaxRegime", taxRegime, DbType.Int32); parameters.Add("CountryCode", command.CountryCode, DbType.Int32);
             parameters.Add("OperationDate", operationDate, DbType.DateTime); parameters.Add("ConstitutionOrBirthDate", command.ConstitutionOrBirthDate.ToDateTime(TimeOnly.MinValue), DbType.Date); parameters.Add("LegacyUserCode", legacyUserCode.Trim(), DbType.String, size: 8);
-            parameters.Add("PhoneId", phoneId, DbType.Int32); parameters.Add("PhoneType", command.PhoneTypeCode, DbType.Int32); parameters.Add("UnassociatedAddressId", 0, DbType.Int32); parameters.Add("AreaCode", command.AreaCode.Trim(), DbType.String, size: 10); parameters.Add("PhoneNumber", command.PhoneNumber.Trim(), DbType.String, size: 30); parameters.Add("PhoneExtension", command.PhoneExtension, DbType.String, size: 10); parameters.Add("PhoneContact", command.PhoneContact, DbType.String, size: 200);
             parameters.Add("BitacoraId", bitacoraId, DbType.Int32);
 
             stage = "person";
@@ -121,9 +120,11 @@ public sealed partial class LegacyCustomerWriteRepository(
             stage = "subtype";
             await connection.ExecuteAsync(new CommandDefinition(command.LegalPersonality == CustomerCreatePersonality.Moral ? CreateMoralInsertSql : CreatePhysicalInsertSql, parameters, transaction, _options.CommandTimeoutSeconds, CommandType.Text, cancellationToken: cancellationToken));
             stage = "role";
-            await connection.ExecuteAsync(new CommandDefinition(CreateRoleInsertSql, parameters, transaction, _options.CommandTimeoutSeconds, CommandType.Text, cancellationToken: cancellationToken));
-            stage = "phone";
-            await connection.ExecuteAsync(new CommandDefinition(CreatePhoneInsertSql, parameters, transaction, _options.CommandTimeoutSeconds, CommandType.Text, cancellationToken: cancellationToken));
+            foreach (var roleCode in command.RoleCodes)
+            {
+                parameters.Add("RoleCode", roleCode, DbType.Int32);
+                await connection.ExecuteAsync(new CommandDefinition(CreateRoleInsertSql, parameters, transaction, _options.CommandTimeoutSeconds, CommandType.Text, cancellationToken: cancellationToken));
+            }
             stage = "audit";
             await connection.ExecuteAsync(new CommandDefinition("INSERT INTO dbo.KBITACORA (BIT_FL_CVE, BIT_FE_FECHA, ATV_FL_CVE, BIT_FE_OPERACION, BIT_DS_REFERENCIA, USR_CL_CVE, USR_CL_FIRMA, BIT_TOP_CVE) VALUES (@BitacoraId, SYSUTCDATETIME(), 4, @OperationDate, @Reference, @LegacyUserCode, @LegacyUserCode, '');", new { BitacoraId = bitacoraId, OperationDate = operationDate, Reference = $"Se agrego la persona con clave {personId}", LegacyUserCode = legacyUserCode.Trim() }, transaction, _options.CommandTimeoutSeconds, CommandType.Text, cancellationToken: cancellationToken));
             stage = "commit";
@@ -163,12 +164,7 @@ public sealed partial class LegacyCustomerWriteRepository(
 
     internal const string CreateRoleInsertSql = """
         INSERT INTO dbo.CPTIPO (PNA_FL_PERSONA, PTI_FG_VALOR, PTI_FE_ULTMOD, USR_CL_CVE)
-        VALUES (@PersonId, 1, @OperationDate, @LegacyUserCode);
-        """;
-
-    internal const string CreatePhoneInsertSql = """
-        INSERT INTO dbo.CTELEFONO (TFN_FL_CVE, PNA_FL_PERSONA, TTL_FL_CVE, DMO_FL_CVE, TFN_CL_LARGA_DISTANCIA, TFN_CL_TELEFONO, TFN_CL_EXTENSION, TFN_FG_STATUS, TFN_FG_REGDEFAULT, TFN_FE_ULTMOD, USR_CL_CVE, TFN_CL_LADA, TFN_DS_CONTACTO)
-        VALUES (@PhoneId, @PersonId, @PhoneType, @UnassociatedAddressId, '', @PhoneNumber, @PhoneExtension, 1, 1, @OperationDate, @LegacyUserCode, @AreaCode, @PhoneContact);
+        VALUES (@PersonId, @RoleCode, @OperationDate, @LegacyUserCode);
         """;
 
     internal static string NormalizeOptionalLegacyString(string? value, int maxLength) =>
@@ -195,6 +191,18 @@ public sealed partial class LegacyCustomerWriteRepository(
         if (!int.TryParse(matchedKey, out var taxRegime))
             throw new CustomerCreateValidationException("The tax regime is not active or compatible with the legal personality.");
         return taxRegime;
+    }
+
+    private static async Task ValidateRoleCodesAsync(SqlConnection connection, SqlTransaction transaction, IReadOnlyList<int> roleCodes, CancellationToken cancellationToken)
+    {
+        if (roleCodes.Count == 0 || roleCodes.Distinct().Count() != roleCodes.Count)
+            throw new CustomerCreateValidationException("At least one distinct person role is required.");
+
+        var activeCodes = (await connection.QueryAsync<int>(new CommandDefinition(
+            "SELECT PAR_CL_VALOR FROM dbo.CPARAMETRO WHERE PAR_FL_CVE = @CatalogCode AND PAR_FG_STATUS = 1 AND PAR_CL_VALOR > 0 AND PAR_CL_VALOR IN @RoleCodes;",
+            new { CatalogCode = 5, RoleCodes = roleCodes }, transaction, cancellationToken: cancellationToken))).ToArray();
+        if (activeCodes.Length != roleCodes.Count || activeCodes.Distinct().Count() != activeCodes.Length || activeCodes.Any(code => !roleCodes.Contains(code)))
+            throw new CustomerCreateValidationException("One or more selected person roles are inactive or unknown.");
     }
 
     private async Task<int> NextIdAsync(SqlConnection connection, SqlTransaction transaction, string tableName, CancellationToken cancellationToken)

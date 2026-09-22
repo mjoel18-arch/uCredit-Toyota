@@ -276,6 +276,12 @@ export function getCustomerAccounts(personId: number): Promise<ManagedCustomerAc
 export function getCustomerBanks(): Promise<CustomerBank[]> {
   return apiRequest<CustomerBank[]>('/api/v1/catalogs/banks')
 }
+
+export type CustomerRoleOption = { roleCode: number; roleName: string }
+
+export function getCustomerRoleCatalog(): Promise<CustomerRoleOption[]> {
+  return apiRequest<CustomerRoleOption[]>('/api/v1/catalogs/person-roles')
+}
 export function createCustomerAccount(personId: number, payload: CustomerAccountPayload): Promise<ManagedCustomerAccount> {
   return withCsrf<ManagedCustomerAccount>(`/api/v1/customers/${encodeURIComponent(personId)}/accounts`, { method: 'POST', body: JSON.stringify(payload) })
 }
@@ -392,11 +398,7 @@ export type CustomerCreatePayload = {
   riskCode: number
   contactFormCode: number
   taxRegimeCode: string
-  phoneTypeCode: number
-  areaCode: string
-  phoneNumber: string
-  phoneExtension?: string
-  phoneContact?: string
+  roleCodes: number[]
   pepConfirmed: boolean
 }
 

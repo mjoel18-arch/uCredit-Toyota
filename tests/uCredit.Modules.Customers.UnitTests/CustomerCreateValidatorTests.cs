@@ -41,8 +41,28 @@ public sealed class CustomerCreateValidatorTests
         Assert.Contains("capitalRegime", errors.Keys);
     }
 
+    [Fact]
+    public void RequiresAtLeastOneRole()
+    {
+        var errors = CustomerCreateValidator.Validate(Valid() with { RoleCodes = [] });
+        Assert.Contains("roleCodes", errors.Keys);
+    }
+
+    [Fact]
+    public void RejectsDuplicateRoles()
+    {
+        var errors = CustomerCreateValidator.Validate(Valid() with { RoleCodes = [3, 3] });
+        Assert.Contains("roleCodes", errors.Keys);
+    }
+
+    [Fact]
+    public void AcceptsMultipleRolesWithoutRequiringCustomerRole()
+    {
+        var errors = CustomerCreateValidator.Validate(Valid() with { RoleCodes = [3, 25] });
+        Assert.DoesNotContain("roleCodes", errors.Keys);
+    }
+
     private static CustomerCreateCommand Valid() => new(
         CustomerCreatePersonality.Individual, "AAA010101AAA", "Synthetic", "Person", "Test", null, null,
-        new DateOnly(1980, 1, 1), 1, 1, 1, 1, "605",
-        1, "55", "5555555555", null, null);
+        new DateOnly(1980, 1, 1), 1, 1, 1, 1, "605", [1]);
 }

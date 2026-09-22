@@ -29,6 +29,7 @@ public static class DependencyInjection
         services.AddScoped<ICustomerPhoneReadRepository, LegacyCustomerPhoneReadRepository>();
         services.AddScoped<ICustomerAccountReadRepository, LegacyCustomerAccountReadRepository>();
         services.AddScoped<ICustomerBankReadRepository, LegacyCustomerBankReadRepository>();
+        services.AddScoped<ICustomerRoleCatalogRepository, LegacyCustomerRoleCatalogRepository>();
         services.AddScoped<LegacyCustomerEmailReadRepository>();
         services.AddScoped<ICustomerEmailReadRepository>(provider => provider.GetRequiredService<LegacyCustomerEmailReadRepository>());
         services.AddScoped<ICustomerEmailUsageRepository>(provider => provider.GetRequiredService<LegacyCustomerEmailReadRepository>());

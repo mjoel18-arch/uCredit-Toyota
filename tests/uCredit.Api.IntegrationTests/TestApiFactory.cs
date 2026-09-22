@@ -49,6 +49,8 @@ public sealed class TestApiFactory : WebApplicationFactory<Program>
             services.AddSingleton<ICustomerAccountReadRepository, FakeCustomerAccountReadRepository>();
             services.RemoveAll<ICustomerBankReadRepository>();
             services.AddSingleton<ICustomerBankReadRepository, FakeCustomerBankReadRepository>();
+            services.RemoveAll<ICustomerRoleCatalogRepository>();
+            services.AddSingleton<ICustomerRoleCatalogRepository, FakeCustomerRoleCatalogRepository>();
             services.RemoveAll<ICustomerEmailReadRepository>();
             services.AddSingleton<ICustomerEmailReadRepository, FakeCustomerEmailReadRepository>();
             services.RemoveAll<ICustomerEmailUsageRepository>();
@@ -258,6 +260,16 @@ internal sealed class FakeCustomerBankReadRepository : ICustomerBankReadReposito
 {
     public Task<IReadOnlyList<CustomerBank>> GetActiveRealAsync(CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<CustomerBank>>([new(2, "Banco Alfa"), new(4, "Banco Beta")]);
+}
+
+internal sealed class FakeCustomerRoleCatalogRepository : ICustomerRoleCatalogRepository
+{
+    public Task<IReadOnlyList<CustomerRoleOption>> GetActiveAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<CustomerRoleOption>>([
+            new(25, "ACCIONISTA"),
+            new(3, "APODERADO"),
+            new(1, "CLIENTE")
+        ]);
 }
 
 internal sealed class FakeCustomerAccountWriteRepository : ICustomerAccountWriteRepository

@@ -109,6 +109,7 @@ app.MapCustomerAddressEndpoints();
 app.MapCustomerPhoneEndpoints();
 app.MapCustomerAccountEndpoints();
 app.MapCustomerBankEndpoints();
+app.MapCustomerRoleCatalogEndpoints();
 app.MapCustomerEmailEndpoints();
 app.MapCustomerCreateEndpoints();
 app.Run();
