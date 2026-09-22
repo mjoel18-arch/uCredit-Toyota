@@ -2134,3 +2134,710 @@ cliente, operación, catálogos y fecha operativa antes de reservar
 consecutivos. La idempotencia se comprobará antes de reservar y nuevamente
 bajo bloqueo dentro de la transacción para impedir duplicar línea,
 `KLTOPERA`, contrato, pagos o cargos.
+
+## Cierre de bloqueos de KCONTRATO para el MVP CD
+
+Esta sección supersede los conteos históricos anteriores de este documento.
+La evidencia directa del método `sd_clsContratoPropuesta.ActualizaContrato`
+confirma que, en alta nueva, la sentencia recibe los argumentos de
+`KCONTRATO` en el orden de la matriz y que la línea automática se invoca antes
+del alta cuando `blnLinAut` es verdadero. La clasificación siguiente separa
+esa evidencia de las decisiones modernas aprobadas.
+
+### Fórmulas y asignaciones confirmadas en `ActualizaContrato`
+
+En el `INSERT` Legacy se observan estas asignaciones:
+
+- `CTO_NO_MTO_FINANCIAR = dblMtoFinanciar` y `CTO_NO_SALDO = dblMtoFinanciar`.
+- `CTO_NO_MTO_ANTICIPO` y `CTO_NO_PRC_ANTICIPO` reciben `dblMtoAnt` y
+  `dblPtjAnt` sólo cuando `ESQ_FG_ANT_RENTA = 1`; de lo contrario reciben 0.
+- `CTO_NO_MTO_ENGANCHE` y `CTO_NO_PRC_ENGANCHE` reciben los mismos valores
+  sólo cuando `ESQ_FG_ENGANCHE = 1`; de lo contrario reciben 0.
+- `CTO_NO_DEPRENTAS = dblNoRent`, `CTO_NO_MTO_DEPRENTAS = dblMtoRent`,
+  `CTO_CL_IVA = dblTasaIVA` y `CTO_NO_MTO_DEPOSITO = dblDeposito`.
+- `CTO_NO_TASA_BASE`, `CTO_NO_PUNTOS_ADIC`, `CTO_NO_FACTOR` y
+  `CTO_NO_TASA_NOMINAL` reciben los parámetros de tasa; para el MVP se
+  validan contra la política de tasa fija y la nominal capturada.
+- `CTO_CL_FPAGO` se escribe como literal `1` en la rama observada y
+  `PPG_FL_CVE` recibe `intPeriodicidad`; su significado funcional CD todavía
+  requiere cerrar los catálogos y no se generaliza a otras operaciones.
+- `CTO_NO_MTO_VRESIDUAL`, `CTO_NO_PRC_VRESIDUAL`, `CTO_NO_MTO_PAGOFINAL` y
+  `CTO_NO_PRC_PAGOFINAL` reciben cero si el esquema no habilita residual o
+  pago final. En el MVP esas funciones están fuera de alcance.
+- `CTO_NO_SALDO = dblSaldo`, donde la rutina inicializa `dblSaldo` con
+  `dblMtoFinanciar`.
+- `CTO_FG_TASA_REGULADA` controla que techo y piso sean los valores recibidos
+  o cero; el MVP usa tasa no regulada y ambos ceros.
+- `CTO_FG_OPC` y sus importes de opción de compra reciben los parámetros de
+  pagos finales; el MVP no habilita la opción y usa cero.
+- `CTO_FG_CHKLIST = 0`, `CTO_FG_CV = 0`, `CTO_NO_SDOANT = 0`,
+  `CTO_FG_TASA_USAORDINARIA = 1` y `SCB_FL_CVE = 1` aparecen como valores
+  técnicos en la sentencia de alta. `SCB_FL_CVE` aún requiere catálogo y
+  significado funcional antes de declararse seguro para el MVP.
+- `CTO_FG_REESTRUCTURA = 0`, `CTO_FG_CESION = intFgCesionado` y
+  `CTO_FG_MAESTRO = intEsContMtro`; reestructura, cesión y maestro están
+  excluidos del MVP y deben recibir la constante moderna aprobada sólo cuando
+  se cierre su semántica física.
+
+La fuente Legacy observada usa `Now` para varias fechas y `GETDATE()` para
+`CTO_FE_OPTERMINA`. La decisión moderna de este documento reemplaza esas
+fechas por la fecha operativa única cuando la columna forma parte del MVP; no
+se copia el reloj Legacy.
+
+### Periodicidad, calendario, amortización y pago
+
+Los parámetros Legacy son `intPeriodicidad`, `intCalendario`,
+`intExigibilidad`, `intEsqPago`, `intCveAmor` e `intTipoCalc`. El código
+confirma el destino, pero no una fila única de catálogo para CD. Permanecen
+pendientes de lectura y compatibilidad:
+
+`PPG_FL_CVE`, `CTO_CL_CALENDARIO`, `CTO_CL_EXIGIBILIDAD`, `CTO_CL_ESQPAGO`,
+`CTO_CL_AMORT` y `TLO_FL_CVE`.
+
+No se usarán frecuencias históricas como regla. Si la configuración CD no
+devuelve una combinación única y activa, el futuro POST fallará antes de
+reservar consecutivos.
+
+### Tasa moratoria
+
+`ActualizaContrato` recibe `intTasaMora`, `intTipoCalcMora`,
+`dblTasaBaseMora`, `dblPuntosMora`, `dblFactorMora` y `dblTasaNomMora`, pero
+la evidencia disponible no cierra todavía la consulta exacta a `CTMORATORIO`
+para `CD`, moneda `1` y configuración activa. El backend deberá resolverla
+server-side y validar vigencia, compatibilidad y unicidad. El frontend no
+enviará identificadores técnicos de tasa moratoria. Si falta la configuración,
+la creación debe rechazarse controladamente antes de cualquier escritura.
+
+### CNBV, CFDI y domicilio
+
+- `CNB_FL_CVE` se recibe seleccionado, pero se valida contra `CCNB` activa y
+  compatible con `CD`; `CTO_CL_EDOEQUIPO` se deriva de esa configuración.
+- `UCO_CL_CLAVE` se recibe como clave funcional y se valida contra el régimen
+  fiscal, `KRELACION_REGIMEN_USOCFDI` activa y `CUSO_COMPROBANTES` activo.
+- `DMO_FL_CVE` debe pertenecer al cliente y estar activo. La decisión restante
+  es si el alta exige predeterminado, dirección fiscal o uso de facturación;
+  no se elige una de esas reglas por frecuencia.
+
+### Empresa, sucursal y seguros
+
+`EMP_FL_CVE = 1` queda aprobado para Toyota y se resuelve por despliegue, no
+desde el navegador. `SUC_FL_CVE` y `SCB_FL_CVE` no se aceptan desde el
+request. La sucursal, la plaza operativa y el catálogo de seguro aún deben
+resolverse por configuración del tenant. `SCB_FL_CVE = 1` es un literal
+observado, no una regla funcional cerrada.
+
+### Estados y fechas restantes
+
+La matriz separa fecha operativa, capturada y calculada:
+
+| Campo | Estado actual |
+|---|---|
+| `CTO_FE_GENERACION`, `CTO_FE_ULTMOD` | Fecha operativa única de `CFECHA_OPERACION` |
+| `CTO_FE_INICIO` | Capturada; validar contra operación y fecha operativa |
+| `CTO_FE_PRIMER_PAGO` | Capturada o calculada según periodicidad; regla CD pendiente |
+| `CTO_FE_ULTPAGO` | Calculada por pagos/amortización; regla CD pendiente |
+| `CTO_FE_SOL_DESEMBOLSO` | Origen UI vs fecha operativa pendiente |
+| `CTO_FE_ACTIVACION` | No se activa un contrato registrado sin transición aprobada |
+| `CTO_FE_BAJA`, `CTO_FE_FIRMA_CONTRATO`, `CTO_FE_FIRMAANEXO` | No aplicables al registro inicial salvo regla Legacy confirmada; requieren valor técnico físico |
+| `CTO_FE_ULTCALC_INTERES` | Posterior al cálculo; proceso y momento pendientes |
+| `CTO_FG_STATUS` | `intStatCont` llega de la captura, pero el valor inicial registrado no está confirmado |
+
+No se debe convertir una fecha no aplicable en `Now` ni `GETDATE`.
+
+### Procesos posteriores y transacción
+
+El código observado llama o puede llamar, según propuesta, reestructura y
+configuración, a procesos de pagos, amortización, cargos, CAT y cálculo de
+tabla. Para el MVP sin propuesta, la secuencia moderna propuesta es:
+
+1. Validar idempotencia, cliente, readiness, domicilio, catálogos, fecha
+   operativa, tasa, moratorio, CNBV, CFDI y parámetros financieros.
+2. Reservar `LCR_FL_CVE` y crear `KLINEA_CREDITO`.
+3. Crear `KLTOPERA` para `CD`.
+4. Generar `CTO_FL_CVE` mediante `spLsnetGeneraClaveContrato`.
+5. Insertar `KCONTRATO`.
+6. Crear el cálculo de amortización y pagos requeridos por la configuración
+   CD; actualizar CAT, cargos obligatorios y bitácora dentro de la misma
+   transacción.
+7. Confirmar sólo al finalizar todos los pasos.
+
+Una falla en cualquiera de esos pasos revierte línea, operación, contrato,
+consecutivos, pagos, cargos, CAT y bitácora. La evidencia Legacy de fronteras
+separadas no cambia la obligación transaccional moderna.
+
+### Matriz de cierre actual
+
+El esquema físico continúa teniendo 70 columnas `NOT NULL`. Con las
+decisiones aprobadas para el MVP y la asignación Legacy localizada:
+
+- **Cerradas:** 47 columnas, incluyendo generación de clave, empresa,
+  persona, línea, moneda, tasa fija, componentes excluidos, montos iniciales
+  aprobados, domicilio y fechas operativas.
+- **Parciales:** 0 como decisión funcional del MVP; las validaciones de
+  catálogo y adaptador siguen siendo necesarias antes de escribir.
+- **Bloqueadas:** 23 columnas, porque aún falta una regla o catálogo de CD:
+
+  `CTO_FG_STATUS`, `CTO_FE_PRIMER_PAGO`, `CTO_FE_ULTPAGO`,
+  `CTO_FE_SOL_DESEMBOLSO`, `CTO_FE_ACTIVACION`, `CTO_FE_BAJA`,
+  `CTO_FE_FIRMA_CONTRATO`, `CTO_FE_FIRMAANEXO`, `CTO_FE_ULTCALC_INTERES`,
+  `CTO_CL_EXIGIBILIDAD`, `CTO_CL_CALENDARIO`, `CTO_CL_FPAGO`, `PPG_FL_CVE`,
+  `CTO_CL_ESQPAGO`, `CTO_CL_AMORT`, `TLO_FL_CVE`, `CTO_CL_FPAGO_SEGBIEN`,
+  `TAS_FL_CVEMORA`, `TLO_FL_CVEMORA`, `TAS_NO_BASEMORA`,
+  `CTO_NO_PUNTOS_MORA`, `CTO_NO_FACTOR_MORA`, `CTO_NO_NOMINAL_MORA`.
+
+La cuenta 47/23 es el estado del MVP documental y no autoriza a ignorar una
+columna física: cada bloqueada debe resolverse con catálogo, fecha no
+aplicable, estado inicial o procedimiento posterior antes del POST.
+
+## DTO mínimo propuesto, sin implementación
+
+El request no debe aceptar identificadores técnicos que el backend puede
+resolver. Para el MVP, el contrato propuesto es:
+
+| Propiedad | Tipo .NET | Requerido | Validación | Destino |
+|---|---|---:|---|---|
+| `personId` | `int` | Sí | Cliente activo y alcance del tenant | `PNA_FL_PERSONA` |
+| `operationCode` | `string` | Sí | Exactamente `CD`, operación activa | `TOP_CL_CVE` |
+| `capital` | `decimal` | Sí | `numeric`/escala física y límites financieros | `CTO_NO_CAPITAL` |
+| `downPaymentAmount` | `decimal` | Sí | No negativo; compatibilidad con esquema | `dblMtoAnt` y derivados de anticipo/enganche |
+| `term` | `int` | Sí | Plazo permitido por CD | `CTO_NO_PLAZO`, línea |
+| `startDate` | `DateOnly` | Sí | Fecha válida y compatible con fecha operativa | `CTO_FE_INICIO` |
+| `firstPaymentDate` | `DateOnly` | Pendiente | Sólo si la regla CD no la deriva | `CTO_FE_PRIMER_PAGO` |
+| `disbursementRequestDate` | `DateOnly` | Pendiente | Sólo si la operación lo exige | `CTO_FE_SOL_DESEMBOLSO` |
+| `nominalAnnualRate` | `decimal` | Sí | `numeric(7,4)` y límites Legacy | `CTO_NO_TASA_NOMINAL`, línea |
+| `cnbvCode` | `int` | Sí | `CCNB` activa y compatible con CD | `CNB_FL_CVE` |
+| `cfdiUseCode` | `string` | Sí | Régimen, relación activa y catálogo activo | `UCO_CL_CLAVE` |
+| `addressId` | `int` | Sí | Domicilio del cliente, activo y regla funcional pendiente | `DMO_FL_CVE` |
+| `idempotencyKey` | `string` | Sí | Longitud/alfabeto controlados; única por actor y operación | Control de idempotencia |
+
+`vatRate`, `paymentPeriodicityCode`, `EMP_FL_CVE`, `LCR_FL_CVE`, `CTO_FL_CVE`,
+`TAS_FL_CVE`, `TLC_FL_CVE`, `SCB_FL_CVE`, estados, saldos, fechas de auditoría,
+usuario Legacy, montos derivados y claves de moratorio quedan fuera del
+request hasta cerrar si son derivados o catálogos obligatorios. Si la
+periodicidad no puede resolverse por configuración CD, se agrega como
+propiedad funcional, no como identificador técnico arbitrario.
+
+## Resultado de preparación
+
+A. **UI:** cliente, operación CD, capital, anticipo, plazo, fecha de inicio,
+tasa nominal, CNBV, CFDI, domicilio y clave de idempotencia; fechas de primer
+pago/desembolso sólo cuando se confirme que son capturadas.
+
+B. **Catálogos:** operación, tasa fija, línea, CNBV, CFDI, domicilio,
+periodicidad/amortización, moratorio y cualquier configuración de seguro
+obligatoria.
+
+C. **Derivados:** clave de contrato, línea, cartera, moneda, fechas
+operativas, montos iniciales, saldo, tasas técnicas y pagos.
+
+D. **Constantes MVP:** empresa `1`, operación `CD`, moneda `1`, línea nueva,
+`TLC_FL_CVE = 2`, línea activa, tasa fija, sin multimóneda, sin subsidio,
+residual, opción, pago final especial, propuesta o reestructura.
+
+E. **Procesos transaccionales:** fecha operativa, consecutivo de línea,
+`KLINEA_CREDITO`, `KLTOPERA`, SP de clave, `KCONTRATO`, pagos, amortización,
+CAT, cargos y bitácora.
+
+F. **Bloqueos restantes:** las 23 columnas listadas, especialmente reglas de
+estado inicial, periodicidad/amortización, fechas de pagos/desembolso,
+moratorio, seguro y procesos posteriores. Por tanto, catálogo/UI y el
+servicio de cálculo/validación pueden diseñarse sin escritura, pero el POST
+transaccional todavía no es seguro.
+
+## Revisión adicional de estado, pagos y moratorio
+
+No se recibió en el contexto de esta revisión un bloque nuevo de resultados
+SQL con filas concretas de `CPERPAGO`, `CPARAMETRO`, `CTCALCULO` o
+`CTMORATORIO`. En consecuencia, se incorporan únicamente las asignaciones que
+sí están visibles en `ActualizaContrato` y se mantienen bloqueadas las
+decisiones que requieren esos valores. Las distribuciones históricas no se
+usan como defaults.
+
+### Estado y fechas
+
+`ActualizaContrato` recibe `intStatCont`, `strFecIni`, `strFecPrimerPago`,
+`strFecSolDesem`, `strFecActivacion`, `strFecBaja`, `strFecFirmaCont`,
+`strFecFirmaAnexo`, `strFecOper` y el usuario. La sentencia también asigna
+fechas con el reloj Legacy (`Now`/`GETDATE`) en algunas rutas. Para uCredit
+queda vigente la decisión moderna de usar una sola fecha de
+`CFECHA_OPERACION`; no se copia el reloj Legacy.
+
+| Columna | Origen visible | Estado |
+|---|---|---|
+| `CTO_FG_STATUS` | `intStatCont` | Bloqueada: falta valor inicial CD y transición autorizada |
+| `CTO_FE_GENERACION` | `strFecOper`/fecha operativa | Confirmada por decisión moderna |
+| `CTO_FE_INICIO` | `strFecIni` | Capturada; validar contra fecha operativa |
+| `CTO_FE_PRIMER_PAGO` | `strFecPrimerPago` | Bloqueada: falta regla de cálculo/captura CD |
+| `CTO_FE_ULTPAGO` | `Now` en ruta observada | Bloqueada: debe derivarse de pagos, no del reloj |
+| `CTO_FE_SOL_DESEMBOLSO` | `strFecSolDesem` | Bloqueada: falta regla de aplicabilidad |
+| `CTO_FE_ACTIVACION` | `strFecActivacion` | Bloqueada: falta transición de estado |
+| `CTO_FE_BAJA` | `strFecBaja` | Bloqueada: falta centinela aprobado/no aplicable |
+| `CTO_FE_FIRMA_CONTRATO` | `strFecFirmaCont` | Bloqueada: falta regla para alta registrada |
+| `CTO_FE_FIRMAANEXO` | `strFecFirmaAnexo` | Bloqueada: falta regla para alta registrada |
+| `CTO_FE_ULTCALC_INTERES` | proceso de cálculo | Bloqueada: falta momento y valor inicial |
+| `CTO_FE_ULTMOD` | `Now` en ruta Legacy | Aprobada modernamente como `CFECHA_OPERACION`; requiere adaptar la escritura |
+
+### Pagos y calendario
+
+El código confirma que `PPG_FL_CVE` recibe `intPeriodicidad`,
+`CTO_CL_EXIGIBILIDAD` recibe `intExigibilidad`, `CTO_CL_CALENDARIO` recibe
+`intCalendario`, `CTO_CL_FPAGO` usa el literal Legacy `1`, `CTO_CL_ESQPAGO`
+recibe `intEsqPago`, `CTO_CL_AMORT` recibe `intCveAmor` y `TLO_FL_CVE`
+recibe `intTipoCalc`. No confirma por sí mismo las filas activas ni la
+compatibilidad de CD.
+
+Por tanto, siguen bloqueados `PPG_FL_CVE`, `CTO_CL_EXIGIBILIDAD`,
+`CTO_CL_CALENDARIO`, `CTO_CL_ESQPAGO`, `CTO_CL_AMORT`, `TLO_FL_CVE` y
+`CTO_CL_FPAGO_SEGBIEN`. Falta evidencia de:
+
+- fila activa y valor exacto de `CPERPAGO` para la periodicidad CD;
+- catálogo y valor de exigibilidad/calendario;
+- significado funcional de `CTO_CL_FPAGO = 1` para este MVP;
+- esquema de pago, tipo de amortización y tipo de cálculo compatibles;
+- regla de seguro para `CTO_CL_FPAGO_SEGBIEN` aun cuando los seguros
+  financiados estén fuera del MVP.
+
+El futuro backend debe resolver estos valores server-side y rechazar una
+configuración inexistente o ambigua antes de reservar consecutivos.
+
+### Tasa moratoria
+
+La correspondencia de parámetros es:
+
+| `CTMORATORIO`/argumento | `KCONTRATO` |
+|---|---|
+| tipo de tasa moratoria / `intTasaMora` | `TAS_FL_CVEMORA` |
+| tipo de cálculo / `intTipoCalcMora` | `TLO_FL_CVEMORA` |
+| tasa base / `dblTasaBaseMora` | `TAS_NO_BASEMORA` |
+| puntos / `dblPuntosMora` | `CTO_NO_PUNTOS_MORA` |
+| factor / `dblFactorMora` | `CTO_NO_FACTOR_MORA` |
+| tasa nominal / `dblTasaNomMora` | `CTO_NO_NOMINAL_MORA` |
+
+La fuente Legacy muestra que esos valores llegan como argumentos, pero no se
+localizó todavía una consulta inequívoca que resuelva una única configuración
+activa por `CD` y moneda `1`. El frontend no enviará identificadores técnicos.
+El backend deberá resolver `CTMORATORIO`, comprobar vigencia, moneda,
+operación y unicidad, y responder `422 contract_late_rate_configuration_required`
+si falta la configuración.
+
+Siguen bloqueadas las seis columnas moratorias: `TAS_FL_CVEMORA`,
+`TLO_FL_CVEMORA`, `TAS_NO_BASEMORA`, `CTO_NO_PUNTOS_MORA`,
+`CTO_NO_FACTOR_MORA` y `CTO_NO_NOMINAL_MORA`.
+
+### Recuento actualizado
+
+Con la evidencia disponible en esta revisión:
+
+- 70 columnas físicas `NOT NULL`.
+- 47 cerradas por evidencia o decisión MVP previa.
+- 0 parciales funcionales.
+- 23 bloqueadas; son las mismas 23 listadas en la sección de cierre anterior,
+  porque no se recibió evidencia SQL nueva con los valores exactos de pagos,
+  estado, fechas y moratorio.
+
+La evidencia faltante por grupo es: valor inicial de `CTO_FG_STATUS`, reglas
+de fechas y centinelas, filas activas de `CPERPAGO`/catálogos de pago, regla
+CD para periodicidad y amortización, catálogo de seguro aplicable y la fila
+única activa de `CTMORATORIO` con su correspondencia a tasa y cálculo.
+
+## Corrección de evidencia moratoria
+
+Esta sección supersede el conteo y el estado de la sección moratoria anterior.
+
+La evidencia SQL confirma una configuración para `CD` y moneda nacional:
+
+| Campo | Valor observado |
+|---|---:|
+| `TMR_FL_CVE` | `7` |
+| `TOP_CL_CVE` | `CD` |
+| `TLO_FL_CVE` | `1` |
+| `TAS_FL_CVE` | `1` |
+| `TMR_CL_MONEDA` | `1` |
+| `TMR_NO_FACTOR` | `0.0000` |
+| `TMR_NO_PUNTOS` | `33.9000` |
+| `TMR_NO_VALTASA` | `33.9000` |
+
+El INSERT de alta de `ActualizaContrato` confirma la asignación de los
+argumentos Legacy a KCONTRATO (`sd_clsContratoPropuesta.vb`, rama de alta):
+
+| Argumento Legacy | Columna KCONTRATO | Estado de origen |
+|---|---|---|
+| `intTasaMora` | `TAS_FL_CVEMORA` | Confirmado: `CTMORATORIO.TAS_FL_CVE` |
+| `intTipoCalcMora` | `TLO_FL_CVEMORA` | Confirmado: `CTMORATORIO.TLO_FL_CVE` |
+| `dblTasaBaseMora` | `TAS_NO_BASEMORA` | Pendiente de asignación upstream inequívoca |
+| `dblPuntosMora` | `CTO_NO_PUNTOS_MORA` | Confirmado: `CTMORATORIO.TMR_NO_PUNTOS` |
+| `dblFactorMora` | `CTO_NO_FACTOR_MORA` | Confirmado: `CTMORATORIO.TMR_NO_FACTOR` |
+| `dblTasaNomMora` | `CTO_NO_NOMINAL_MORA` | Pendiente de asignación upstream inequívoca |
+
+`sd_clsParametrizacion.vb`, método `ObtenTasaMoratoria`, expone
+`TMR_NO_VALTASA`, `TMR_NO_PUNTOS` y `TMR_NO_FACTOR`. En su variante de
+resolución de tasa también expone `TSV_NO_VALOR AS TBASE` desde
+`KTASA_VALOR`. Esto no demuestra que `TMR_NO_VALTASA` se copie directamente a
+`TAS_NO_BASEMORA` ni a `CTO_NO_NOMINAL_MORA`; no se asignará así por inferencia.
+El caller que alimenta `dblTasaBaseMora` y `dblTasaNomMora` antes de
+`ActualizaContrato` debe quedar identificado antes del POST.
+
+La consulta sin filas para `KCONTRATO` con `CTO_FG_STATUS = 1` no implica
+ausencia de configuración moratoria. La resolución debe validar la fila de
+`CTMORATORIO` por operación, moneda, tasa y tipo de cálculo.
+
+En consecuencia, cuatro de las seis columnas moratorias están confirmadas y
+permanecen bloqueadas únicamente:
+
+- `TAS_NO_BASEMORA`: falta confirmar si proviene de `TSV_NO_VALOR`,
+  `TMR_NO_VALTASA` u otra regla de alta.
+- `CTO_NO_NOMINAL_MORA`: falta confirmar si se calcula con la tasa base,
+  puntos/factor, `TMR_NO_VALTASA` u otra regla de alta.
+
+### Recuento corregido
+
+El recuento actualizado de las 70 columnas físicas `NOT NULL` es:
+
+- **51 confirmadas** por evidencia o decisión MVP, incluyendo
+  `TAS_FL_CVEMORA`, `TLO_FL_CVEMORA`, `CTO_NO_PUNTOS_MORA` y
+  `CTO_NO_FACTOR_MORA`.
+- **0 parciales funcionales**.
+- **19 bloqueadas**: las 17 pendientes de estado, fechas, pagos y
+  configuración, más `TAS_NO_BASEMORA` y `CTO_NO_NOMINAL_MORA`.
+
+El futuro backend debe resolver la configuración moratoria server-side,
+validar operación `CD`, moneda `1`, vigencia y unicidad, y responder
+`422 contract_late_rate_configuration_required` si no existe una
+configuración inequívoca o si no puede completar las dos asignaciones aún
+pendientes.
+
+## Evidencia adicional: alta nueva, pagos y moratorios
+
+### Estado inicial
+
+La distribución actual no contiene contratos `CD` con `CTO_FG_STATUS = 1`;
+los estados observados son `3`, `5`, `6`, `10` y `11`. Esa distribución no
+define el estado de alta. En `GuardaInfo`, la llamada de contrato nuevo a
+`ActualizaContrato` pasa el literal `1` en la posición de `intStatCont`
+(`su_actContratoPropuesta.aspx.vb`, bloque de guardado de contrato). Por
+tanto, para el flujo de alta nueva queda confirmada la secuencia: crear con
+`CTO_FG_STATUS = 1` y permitir que procesos posteriores lo cambien. No se
+deduce esa regla de la distribución histórica.
+
+### Pagos: cadena confirmada y valores pendientes
+
+En `su_actContratoPropuesta.aspx.vb`, durante la carga de la pantalla se
+llenan los controles y, al guardar, se copian sus valores a los argumentos de
+`ActualizaContrato`:
+
+| Columna KCONTRATO | Control/argumento | Catálogo o fuente Legacy | Estado para CD |
+|---|---|---|---|
+| `CTO_CL_EXIGIBILIDAD` | `cmbExigibilidad` → `intPCveExig` | `CPARAMETRO`, catálogo `34` | Valor exacto CD pendiente |
+| `CTO_CL_CALENDARIO` | `cmbCalendGen` → `intPCveCalen` | `CPARAMETRO`, catálogo `8` | Valor exacto CD pendiente |
+| `PPG_FL_CVE` | `cmbPeriodicidad` → `intPPeriod` | `CPERPAGO` mediante `ObtenPerPago` | Valor exacto CD pendiente |
+| `CTO_CL_ESQPAGO` | `rdbEsquemas` → `intPEsqPago` | `CESQUEMA_CALCULO`, `CEC_CL_ESQPAGO` | Valor exacto CD pendiente |
+| `CTO_CL_AMORT` | regla de `rdbAmort*` → `intPCveTipoAmort` | opciones de amortización de la pantalla | Valor exacto CD pendiente |
+| `TLO_FL_CVE` | `cmbTipoCalc` → `intPCveTipoCal` | `CTCALCULO` mediante `ObtenTipoCalculoDs` | Debe resolver la configuración CD |
+| `CTO_CL_FPAGO_SEGBIEN` | radios seguro → `intPCveFoPago` | opciones `1=contado`, `2=financiado`, `3=cuenta cliente` | No aplica sin seguro; centinela pendiente |
+
+La pantalla establece el catálogo de exigibilidad con `LlenaComboParametros`
+clave `34`, calendario con clave `8`, periodicidad con `ObtenPerPago`, y
+esquema con `sn_clsEsquemaPago.ObtenEsquemaPago`, que consulta
+`CESQUEMA_CALCULO`. El código de guardado no fija los valores predominantes
+`1/3/1/3/1`; los toma de controles. Por ello la frecuencia observada sólo es
+evidencia auxiliar y no cierra el MVP.
+
+Las variantes confirmadas físicamente para `CTO_CL_FPAGO`, `TLO_FL_CVE` y
+`CTO_CL_FPAGO_SEGBIEN` requieren una regla de operación CD y no pueden
+seleccionarse por frecuencia. Esos valores deben resolverse server-side o
+capturarse mediante catálogos autorizados, nunca como identificadores libres.
+
+### Moratorios: configuración posterior frente a valores del alta
+
+La configuración observada en `CTMORATORIO` para CD/pesos es:
+
+| Campo | Valor |
+|---|---:|
+| `TMR_FL_CVE` | `7` |
+| `TLO_FL_CVE` | `1` |
+| `TAS_FL_CVE` | `1` |
+| `TMR_NO_FACTOR` | `0` |
+| `TMR_NO_PUNTOS` | `33.9` |
+| `TMR_NO_VALTASA` | `33.9` |
+
+El code-behind carga esa configuración mediante `ObtenTasaMoratoria` y
+rellena `cmbTipoTasaTM`, `cmbTipoCalcTM`, `txtTasaBaseTM`, `txtPuntosTM` y
+`txtFactorTM`. Al guardar, `GuardaInfo` vuelve a leer los controles y calcula
+`lblTasaNominalTM`; después los envía a `ActualizaContrato`. Esto demuestra
+que la pestaña moratoria participa en el alta Legacy, aunque sus valores
+puedan reutilizar una configuración técnica posterior. No demuestra que
+`33.9` deba persistirse como valor inicial del contrato.
+
+El mapeo de la sentencia de `ActualizaContrato` queda así:
+
+| Columna | Asignación en alta | Estado |
+|---|---|---|
+| `TAS_FL_CVEMORA` | `intTasaMora` / `cmbTipoTasaTM` | Referencia técnica; valor CD inicial debe validarse contra CTMORATORIO |
+| `TLO_FL_CVEMORA` | `intTipoCalcMora` / `cmbTipoCalcTM` | El default observado es `1`; el control permite otra selección, por lo que falta cerrar la regla CD |
+| `TAS_NO_BASEMORA` | `dblTasaBaseMora` / `txtTasaBaseTM` | Pendiente: el caller puede recibir `TSV_NO_VALOR`; no usar `TMR_NO_VALTASA` por inferencia |
+| `CTO_NO_PUNTOS_MORA` | `dblPuntosMora` / `txtPuntosTM` | Configuración observada `33.9`, pero no aprobada como valor inicial del contrato |
+| `CTO_NO_FACTOR_MORA` | `dblFactorMora` / `txtFactorTM` | Configuración observada `0`; no convertir frecuencia contractual en regla |
+| `CTO_NO_NOMINAL_MORA` | `dblTasaNomMora` / `lblTasaNominalTM` | Calculada por `TasaNominal`; fórmula y valor inicial CD aún requieren cierre |
+| `CTO_FG_TASA_USAORDINARIA` | `chkTasaOrdinariaBase` | La pantalla lo envía; para el MVP se propone `0`, pendiente de confirmación de alta |
+
+La mayoría histórica de contratos con ceros no prueba por sí sola que el alta
+cree ceros. La propuesta de MVP (`1,1,0,0,0,0,0`) queda documentada sólo como
+propuesta, no como regla aprobada, hasta localizar la asignación de alta que
+la confirme. La primera versión de UI no debe exponer una pestaña moratoria:
+el backend debe resolver su configuración y rechazarla de forma controlada
+si es ambigua (`422 contract_late_rate_configuration_required`).
+
+### Recuento documental revisado
+
+- **51 columnas cerradas** por evidencia o decisión MVP previa, incluyendo el
+  estado inicial `CTO_FG_STATUS = 1`.
+- **19 columnas bloqueadas**: pagos con variante no resuelta, fechas y
+  centinelas pendientes, configuración de seguro y asignaciones moratorias
+  cuyo valor de alta no está confirmado.
+- No se marcan como reglas los valores `1/3/1/3/1`, `33.9` ni los ceros
+  históricos.
+
+El POST todavía no puede diseñarse de forma segura. Faltan los valores CD
+exactos y vigentes de los catálogos de pagos, la regla de no-aplicabilidad del
+seguro, la selección definitiva de `TLO_FL_CVE` y la asignación inicial de
+base/nominal moratorios. Los campos de selector serán exigibilidad,
+calendario, periodicidad, esquema de pago, amortización, tipo de cálculo y
+CNBV; el backend derivará empresa, línea, moneda, fechas operativas, tasas
+técnicas y referencias moratorias.
+
+## Cierre técnico de las columnas pendientes del MVP CD
+
+Esta sección supersede los recuentos anteriores cuando difieren. La fuente
+primaria es el flujo de alta nueva de
+`Migrado/su_actContratoPropuesta.aspx.vb`, su llamada a `ActualizaContrato` y
+la construcción del `INSERT` en `sdLsenet/sd_clsContratoPropuesta.vb`.
+Las frecuencias históricas sólo se usan como contraste.
+
+### Trazabilidad de pagos y fechas
+
+En alta nueva, `GuardaInfo` obtiene los valores de pantalla y los pasa a
+`ActualizaContrato`: `cmbExigibilidad` a `intPCveExig`, `cmbCalendGen` a
+`intPCveCalen`, `cmbPeriodicidad` a `intPPeriod`, `rdbEsquemas` a
+`intPEsqPago`, los radios de amortización a `intPCveTipoAmort`,
+`cmbTipoCalc` a `intPCveTipoCal` y los radios de seguro a
+`intPCveFoPago`. La carga de controles confirma las fuentes, pero no una fila
+única compatible con CD:
+
+- exigibilidad: `LlenaComboParametros(..., 34, ...)`;
+- calendario: `LlenaComboParametros(..., 8, ...)`;
+- periodicidad: `ObtenPerPago` sobre `CPERPAGO`;
+- esquema: `sn_clsEsquemaPago.ObtenEsquemaPago`, sobre
+  `CESQUEMA_CALCULO`;
+- tipo de cálculo: `ObtenTipoCalculoDs`, sobre `CTCALCULO`;
+- seguro: radios de la pantalla, con valores Legacy `1=contado`,
+  `2=financiado`, `3=cuenta cliente`.
+
+El INSERT Legacy contiene además un literal `1` para `CTO_CL_FPAGO`. Ese
+campo no pertenece a las 19 pendientes: queda cerrado como constante Legacy
+para esta ruta. No se generaliza a otras operaciones.
+
+Las fechas observadas en la validación y el INSERT son distintas de la
+política moderna aprobada:
+
+- `txtFechaIni` y `txtFechaPriPag` son controles de usuario; la pantalla exige
+  fecha de inicio y primer pago, y si falta desembolso copia la fecha del
+  primer pago a `txtFechaDesem`.
+- `txtFechaDesem` se valida contra la fecha de inicio; no se localizó en este
+  flujo una regla CD que lo derive directamente de `CFECHA_OPERACION`.
+- activación, baja, firma de contrato y firma de anexo usan el valor de
+  pantalla cuando existe; el code-behind asigna `1900-01-01` cuando están
+  vacíos (`su_actContratoPropuesta.aspx.vb`, bloque de extracción de fechas).
+- el INSERT Legacy usa `Now` para `CTO_FE_ULTPAGO` y `CTO_FE_ULTMOD`; la
+  política moderna prohíbe esa fuente y exige una única `CFECHA_OPERACION`
+  leída dentro de la transacción.
+- `ActualizaFechaUltimoPago` puede cambiar posteriormente
+  `CTO_FE_ULTPAGOORIGINAL` y `CTO_FE_ULTPAGO` con la fecha del pago; por ello
+  la fecha inicial y la fecha posterior no deben confundirse.
+- el INSERT posiciona `strFecOper` en el campo de último cálculo de interés
+  del contrato; la asignación debe conservarse como `CFECHA_OPERACION` en el
+  diseño moderno, no como reloj del servidor.
+
+### Matriz exacta de las 19 columnas todavía bloqueadas
+
+Se usa deliberadamente sólo `cerrada` o `bloqueada por evidencia faltante`.
+Una fila queda bloqueada si el código muestra el parámetro pero no permite
+demostrar la regla CD implementable y vigente.
+
+| Columna | Origen exacto | Valor/regla MVP CD | Evidencia Legacy | Validación backend | Estado |
+|---|---|---|---|---|---|
+| `CTO_CL_EXIGIBILIDAD` | `cmbExigibilidad` → `intPCveExig` | Falta fila CD única de CPARAMETRO 34 | `su_actContratoPropuesta.aspx.vb`, carga y `GuardaInfo`; `ActualizaContrato` lo inserta | CPARAMETRO 34 activo y compatible con CD | bloqueada por evidencia faltante |
+| `CTO_CL_CALENDARIO` | `cmbCalendGen` → `intPCveCalen` | Falta fila CD única de CPARAMETRO 8 | carga por `LlenaComboParametros`; argumento de `ActualizaContrato` | CPARAMETRO 8 activo y compatible con CD | bloqueada por evidencia faltante |
+| `PPG_FL_CVE` | `cmbPeriodicidad` → `intPPeriod` | Falta periodicidad CD autoritativa | `ObtenPerPago(0,1,2,...)` y extracción de combo | `CPERPAGO` activo, compatible con moneda/operación y esquema | bloqueada por evidencia faltante |
+| `CTO_CL_ESQPAGO` | `rdbEsquemas` → `intPEsqPago` | Falta esquema CD único | `ObtenEsquemaPago` consulta `CESQUEMA_CALCULO`; valor seleccionado se pasa a `ActualizaContrato` | clave activa y compatible con la operación | bloqueada por evidencia faltante |
+| `CTO_CL_AMORT` | radios `rdbAmort*` → `intPCveTipoAmort` | Falta regla CD entre las opciones | `GuardaInfo` asigna 1/2/3 según radio; INSERT recibe `intCveAmor` | catálogo/regla de amortización activa para CD | bloqueada por evidencia faltante |
+| `TLO_FL_CVE` | `cmbTipoCalc` → `intPCveTipoCal` | Falta tipo de cálculo ordinario CD | `ObtenTipoCalculoDs` y llamada a `ActualizaContrato` | `CTCALCULO` activo y compatible con tasa/esquema | bloqueada por evidencia faltante |
+| `CTO_CL_FPAGO_SEGBIEN` | radios seguro → `intPCveFoPago` | Falta centinela confirmado cuando no aplica seguro | `GuardaInfo` usa 1/2/3; no hay regla CD de no-aplicabilidad | catálogo/regla de seguro; rechazar valor libre | bloqueada por evidencia faltante |
+| `CTO_FE_PRIMER_PAGO` | `txtFechaPriPag` | Fecha capturada; debe cumplir regla CD de periodicidad | validación exige fecha y `ValidaFechaPrimerPago` | no anterior al inicio; fecha válida y compatible con calendario | bloqueada por evidencia faltante |
+| `CTO_FE_ULTPAGO` | INSERT usa `Now`; después `ActualizaFechaUltimoPago` | Fecha inicial calculada por regla de pagos, no `Now` | `sd_clsContratoPropuesta.vb`, INSERT y `ActualizaFechaUltimoPago` | derivar desde pagos y fecha operativa; no reloj servidor | bloqueada por evidencia faltante |
+| `CTO_FE_SOL_DESEMBOLSO` | `txtFechaDesem`, o copia de primer pago | Falta decidir captura/derivación CD | validación y argumento `strFecSolDesem` | fecha válida, no anterior al inicio; fuente única documentada | bloqueada por evidencia faltante |
+| `CTO_FE_ACTIVACION` | `txtFechaAct` o `1900-01-01` | Centinela y transición inicial CD deben aprobarse | extracción de fechas en code-behind; INSERT recibe `strFecActivacion` | no activar sin evento autorizado; centinela sólo si contrato lo permite | bloqueada por evidencia faltante |
+| `CTO_FE_BAJA` | `txtFechaBaja` o `1900-01-01` | Centinela inicial CD debe aprobarse | extracción de fechas; INSERT recibe `strFecBaja` | no baja en alta nueva; valor técnico compatible | bloqueada por evidencia faltante |
+| `CTO_FE_FIRMA_CONTRATO` | `txtFechaFirCont` o `1900-01-01` | Centinela inicial CD debe aprobarse | code-behind y `strFecFirma` | no futura respecto a fecha operativa; aplicabilidad CD | bloqueada por evidencia faltante |
+| `CTO_FE_FIRMAANEXO` | `txtFechaFirAnex` o `1900-01-01` | Centinela inicial CD debe aprobarse | code-behind y `strFecAnexo` | no futura; sólo si el anexo aplica | bloqueada por evidencia faltante |
+| `CTO_FE_ULTCALC_INTERES` | `strFecOper` en el INSERT Legacy | `CFECHA_OPERACION` única del alta moderna | lista de columnas/valores de `ActualizaContrato`; Legacy lo ubica junto a flags de cálculo | exactamente una fecha operativa válida antes de reservar consecutivos | bloqueada por evidencia faltante |
+| `TAS_NO_BASEMORA` | `dblTasaBaseMora` desde `txtTasaBaseTM`/configuración | No copiar automáticamente `TMR_NO_VALTASA` | `ObtenTasaMoratoria` muestra `TSV_NO_VALOR AS TBASE`; caller final aún no localizado | configuración CD/pesos única; error `422 contract_late_rate_configuration_required` | bloqueada por evidencia faltante |
+| `CTO_NO_NOMINAL_MORA` | `dblTasaNomMora` desde `lblTasaNominalTM` | Fórmula/valor inicial de alta no confirmado | code-behind calcula/expone `TasaNominal`, pero falta expresión completa del caller | fórmula Legacy reproducida como regla explícita; no inferir de 33.9 | bloqueada por evidencia faltante |
+| `CTO_FG_TASA_USAORDINARIA` | `chkTasaOrdinariaBase` → `bUsaTasaOrdinaria` | Falta regla CD: no asumir `0` histórico | `GuardaInfo` convierte booleano a 0/1 y lo pasa al INSERT | política de tasa fija CD y compatibilidad con tasa moratoria | bloqueada por evidencia faltante |
+
+La lista anterior explica el aparente desfase de los recuentos previos: el
+literal `CTO_CL_FPAGO = 1` y `CTO_FG_STATUS = 1` ya están cerrados por código,
+mientras que `CTO_FG_TASA_USAORDINARIA` debe contarse explícitamente entre las
+pendientes. Por tanto, el estado actual de las 70 columnas NOT NULL es:
+
+- **51 cerradas** por evidencia Legacy o decisión MVP ya aprobada;
+- **19 bloqueadas por evidencia faltante**;
+- **0 parciales**.
+
+Las 19 bloqueadas son exactamente las filas de la matriz anterior. El bloqueo
+no se resolverá con frecuencias ni con el valor predeterminado de un control:
+requiere localizar las filas activas y compatibles con CD, o documentar una
+decisión funcional moderna explícita.
+
+### Evaluación de seguridad del flujo
+
+- **UI y catálogos GET:** sí pueden diseñarse e implementarse como lectura,
+  siempre que devuelvan sólo catálogos activos y no permitan enviar
+  identificadores técnicos no resueltos.
+- **Servicio de cálculo sin escritura:** sí puede implementarse para validar
+  persona, operación, moneda, fecha operativa, línea, tasas y fórmulas, pero
+  debe devolver un estado bloqueado mientras falten los catálogos de pagos y
+  las dos asignaciones moratorias.
+- **POST `/api/v1/contracts`:** todavía no es seguro. Faltan reglas
+  implementables para las 19 columnas, especialmente pagos, fechas no
+  aplicables, base/nominal moratorios y `CTO_FG_TASA_USAORDINARIA`.
+- **Siguiente unidad mínima:** completar consultas de sólo lectura y el
+  servicio de resolución/validación de configuración CD, sin reservar
+  consecutivos ni escribir KLINEA_CREDITO, KLTOPERACION o KCONTRATO.
+
+### Evidencia Legacy revisada en esta etapa
+
+- `Sitio Web/Migrado/su_actContratoPropuesta.aspx`;
+- `Sitio Web/Migrado/su_actContratoPropuesta.aspx.vb`, incluidos Page_Load,
+  carga de combos, validación de fechas y `GuardaInfo`;
+- `sdLsenet/sd_clsContratoPropuesta.vb`, INSERT/UPDATE de KCONTRATO y
+  `ActualizaFechaUltimoPago`;
+- `sdLsenet/sd_clsParametrizacion.vb`, `ObtenTasaMoratoria`;
+- `Proleasenet.EsquemaPago/sn_clsEsquemaPago.vb`, `ObtenEsquemaPago`;
+- catálogos invocados por la pantalla: CPARAMETRO 34/8, CPERPAGO,
+  CESQUEMA_CALCULO, CTCALCULO y CTMORATORIO.
+
+La evidencia faltante queda delimitada por fila en la matriz; no se vuelve a
+solicitar el esquema físico de KCONTRATO ni distribuciones ya recibidas.
+
+## Auditoría final del conteo físico
+
+El conteo se recalculó desde la matriz física de 70 columnas `NOT NULL`, sin
+reutilizar los totales anteriores. Cada columna aparece exactamente una vez
+en las listas siguientes.
+
+### Columnas `NOT NULL` cerradas (51)
+
+`CTO_FL_CVE`, `EMP_FL_CVE`, `TAS_FL_CVE`, `LCR_FL_CVE`,
+`CTO_FE_GENERACION`, `CTO_FE_INICIO`, `CTO_FG_REESTRUCTURA`, `CTO_FG_STATUS`,
+`CTO_CL_MONEDA`, `CTO_NO_MTO_FINANCIAR`, `CTO_NO_MTO_ANTICIPO`,
+`CTO_NO_PRC_ANTICIPO`, `CTO_NO_PLAZO`, `CTO_NO_MTO_ENGANCHE`,
+`CTO_NO_PRC_ENGANCHE`, `CTO_NO_DEPRENTAS`, `CTO_NO_MTO_DEPRENTAS`,
+`CTO_CL_IVA`, `CTO_NO_MTO_DEPOSITO`, `CTO_NO_TASA_BASE`,
+`CTO_NO_PUNTOS_ADIC`, `CTO_NO_FACTOR`, `CTO_NO_TASA_NOMINAL`,
+`CTO_CL_FPAGO`, `CTO_FG_SEGVIDA`, `CTO_NO_MTO_VRESIDUAL`,
+`CTO_NO_PRC_VRESIDUAL`, `CTO_NO_SALDO`, `CTO_FE_ULTMOD`,
+`CTO_FG_TASA_REGULADA`, `CTO_NO_TASA_TECHO`, `CTO_NO_TASA_PISO`,
+`TAS_FL_CVEMORA`, `TLO_FL_CVEMORA`, `CTO_NO_PUNTOS_MORA`,
+`CTO_NO_FACTOR_MORA`, `CTO_NO_MTO_OPCIONCOMPRA`,
+`CTO_NO_PRC_OPCIONCOMPRA`, `CTO_NO_MTO_PAGOFINAL`,
+`CTO_NO_PRC_PAGOFINAL`, `CTO_FG_CHKLIST`, `CTO_FG_MAESTRO`,
+`CTO_NO_ANEXO`, `CTO_NO_GRACIA_INT`, `CTO_FG_CESION`, `CTO_FG_CV`,
+`PNA_FL_PERSONA`, `SCB_FL_CVE`, `CTO_NO_SDOANT`, `CTO_NO_EVM`,
+`CTO_NO_PORC_EVM`.
+
+Entre las cerradas se incluyen `CTO_FG_STATUS = 1` para alta nueva y
+`CTO_CL_FPAGO = 1` por el literal visible en el INSERT Legacy. También se
+incluyen las decisiones modernas ya aprobadas para tasa fija CD, moneda,
+línea automática, montos iniciales, referencias moratorias y fechas
+operativas. Esas decisiones son específicas del MVP CD, no defaults globales.
+
+### Columnas `NOT NULL` bloqueadas (19)
+
+| Columna | Motivo exacto del bloqueo |
+|---|---|
+| `CNB_FL_CVE` | Falta seleccionar una fila activa inequívoca de `CCNB` compatible con la operación CD; `CNB_FG_REGDEFAULT` sólo es selección inicial. |
+| `CTO_CL_EDOEQUIPO` | No está cerrada la regla de estado de equipo para CD ni su valor de alta. |
+| `CTO_CL_EXIGIBILIDAD` | Falta la fila activa CD de CPARAMETRO 34. |
+| `CTO_CL_CALENDARIO` | Falta la fila activa CD de CPARAMETRO 8. |
+| `PPG_FL_CVE` | Falta la periodicidad CD autoritativa de `CPERPAGO`. |
+| `CTO_CL_ESQPAGO` | Falta el esquema activo compatible de `CESQUEMA_CALCULO`. |
+| `CTO_CL_AMORT` | Falta la opción de amortización autorizada para CD. |
+| `TLO_FL_CVE` | Falta el tipo de cálculo ordinario CD de `CTCALCULO`. |
+| `CTO_CL_FPAGO_SEGBIEN` | Falta el centinela de no-aplicabilidad del seguro. |
+| `CTO_FE_PRIMER_PAGO` | La pantalla captura la fecha, pero falta cerrar su regla CD con periodicidad y calendario. |
+| `CTO_FE_ULTPAGO` | Legacy usa `Now` en el INSERT y luego puede actualizarla; falta la regla inicial moderna derivada de pagos. |
+| `CTO_FE_SOL_DESEMBOLSO` | Falta decidir si CD la captura o la deriva; Legacy copia el primer pago si viene vacía. |
+| `CTO_FE_ACTIVACION` | Falta aprobar aplicabilidad y valor inicial de la transición de activación. |
+| `CTO_FE_BAJA` | Falta aprobar el valor inicial no aplicable y la transición de baja. |
+| `CTO_FE_FIRMA_CONTRATO` | Falta aprobar aplicabilidad y centinela inicial para CD. |
+| `CTO_FE_FIRMAANEXO` | Falta aprobar aplicabilidad y centinela inicial para CD. |
+| `CTO_FE_ULTCALC_INTERES` | Aunque Legacy posiciona `strFecOper`, falta cerrar que el primer cálculo de interés ocurra en ese momento. |
+| `TAS_NO_BASEMORA` | No se confirmó si el alta usa `TSV_NO_VALOR`, `TMR_NO_VALTASA` u otra fuente. |
+| `CTO_NO_NOMINAL_MORA` | No se confirmó la expresión de `TasaNominal` y su valor inicial de alta. |
+
+La suma es `51 + 19 = 70`. `CTO_FG_STATUS` y `CTO_CL_FPAGO` no regresaron
+a bloqueadas: fueron retiradas de esa lista por evidencia directa. Tampoco se
+incluye `CTO_FG_TASA_USAORDINARIA`, porque es nullable físicamente.
+
+### Fechas con posible centinela
+
+| Columna | Expresión Legacy | Condición | Regla MVP CD | Estado |
+|---|---|---|---|---|
+| `CTO_FE_ACTIVACION` | `If(txtFechaAct.Text.Trim.Length > 0, Format(CDate(txtFechaAct.Text), "yyyy-MM-dd"), "1900-01-01")` | Fecha capturada o control vacío | No activar durante el alta sin evento; definir valor técnico no aplicable | Requiere aprobación funcional |
+| `CTO_FE_BAJA` | `If(txtFechaBaja.Text.Trim.Length > 0, Format(CDate(txtFechaBaja.Text), "yyyy-MM-dd"), "1900-01-01")` | Fecha capturada o control vacío | No dar de baja en alta nueva; definir valor técnico no aplicable | Requiere aprobación funcional |
+| `CTO_FE_FIRMA_CONTRATO` | `If(txtFechaFirCont.Text.Trim.Length > 0, Format(CDate(txtFechaFirCont.Text), "yyyy-MM-dd"), "1900-01-01")` | Firma capturada o vacía | Sólo usar fecha real si CD exige firma al alta; no aprobar centinela global | Requiere aprobación funcional |
+| `CTO_FE_FIRMAANEXO` | `If(txtFechaFirAnex.Text.Trim.Length > 0, Format(CDate(txtFechaFirAnex.Text), "yyyy-MM-dd"), "1900-01-01")` | Anexo capturado o vacío | Sólo usar fecha real si el anexo aplica; no aprobar centinela global | Requiere aprobación funcional |
+| `CTO_FE_SOL_DESEMBOLSO` | `txtFechaDesem`; si está vacío, la pantalla asigna `txtFechaPriPag` | Desembolso vacío | Confirmar si CD usa primer pago o fecha operativa; no usar `Now` | Bloqueada |
+| `CTO_FE_PRIMER_PAGO` | `txtFechaPriPag` validada por `ValidaFechaPrimerPago` | Captura obligatoria en la ruta de contrato | Fecha capturada y compatible con periodicidad/calendario | Bloqueada |
+| `CTO_FE_ULTPAGO` | `Format(Now, "yyyyMMdd")` en INSERT; `ActualizaFechaUltimoPago` la modifica después | Alta y pagos posteriores | Derivar con la regla de pagos usando fecha operativa única | Bloqueada |
+| `CTO_FE_ULTCALC_INTERES` | `strFecOper` en la lista de valores del INSERT | Alta Legacy | Usar `CFECHA_OPERACION`; confirmar el momento del primer cálculo | Bloqueada |
+
+Ningún `1900-01-01` se aprueba como regla general. Las cuatro columnas que
+usan ese centinela en el code-behind requieren decisión funcional individual.
+Las fechas modernas no usarán `DateTime.Now`, `GETDATE` ni la fecha del equipo.
+
+### Bloqueos funcionales adicionales
+
+Estos elementos no pertenecen a las 70 columnas `NOT NULL`, pero pueden
+impedir un POST seguro:
+
+| Elemento | Naturaleza | Bloqueo |
+|---|---|---|
+| `CTO_FG_TASA_USAORDINARIA` | Nullable | Falta decidir si CD fija `0` o conserva una configuración de tasa ordinaria. |
+| `DMO_FL_CVE` | Nullable | Falta cerrar si el contrato CD requiere domicilio activo y cuál se selecciona. |
+| `UCO_CL_CLAVE` | Nullable | Requiere uso CFDI compatible con régimen, catálogo y relación activa. |
+| `CTO_NO_TIR` | Nullable/proceso posterior | Falta confirmar cuándo se calcula y si pertenece al alta o a amortización. |
+| `CTO_NO_PORC_CAT` | Nullable/proceso posterior | Falta confirmar cálculo CAT y su frontera transaccional. |
+| `CTO_FE_ULTPAGOORIGINAL` | Nullable/proceso posterior | Se actualiza junto con pagos; requiere regla inicial y de actualización. |
+| Amortización, pagos, CAT y cargos | Procesos posteriores | Deben ejecutarse dentro de la misma transacción moderna y tener rollback verificable. |
+
+**Bloqueos funcionales adicionales: 7.** La columna `CTO_FG_TASA_USAORDINARIA`
+no altera el conteo de las 70.
+
+## Resumen auditado
+
+- **NOT NULL cerradas: 51**.
+- **NOT NULL bloqueadas: 19**.
+- **Total físico NOT NULL: 70**.
+- **Bloqueos funcionales adicionales nullable/procesos: 7**.
+- **UI y catálogos GET implementables:** sí, como lectura y resolución sin
+  escritura.
+- **Cálculo sin escritura implementable:** sí, devolviendo bloqueo controlado
+  cuando falte cualquiera de las configuraciones anteriores.
+- **POST seguro:** no.
+
+La corrección principal del conteo es que `CTO_FG_STATUS` y `CTO_CL_FPAGO`
+quedan cerradas por evidencia Legacy; `CTO_FG_TASA_USAORDINARIA` se mueve a
+los bloqueos funcionales adicionales por ser nullable y no se cuenta entre
+las 70. No se mantuvo el total anterior por inercia: las dos listas son
+exhaustivas y disjuntas.
