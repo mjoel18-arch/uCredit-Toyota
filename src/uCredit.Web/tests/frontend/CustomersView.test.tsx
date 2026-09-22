@@ -2,12 +2,12 @@ import React from 'react'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../../src/shared/api/apiClient'
-import { activateCustomerAccount, activateCustomerPhone, createCustomerAccount, createCustomerPhone, deactivateCustomerAccount, deactivateCustomerPhone, getCustomerAccounts, getCustomerAddresses, getCustomerBanks, getCustomerByPersonId, getCustomerPhones, getCustomerProfileReadiness, searchCustomers, updateCustomerAccount, updateCustomerPhone } from '../../src/features/auth/authApi'
+import { activateCustomerAccount, activateCustomerEmail, activateCustomerPhone, createCustomerAccount, createCustomerEmail, createCustomerPhone, deactivateCustomerAccount, deactivateCustomerEmail, deactivateCustomerPhone, getCustomerAccounts, getCustomerAddresses, getCustomerBanks, getCustomerByPersonId, getCustomerEmailUsages, getCustomerEmails, getCustomerPhones, getCustomerProfileReadiness, searchCustomers, updateCustomerAccount, updateCustomerEmail, updateCustomerPhone } from '../../src/features/auth/authApi'
 import { CustomersView } from '../../src/features/customers/CustomersView'
 
 vi.mock('../../src/features/auth/authApi', async () => {
   const actual = await vi.importActual<typeof import('../../src/features/auth/authApi')>('../../src/features/auth/authApi')
-  return { ...actual, activateCustomerAccount: vi.fn(), activateCustomerPhone: vi.fn(), createCustomerAccount: vi.fn(), createCustomerPhone: vi.fn(), deactivateCustomerAccount: vi.fn(), deactivateCustomerPhone: vi.fn(), getCustomerAccounts: vi.fn(), getCustomerAddresses: vi.fn(), getCustomerBanks: vi.fn(), getCustomerByPersonId: vi.fn(), getCustomerPhones: vi.fn(), getCustomerProfileReadiness: vi.fn(), searchCustomers: vi.fn(), updateCustomerAccount: vi.fn(), updateCustomerPhone: vi.fn() }
+  return { ...actual, activateCustomerAccount: vi.fn(), activateCustomerEmail: vi.fn(), activateCustomerPhone: vi.fn(), createCustomerAccount: vi.fn(), createCustomerEmail: vi.fn(), createCustomerPhone: vi.fn(), deactivateCustomerAccount: vi.fn(), deactivateCustomerEmail: vi.fn(), deactivateCustomerPhone: vi.fn(), getCustomerAccounts: vi.fn(), getCustomerAddresses: vi.fn(), getCustomerBanks: vi.fn(), getCustomerByPersonId: vi.fn(), getCustomerEmailUsages: vi.fn(), getCustomerEmails: vi.fn(), getCustomerPhones: vi.fn(), getCustomerProfileReadiness: vi.fn(), searchCustomers: vi.fn(), updateCustomerAccount: vi.fn(), updateCustomerEmail: vi.fn(), updateCustomerPhone: vi.fn() }
 })
 
 const searchMock = vi.mocked(searchCustomers)
@@ -21,13 +21,19 @@ const createAccountMock = vi.mocked(createCustomerAccount)
 const updateAccountMock = vi.mocked(updateCustomerAccount)
 const activateAccountMock = vi.mocked(activateCustomerAccount)
 const deactivateAccountMock = vi.mocked(deactivateCustomerAccount)
+const emailsMock = vi.mocked(getCustomerEmails)
+const emailUsagesMock = vi.mocked(getCustomerEmailUsages)
+const createEmailMock = vi.mocked(createCustomerEmail)
+const updateEmailMock = vi.mocked(updateCustomerEmail)
+const activateEmailMock = vi.mocked(activateCustomerEmail)
+const deactivateEmailMock = vi.mocked(deactivateCustomerEmail)
 const createPhoneMock = vi.mocked(createCustomerPhone)
 const updatePhoneMock = vi.mocked(updateCustomerPhone)
 const activatePhoneMock = vi.mocked(activateCustomerPhone)
 const deactivatePhoneMock = vi.mocked(deactivateCustomerPhone)
 const unauthorized = vi.fn()
 
-beforeEach(() => { searchMock.mockReset(); detailMock.mockReset(); readinessMock.mockReset(); addressesMock.mockReset(); phonesMock.mockReset(); accountsMock.mockReset(); banksMock.mockReset(); createAccountMock.mockReset(); updateAccountMock.mockReset(); activateAccountMock.mockReset(); deactivateAccountMock.mockReset(); createPhoneMock.mockReset(); updatePhoneMock.mockReset(); activatePhoneMock.mockReset(); deactivatePhoneMock.mockReset(); addressesMock.mockResolvedValue([]); phonesMock.mockResolvedValue([]); accountsMock.mockResolvedValue([]); banksMock.mockResolvedValue([{ bankId: 2, bankName: 'Banco Alfa' }, { bankId: 4, bankName: 'Banco Beta' }]); createAccountMock.mockResolvedValue({} as never); updateAccountMock.mockResolvedValue({} as never); activateAccountMock.mockResolvedValue({} as never); deactivateAccountMock.mockResolvedValue({} as never); createPhoneMock.mockResolvedValue({} as never); updatePhoneMock.mockResolvedValue({} as never); activatePhoneMock.mockResolvedValue({} as never); deactivatePhoneMock.mockResolvedValue({} as never); unauthorized.mockReset() })
+beforeEach(() => { searchMock.mockReset(); detailMock.mockReset(); readinessMock.mockReset(); addressesMock.mockReset(); phonesMock.mockReset(); accountsMock.mockReset(); banksMock.mockReset(); createAccountMock.mockReset(); updateAccountMock.mockReset(); activateAccountMock.mockReset(); deactivateAccountMock.mockReset(); createPhoneMock.mockReset(); updatePhoneMock.mockReset(); activatePhoneMock.mockReset(); deactivatePhoneMock.mockReset(); emailsMock.mockReset(); emailUsagesMock.mockReset(); createEmailMock.mockReset(); updateEmailMock.mockReset(); activateEmailMock.mockReset(); deactivateEmailMock.mockReset(); addressesMock.mockResolvedValue([]); phonesMock.mockResolvedValue([]); accountsMock.mockResolvedValue([]); emailsMock.mockResolvedValue([]); emailUsagesMock.mockResolvedValue([{ code: 1, description: 'Envío de facturas' }, { code: 2, description: 'Envío de estado de cuenta' }, { code: 3, description: 'Salesforce' }]); banksMock.mockResolvedValue([{ bankId: 2, bankName: 'Banco Alfa' }, { bankId: 4, bankName: 'Banco Beta' }]); createAccountMock.mockResolvedValue({} as never); updateAccountMock.mockResolvedValue({} as never); activateAccountMock.mockResolvedValue({} as never); deactivateAccountMock.mockResolvedValue({} as never); createPhoneMock.mockResolvedValue({} as never); updatePhoneMock.mockResolvedValue({} as never); activatePhoneMock.mockResolvedValue({} as never); deactivatePhoneMock.mockResolvedValue({} as never); createEmailMock.mockResolvedValue({} as never); updateEmailMock.mockResolvedValue({} as never); activateEmailMock.mockResolvedValue({} as never); deactivateEmailMock.mockResolvedValue({} as never); unauthorized.mockReset() })
 afterEach(() => cleanup())
 
 const accountFixture = { accountId: 7001, personId: 42, bankId: 2, bankName: 'Banco de prueba', branchNumber: 12, currencyCode: 1, currencyName: 'Pesos', accountTypeCode: 1, accountTypeName: 'Cheques', paymentMethodCode: null, status: 1, maskedAccountNumber: '••••0001', maskedClabe: '••••0002', modifiedAt: '2025-01-01T00:00:00Z' }
@@ -67,6 +73,7 @@ describe('CustomersView', () => {
   it('renders the authorized detail with active phone and emails', async () => {
     searchMock.mockResolvedValue({ items: [{ personId: 42, rfcMasked: 'ABC0******B1', name: 'Cliente', legalPersonality: { code: 1, description: 'FISICA' }, status: { code: 1, description: 'ACTIVO' }, primaryAddress: null, primaryPhone: null, roles: [] }], page: 1, pageSize: 20, total: 1 })
     detailMock.mockResolvedValue({ personId: 42, rfc: 'ABC010203AB1', name: 'Cliente', legalPersonality: { code: 1, description: 'FISICA' }, status: { code: 1, description: 'ACTIVO' }, primaryAddress: null, primaryPhone: { phoneId: 2, areaCode: '55', phoneNumber: '5555555555', extension: null, isDefault: true }, activePhones: [{ phoneId: 2, areaCode: '55', phoneNumber: '5555555555', extension: null, isDefault: true }], activeEmails: [{ emailId: 1, contact: 'Contacto', email: 'cliente@example.test' }], roles: [] })
+    emailsMock.mockResolvedValue([{ emailId: 1, personId: 42, contact: 'Contacto', email: 'cliente@example.test', status: 'Active', usageCodes: [1], modifiedAt: '2025-01-01T00:00:00Z' }])
     readinessMock.mockResolvedValue({ personId: 42, hasGeneralData: true, hasAddress: true, hasPhone: true, hasAccount: true, canCreateContract: true, missingRequirements: [] })
     render(<CustomersView productName="uCredit-auto" customerName="Toyota Financial Services" onUnauthorized={unauthorized} />)
     fireEvent.change(screen.getByLabelText('Identificador'), { target: { value: '42' } })
@@ -285,5 +292,136 @@ describe('CustomersView', () => {
     fireEvent.change(screen.getByLabelText('CLABE'), { target: { value: 'SYNTHETIC-CLABE-18' } })
     fireEvent.click(screen.getByRole('button', { name: 'Guardar cuenta' }))
     await vi.waitFor(() => expect(unauthorized).toHaveBeenCalledOnce())
+  })
+
+  it('creates an email with the dynamic invoice usage selected by default', async () => {
+    configureAccountDetail([])
+    let resolveCreate!: (value: unknown) => void
+    createEmailMock.mockReturnValue(new Promise(resolve => { resolveCreate = resolve }) as never)
+    await openAccountDetail()
+    const section = screen.getByRole('heading', { name: 'Correos' }).closest('section') as HTMLElement
+    fireEvent.click(section.querySelector('button') as HTMLButtonElement)
+    const dialog = await screen.findByRole('dialog', { name: 'Agregar correo' })
+    fireEvent.change(screen.getByLabelText('Correo electrónico'), { target: { value: 'nuevo@example.invalid' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar correo' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Guardando…' }))
+    expect(createEmailMock).toHaveBeenCalledOnce()
+    resolveCreate({})
+    await vi.waitFor(() => expect(createEmailMock).toHaveBeenCalledOnce())
+    expect(createEmailMock.mock.calls[0][1]).toMatchObject({ email: 'nuevo@example.invalid', usageCodes: [1] })
+    await vi.waitFor(() => expect(readinessMock).toHaveBeenCalledTimes(2))
+    expect(dialog).toBeTruthy()
+  })
+
+  it('renders empty and multiple email collections without changing readiness', async () => {
+    configureAccountDetail([])
+    await openAccountDetail()
+    expect(screen.getByText('No hay correos registrados.')).toBeTruthy()
+    expect(readinessMock).toHaveBeenCalledOnce()
+
+    cleanup()
+    configureAccountDetail([])
+    readinessMock.mockClear()
+    emailsMock.mockResolvedValue([
+      { emailId: 8, personId: 42, contact: null, email: 'uno@example.invalid', status: 'Active', usageCodes: [1], modifiedAt: '2025-01-01T00:00:00Z' },
+      { emailId: 9, personId: 42, contact: null, email: 'dos@example.invalid', status: 'Inactive', usageCodes: [2], modifiedAt: '2025-01-02T00:00:00Z' },
+    ])
+    await openAccountDetail()
+    expect(screen.getByText('uno@example.invalid')).toBeTruthy()
+    expect(screen.getByText('Correo inactivo')).toBeTruthy()
+    expect(readinessMock).toHaveBeenCalledOnce()
+  })
+
+  it('requires at least one usage and does not submit when the last usage is removed', async () => {
+    configureAccountDetail([])
+    await openAccountDetail()
+    const section = screen.getByRole('heading', { name: 'Correos' }).closest('section') as HTMLElement
+    fireEvent.click(section.querySelector('button') as HTMLButtonElement)
+    await screen.findByRole('dialog', { name: 'Agregar correo' })
+    fireEvent.change(screen.getByLabelText('Correo electrónico'), { target: { value: 'nuevo@example.invalid' } })
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Envío de facturas' }))
+    fireEvent.submit(screen.getByRole('dialog').querySelector('form') as HTMLFormElement)
+    expect((await screen.findByRole('alert')).textContent).toContain('Selecciona al menos un uso de correo.')
+    expect(createEmailMock).not.toHaveBeenCalled()
+  })
+
+  it('shows duplicate and modified email conflicts without retrying', async () => {
+    configureAccountDetail([])
+    createEmailMock.mockRejectedValue(new ApiError(409, 'email_duplicate'))
+    await openAccountDetail()
+    const section = screen.getByRole('heading', { name: 'Correos' }).closest('section') as HTMLElement
+    fireEvent.click(section.querySelector('button') as HTMLButtonElement)
+    await screen.findByRole('dialog', { name: 'Agregar correo' })
+    fireEvent.change(screen.getByLabelText('Correo electrónico'), { target: { value: 'duplicado@example.invalid' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar correo' }))
+    await vi.waitFor(() => expect(screen.getAllByRole('status').some(item => item.textContent?.includes('Ya existe ese correo activo'))).toBe(true))
+    expect(createEmailMock).toHaveBeenCalledOnce()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+    cleanup()
+    emailsMock.mockResolvedValue([{ emailId: 8, personId: 42, contact: null, email: 'existente@example.invalid', status: 'Active', usageCodes: [1], modifiedAt: '2025-01-01T00:00:00Z' }])
+    updateEmailMock.mockRejectedValue(new ApiError(409, 'email_modified'))
+    await openAccountDetail()
+    fireEvent.click(screen.getByRole('button', { name: 'Editar' }))
+    await screen.findByPlaceholderText('Dejar vacío para conservar')
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar correo' }))
+    await vi.waitFor(() => expect(screen.getAllByRole('status').some(item => item.textContent?.includes('El correo cambió'))).toBe(true))
+    expect(updateEmailMock).toHaveBeenCalledOnce()
+  })
+
+  it.each([400, 403, 404, 503])('shows controlled email error for HTTP %s', async status => {
+    configureAccountDetail([])
+    createEmailMock.mockRejectedValue(new ApiError(status))
+    await openAccountDetail()
+    const section = screen.getByRole('heading', { name: 'Correos' }).closest('section') as HTMLElement
+    fireEvent.click(section.querySelector('button') as HTMLButtonElement)
+    await screen.findByRole('dialog', { name: 'Agregar correo' })
+    fireEvent.change(screen.getByLabelText('Correo electrónico'), { target: { value: 'error@example.invalid' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar correo' }))
+    expect(await screen.findByRole('status')).toBeTruthy()
+    expect(createEmailMock).toHaveBeenCalledOnce()
+  })
+
+  it('returns to login on email 401 and reports catalog failure or emptiness', async () => {
+    configureAccountDetail([])
+    createEmailMock.mockRejectedValue(new ApiError(401))
+    await openAccountDetail()
+    const section = screen.getByRole('heading', { name: 'Correos' }).closest('section') as HTMLElement
+    fireEvent.click(section.querySelector('button') as HTMLButtonElement)
+    await screen.findByRole('dialog', { name: 'Agregar correo' })
+    fireEvent.change(screen.getByLabelText('Correo electrónico'), { target: { value: 'unauthorized@example.invalid' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar correo' }))
+    await vi.waitFor(() => expect(unauthorized).toHaveBeenCalledOnce())
+
+    cleanup()
+    configureAccountDetail([])
+    emailUsagesMock.mockResolvedValue([])
+    await openAccountDetail()
+    fireEvent.click((screen.getByRole('heading', { name: 'Correos' }).closest('section') as HTMLElement).querySelector('button') as HTMLButtonElement)
+    expect(await screen.findByText('No hay usos de correo disponibles.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Guardar correo' })).toHaveProperty('disabled', true)
+  })
+
+  it('does not preload an existing email in the edit panel', async () => {
+    configureAccountDetail([])
+    emailsMock.mockResolvedValue([{ emailId: 8, personId: 42, contact: 'Contacto', email: 'existente@example.invalid', status: 'Active', usageCodes: [1], modifiedAt: '2025-01-01T00:00:00Z' }])
+    await openAccountDetail()
+    const section = screen.getByRole('heading', { name: 'Correos' }).closest('section') as HTMLElement
+    fireEvent.click(screen.getByRole('button', { name: 'Editar' }))
+    expect(await screen.findByPlaceholderText('Dejar vacío para conservar')).toHaveProperty('value', '')
+    expect(section.textContent).toContain('existente@example.invalid')
+  })
+
+  it('refreshes email state and readiness after deactivation', async () => {
+    configureAccountDetail([])
+    const email = { emailId: 8, personId: 42, contact: null, email: 'activo@example.invalid', status: 'Active' as const, usageCodes: [1], modifiedAt: '2025-01-01T00:00:00Z' }
+    emailsMock.mockResolvedValue([email])
+    deactivateEmailMock.mockResolvedValue({ ...email, status: 'Inactive' } as never)
+    await openAccountDetail()
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Desactivar' }))
+    await vi.waitFor(() => expect(deactivateEmailMock).toHaveBeenCalledOnce())
+    await vi.waitFor(() => expect(readinessMock).toHaveBeenCalledTimes(2))
+    vi.restoreAllMocks()
   })
 })

@@ -49,6 +49,12 @@ public sealed class TestApiFactory : WebApplicationFactory<Program>
             services.AddSingleton<ICustomerAccountReadRepository, FakeCustomerAccountReadRepository>();
             services.RemoveAll<ICustomerBankReadRepository>();
             services.AddSingleton<ICustomerBankReadRepository, FakeCustomerBankReadRepository>();
+            services.RemoveAll<ICustomerEmailReadRepository>();
+            services.AddSingleton<ICustomerEmailReadRepository, FakeCustomerEmailReadRepository>();
+            services.RemoveAll<ICustomerEmailUsageRepository>();
+            services.AddSingleton<ICustomerEmailUsageRepository, FakeCustomerEmailUsageRepository>();
+            services.RemoveAll<ICustomerEmailWriteRepository>();
+            services.AddSingleton<ICustomerEmailWriteRepository, FakeCustomerEmailWriteRepository>();
             services.RemoveAll<ICustomerAccountWriteRepository>();
             services.AddSingleton<ICustomerAccountWriteRepository, FakeCustomerAccountWriteRepository>();
             services.RemoveAll<IExecutionTenantContext>();
@@ -277,6 +283,86 @@ internal sealed class FakeCustomerAccountWriteRepository : ICustomerAccountWrite
     public Task<ManagedCustomerAccount> ActivateAsync(CustomerAccountStateChangeCommand command, string legacyUserCode, string correlationId, CancellationToken cancellationToken = default) => Task.FromResult(Result(command.PersonId, command.AccountId));
 
     public Task<ManagedCustomerAccount> DeactivateAsync(CustomerAccountStateChangeCommand command, string legacyUserCode, string correlationId, CancellationToken cancellationToken = default) => Task.FromResult(Result(command.PersonId, command.AccountId, 2));
+}
+
+internal sealed class FakeCustomerEmailReadRepository : ICustomerEmailReadRepository
+{
+    private static readonly ManagedCustomerEmail First = new(8001, 42, "Contacto sintético", "uno@example.invalid", 1, [1, 2], new DateTime(2025, 1, 1));
+    private static readonly ManagedCustomerEmail Second = new(8002, 42, null, "dos@example.invalid", 2, [3], new DateTime(2025, 1, 2));
+
+    public Task<IReadOnlyList<ManagedCustomerEmail>?> GetByPersonIdAsync(int personId, CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<ManagedCustomerEmail>?>(personId switch
+        {
+            42 => [First, Second],
+            47 => [],
+            999 => null,
+            _ => [],
+        });
+}
+
+internal sealed class FakeCustomerEmailUsageRepository : ICustomerEmailUsageRepository
+{
+    public Task<IReadOnlyList<CustomerEmailUsage>> GetActiveUsagesAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<CustomerEmailUsage>>([
+            new(1, "Envío de facturas"),
+            new(2, "Envío de estado de cuenta"),
+            new(3, "Salesforce")
+        ]);
+}
+
+internal sealed class FakeCustomerEmailWriteRepository : ICustomerEmailWriteRepository
+{
+    private static ManagedCustomerEmail Result(int personId, int emailId, string email, int status = 1, IReadOnlyList<int>? usages = null) =>
+        new(emailId, personId, "Contacto sintético", email, status, usages ?? [1], new DateTime(2025, 1, 3));
+
+    private static void ValidateUsages(IReadOnlyList<int> usageCodes)
+    {
+        var normalized = CustomerEmailRules.NormalizeUsages(usageCodes);
+        if (normalized.Any(code => code is < 1 or > 3))
+            throw new CustomerEmailValidationException("One or more email uses are invalid.");
+    }
+
+    public Task<ManagedCustomerEmail> CreateAsync(CustomerEmailCreateCommand command, string legacyUserCode, string correlationId, CancellationToken cancellationToken = default)
+    {
+        CustomerEmailRules.NormalizeEmail(command.Email);
+        ValidateUsages(command.UsageCodes);
+        return command.PersonId switch
+        {
+            48 => Task.FromException<ManagedCustomerEmail>(new CustomerEmailConflictException("email_duplicate", "Duplicate email.")),
+            50 => Task.FromException<ManagedCustomerEmail>(new LegacyWriteNotConfiguredException("Not configured.", "configuration", LegacyWriteConfigurationReason.MissingWriteConnection)),
+            51 => Task.FromException<ManagedCustomerEmail>(new CustomerEmailValidationException("The email cannot be registered.")),
+            999 => Task.FromException<ManagedCustomerEmail>(new CustomerEmailNotFoundException("Customer was not found.")),
+            _ => Task.FromResult(Result(command.PersonId, 8003, command.Email, usages: command.UsageCodes)),
+        };
+    }
+
+    public Task<ManagedCustomerEmail> UpdateAsync(CustomerEmailUpdateCommand command, string legacyUserCode, string correlationId, CancellationToken cancellationToken = default)
+    {
+        if (command.Email is not null) CustomerEmailRules.NormalizeEmail(command.Email);
+        ValidateUsages(command.UsageCodes);
+        return command.PersonId switch
+        {
+            48 => Task.FromException<ManagedCustomerEmail>(new CustomerEmailConflictException("email_duplicate", "Duplicate email.")),
+            49 => Task.FromException<ManagedCustomerEmail>(new CustomerEmailConflictException("email_modified", "Modified.")),
+            50 => Task.FromException<ManagedCustomerEmail>(new LegacyWriteNotConfiguredException("Not configured.", "configuration", LegacyWriteConfigurationReason.MissingWriteConnection)),
+            999 => Task.FromException<ManagedCustomerEmail>(new CustomerEmailNotFoundException("Email was not found.")),
+            _ => Task.FromResult(Result(command.PersonId, command.EmailId, command.Email ?? "conservado@example.invalid", usages: command.UsageCodes)),
+        };
+    }
+
+    public Task<ManagedCustomerEmail> ActivateAsync(CustomerEmailStateChangeCommand command, string legacyUserCode, string correlationId, CancellationToken cancellationToken = default) =>
+        command.PersonId == 48
+            ? Task.FromException<ManagedCustomerEmail>(new CustomerEmailConflictException("email_duplicate", "Duplicate email."))
+            : command.PersonId == 49
+                ? Task.FromException<ManagedCustomerEmail>(new CustomerEmailConflictException("email_modified", "Modified."))
+                : command.PersonId == 999
+                    ? Task.FromException<ManagedCustomerEmail>(new CustomerEmailNotFoundException("Email was not found."))
+                    : Task.FromResult(Result(command.PersonId, command.EmailId, "activado@example.invalid"));
+
+    public Task<ManagedCustomerEmail> DeactivateAsync(CustomerEmailStateChangeCommand command, string legacyUserCode, string correlationId, CancellationToken cancellationToken = default) =>
+        command.PersonId == 999
+            ? Task.FromException<ManagedCustomerEmail>(new CustomerEmailNotFoundException("Email was not found."))
+            : Task.FromResult(Result(command.PersonId, command.EmailId, "desactivado@example.invalid", 2, [1, 2]));
 }
 
 internal sealed class FakeExecutionTenantContext(

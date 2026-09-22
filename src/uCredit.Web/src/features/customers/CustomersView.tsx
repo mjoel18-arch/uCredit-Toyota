@@ -1,6 +1,6 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { ApiError, apiErrorMessage } from '../../shared/api/apiClient'
-import { activateCustomerAccount, activateCustomerAddress, activateCustomerPhone, createCustomerAccount, createCustomerAddress, createCustomerPhone, deactivateCustomerAccount, deactivateCustomerAddress, deactivateCustomerPhone, getCustomerAccounts, getCustomerAddresses, getCustomerBanks, getCustomerByPersonId, getCustomerPhones, getCustomerProfileReadiness, searchCustomers, updateCustomerAccount, updateCustomerAddress, updateCustomerPhone, type CustomerAccountPayload, type CustomerAddressPayload, type CustomerDetail, type CustomerListItem, type CustomerPhonePayload, type CustomerProfileReadiness, type ManagedCustomerAccount, type ManagedCustomerAddress, type ManagedCustomerPhone, type CustomerBank } from '../auth/authApi'
+import { activateCustomerAccount, activateCustomerAddress, activateCustomerEmail, activateCustomerPhone, createCustomerAccount, createCustomerAddress, createCustomerEmail, createCustomerPhone, deactivateCustomerAccount, deactivateCustomerAddress, deactivateCustomerEmail, deactivateCustomerPhone, getCustomerAccounts, getCustomerAddresses, getCustomerBanks, getCustomerByPersonId, getCustomerEmailUsages, getCustomerEmails, getCustomerPhones, getCustomerProfileReadiness, searchCustomers, updateCustomerAccount, updateCustomerAddress, updateCustomerEmail, updateCustomerPhone, type CustomerAccountPayload, type CustomerAddressPayload, type CustomerDetail, type CustomerEmailPayload, type CustomerEmailUsage, type CustomerListItem, type CustomerPhonePayload, type CustomerProfileReadiness, type ManagedCustomerAccount, type ManagedCustomerAddress, type ManagedCustomerEmail, type ManagedCustomerPhone, type CustomerBank } from '../auth/authApi'
 import { CustomerCreateView } from './CustomerCreateView'
 
 export function CustomersView({ onUnauthorized, canCreate = false, onCreated = () => undefined }: { productName: string; customerName: string; onUnauthorized: () => void; canCreate?: boolean; onCreated?: (personId: number, pepValidationStatus?: string) => void }) {
@@ -13,6 +13,7 @@ export function CustomersView({ onUnauthorized, canCreate = false, onCreated = (
   const [addresses, setAddresses] = useState<ManagedCustomerAddress[]>([])
   const [phones, setPhones] = useState<ManagedCustomerPhone[]>([])
   const [accounts, setAccounts] = useState<ManagedCustomerAccount[]>([])
+  const [emails, setEmails] = useState<ManagedCustomerEmail[]>([])
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
   const [message, setMessage] = useState('')
@@ -43,14 +44,15 @@ export function CustomersView({ onUnauthorized, canCreate = false, onCreated = (
 
   async function loadDetail(personIdToLoad: number) {
     try {
-      const [customer, profileReadiness, customerAddresses, customerPhones, customerAccounts] = await Promise.all([
+      const [customer, profileReadiness, customerAddresses, customerPhones, customerAccounts, customerEmails] = await Promise.all([
         getCustomerByPersonId(personIdToLoad),
         getCustomerProfileReadiness(personIdToLoad),
         getCustomerAddresses(personIdToLoad),
         getCustomerPhones(personIdToLoad),
         getCustomerAccounts(personIdToLoad).catch(error => { if (error instanceof ApiError && error.status === 401) onUnauthorized(); return [] }),
+        getCustomerEmails(personIdToLoad),
       ])
-      setDetail(customer); setReadiness(profileReadiness); setAddresses(customerAddresses); setPhones(customerPhones); setAccounts(customerAccounts); setMessage('')
+      setDetail(customer); setReadiness(profileReadiness); setAddresses(customerAddresses); setPhones(customerPhones); setAccounts(customerAccounts); setEmails(customerEmails); setMessage('')
     }
     catch (error) { if (error instanceof ApiError && error.status === 401) onUnauthorized(); else setMessage(error instanceof ApiError && error.status === 404 ? 'No se encontró el cliente.' : apiErrorMessage(error, 'No fue posible consultar el cliente.')) }
   }
@@ -72,19 +74,75 @@ export function CustomersView({ onUnauthorized, canCreate = false, onCreated = (
     {pepNotice && <div className="notice notice-warning" role="status">Validación PEP no ejecutada en este ambiente de demostración.</div>}
     {message && <div className="notice notice-error" role="alert">{message}</div>}
     {items.length > 0 && <div className="customer-results" aria-live="polite"><table><thead><tr><th>Identificador</th><th>RFC</th><th>Nombre</th><th>Personalidad</th><th>Estatus</th><th /></tr></thead><tbody>{items.map(item => <tr key={item.personId}><td>{item.personId}</td><td>{item.rfcMasked ?? 'No disponible'}</td><td>{item.name}</td><td>{item.legalPersonality.description ?? item.legalPersonality.code}</td><td>{item.status.description ?? item.status.code}</td><td><button type="button" onClick={() => void openDetail(item)}>Ver detalle</button></td></tr>)}</tbody></table><div className="customer-pagination"><span>{total} resultado(s)</span><button type="button" disabled={busy || page <= 1} onClick={() => void search(page - 1)}>Anterior</button><button type="button" disabled={busy || page * 20 >= total} onClick={() => void search(page + 1)}>Siguiente</button></div></div>}
-    {detail && readiness && <CustomerDetailCard detail={detail} readiness={readiness} addresses={addresses} phones={phones} accounts={accounts} canWrite={canCreate} onUnauthorized={onUnauthorized} onRefresh={async () => { const [loadedAddresses, loadedReadiness, loadedPhones, loadedAccounts] = await Promise.all([getCustomerAddresses(detail.personId), getCustomerProfileReadiness(detail.personId), getCustomerPhones(detail.personId), getCustomerAccounts(detail.personId).catch(error => { if (error instanceof ApiError && error.status === 401) onUnauthorized(); return [] })]); setAddresses(loadedAddresses); setReadiness(loadedReadiness); setPhones(loadedPhones); setAccounts(loadedAccounts) }} />}
+    {detail && readiness && <CustomerDetailCard detail={detail} readiness={readiness} addresses={addresses} phones={phones} accounts={accounts} emails={emails} canWrite={canCreate} onUnauthorized={onUnauthorized} onRefresh={async () => { const [loadedAddresses, loadedReadiness, loadedPhones, loadedAccounts, loadedEmails] = await Promise.all([getCustomerAddresses(detail.personId), getCustomerProfileReadiness(detail.personId), getCustomerPhones(detail.personId), getCustomerAccounts(detail.personId).catch(error => { if (error instanceof ApiError && error.status === 401) onUnauthorized(); return [] }), getCustomerEmails(detail.personId)]); setAddresses(loadedAddresses); setReadiness(loadedReadiness); setPhones(loadedPhones); setAccounts(loadedAccounts); setEmails(loadedEmails) }} />}
     <div className="customer-upcoming"><button type="button" disabled>Editar cliente · Próximamente</button><button type="button" disabled>Crear propuesta · Próximamente</button><button type="button" disabled={!readiness?.canCreateContract} aria-disabled={!readiness?.canCreateContract}>{readiness?.canCreateContract ? 'Capturar contrato' : 'Capturar contrato · Próximamente'}</button></div>
   </section>
 }
 
-function CustomerDetailCard({ detail, readiness, addresses, phones, accounts, canWrite, onUnauthorized, onRefresh }: { detail: CustomerDetail; readiness: CustomerProfileReadiness; addresses: ManagedCustomerAddress[]; phones: ManagedCustomerPhone[]; accounts: ManagedCustomerAccount[]; canWrite: boolean; onUnauthorized: () => void; onRefresh: () => Promise<void> }) {
+function CustomerDetailCard({ detail, readiness, addresses, phones, accounts, emails, canWrite, onUnauthorized, onRefresh }: { detail: CustomerDetail; readiness: CustomerProfileReadiness; addresses: ManagedCustomerAddress[]; phones: ManagedCustomerPhone[]; accounts: ManagedCustomerAccount[]; emails: ManagedCustomerEmail[]; canWrite: boolean; onUnauthorized: () => void; onRefresh: () => Promise<void> }) {
   const requirements = [
     ['Datos generales', readiness.hasGeneralData, 'generalData'],
     ['Domicilio', readiness.hasAddress, 'address'],
     ['Teléfono', readiness.hasPhone, 'phone'],
     ['Cuenta', readiness.hasAccount, 'account'],
   ] as const
-  return <article className="contract-detail" aria-labelledby="customer-detail-title"><header className="contract-detail-header"><div><span className="eyebrow">Cliente</span><h3 id="customer-detail-title">{detail.name}</h3></div><span className="detail-match">ID {detail.personId}</span></header><dl className="detail-grid"><Detail label="RFC" value={detail.rfc} /><Detail label="Personalidad" value={detail.legalPersonality.description} /><Detail label="Estatus" value={detail.status.description} /><Detail label="Teléfono principal" value={detail.primaryPhone ? [detail.primaryPhone.areaCode, detail.primaryPhone.phoneNumber].filter(Boolean).join(' ') : null} /><Detail label="Correo" value={detail.activeEmails[0]?.email} /><Detail label="Domicilio" value={detail.primaryAddress ? [detail.primaryAddress.streetAndNumber, detail.primaryAddress.exteriorNumber, detail.primaryAddress.city, detail.primaryAddress.state].filter(Boolean).join(', ') : null} /></dl><h4>Requisitos para contrato</h4><ul className="readiness-requirements">{requirements.map(([label, complete, key]) => <li key={key} data-status={complete ? 'complete' : 'pending'}><span>{label}</span><strong>{complete ? 'Completo' : 'Pendiente'}</strong></li>)}</ul><p role="status">{readiness.canCreateContract ? 'Cliente habilitado para contratos.' : 'Este cliente todavía no puede tener contratos.'}</p><AddressManagement addresses={addresses} personId={detail.personId} canWrite={canWrite} onUnauthorized={onUnauthorized} onRefresh={onRefresh} /><PhoneManagement phones={phones} personId={detail.personId} canWrite={canWrite} onUnauthorized={onUnauthorized} onRefresh={onRefresh} /><AccountManagement accounts={accounts} personId={detail.personId} canWrite={canWrite} onUnauthorized={onUnauthorized} onRefresh={onRefresh} /><h4>Correos activos</h4><ul>{detail.activeEmails.map(email => <li key={email.emailId}>{email.email ?? 'No disponible'}</li>)}</ul></article>
+  return <article className="contract-detail" aria-labelledby="customer-detail-title"><header className="contract-detail-header"><div><span className="eyebrow">Cliente</span><h3 id="customer-detail-title">{detail.name}</h3></div><span className="detail-match">ID {detail.personId}</span></header><dl className="detail-grid"><Detail label="RFC" value={detail.rfc} /><Detail label="Personalidad" value={detail.legalPersonality.description} /><Detail label="Estatus" value={detail.status.description} /><Detail label="Teléfono principal" value={detail.primaryPhone ? [detail.primaryPhone.areaCode, detail.primaryPhone.phoneNumber].filter(Boolean).join(' ') : null} /><Detail label="Correo" value={detail.activeEmails[0]?.email} /><Detail label="Domicilio" value={detail.primaryAddress ? [detail.primaryAddress.streetAndNumber, detail.primaryAddress.exteriorNumber, detail.primaryAddress.city, detail.primaryAddress.state].filter(Boolean).join(', ') : null} /></dl><h4>Requisitos para contrato</h4><ul className="readiness-requirements">{requirements.map(([label, complete, key]) => <li key={key} data-status={complete ? 'complete' : 'pending'}><span>{label}</span><strong>{complete ? 'Completo' : 'Pendiente'}</strong></li>)}</ul><p role="status">{readiness.canCreateContract ? 'Cliente habilitado para contratos.' : 'Este cliente todavía no puede tener contratos.'}</p><AddressManagement addresses={addresses} personId={detail.personId} canWrite={canWrite} onUnauthorized={onUnauthorized} onRefresh={onRefresh} /><PhoneManagement phones={phones} personId={detail.personId} canWrite={canWrite} onUnauthorized={onUnauthorized} onRefresh={onRefresh} /><AccountManagement accounts={accounts} personId={detail.personId} canWrite={canWrite} onUnauthorized={onUnauthorized} onRefresh={onRefresh} /><EmailManagement emails={emails} personId={detail.personId} canWrite={canWrite} onUnauthorized={onUnauthorized} onRefresh={onRefresh} /></article>
+}
+
+function EmailManagement({ emails, personId, canWrite, onUnauthorized, onRefresh }: { emails: ManagedCustomerEmail[]; personId: number; canWrite: boolean; onUnauthorized: () => void; onRefresh: () => Promise<void> }) {
+  const [editing, setEditing] = useState<ManagedCustomerEmail | null>(null)
+  const [open, setOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState('')
+  const [usages, setUsages] = useState<CustomerEmailUsage[]>([])
+  const [catalogError, setCatalogError] = useState('')
+
+  useEffect(() => {
+    void getCustomerEmailUsages().then(setUsages).catch(error => { if (error instanceof ApiError && error.status === 401) onUnauthorized(); else setCatalogError('No fue posible cargar los usos de correo.') })
+  }, [onUnauthorized])
+
+  async function openPanel(email: ManagedCustomerEmail | null) {
+    setEditing(email); setMessage(''); setCatalogError(''); setOpen(true)
+    try { setUsages(await getCustomerEmailUsages()) }
+    catch (error) { if (error instanceof ApiError && error.status === 401) onUnauthorized(); else setCatalogError('No fue posible cargar los usos de correo.') }
+  }
+  async function save(payload: CustomerEmailPayload) {
+    setBusy(true); setMessage('')
+    try {
+      if (editing) await updateCustomerEmail(personId, editing.emailId, { ...payload, expectedModifiedAt: editing.modifiedAt })
+      else await createCustomerEmail(personId, payload)
+      setOpen(false); setEditing(null); await onRefresh(); setMessage('Correo guardado correctamente.')
+    } catch (error) { handleEmailError(error, onUnauthorized, setMessage, 'No fue posible guardar el correo.') }
+    finally { setBusy(false) }
+  }
+  async function changeState(email: ManagedCustomerEmail, activate: boolean) {
+    if (!activate && !window.confirm('¿Deseas desactivar este correo? El registro se conservará.')) return
+    setBusy(true); setMessage('')
+    try {
+      if (activate) await activateCustomerEmail(personId, email.emailId, { expectedModifiedAt: email.modifiedAt })
+      else await deactivateCustomerEmail(personId, email.emailId, { expectedModifiedAt: email.modifiedAt })
+      await onRefresh(); setMessage(activate ? 'Correo activado.' : 'Correo desactivado.')
+    } catch (error) { handleEmailError(error, onUnauthorized, setMessage, 'No fue posible actualizar el correo.') }
+    finally { setBusy(false) }
+  }
+  return <section className="customer-emails" aria-labelledby="emails-title"><div className="section-heading"><div><span className="eyebrow">Expediente</span><h4 id="emails-title">Correos</h4></div>{canWrite && <button type="button" onClick={() => void openPanel(null)}>Agregar</button>}</div>{message && <div className="notice notice-status" role="status">{message}</div>}{emails.length === 0 ? <p>No hay correos registrados.</p> : <div className="email-list">{emails.map(email => <article className="email-card" key={email.emailId}><div><strong>{email.status === 'Active' ? 'Activo' : 'Inactivo'}</strong><p>{email.status === 'Active' ? email.email : 'Correo inactivo'}</p><small>{email.contact || 'Sin contacto'} · Usos: {friendlyEmailUses(email.usageCodes, usages)}</small></div>{canWrite && <div className="email-actions"><button type="button" disabled={busy} onClick={() => void openPanel(email)}>Editar</button>{email.status === 'Active' ? <button type="button" disabled={busy} onClick={() => void changeState(email, false)}>Desactivar</button> : <button type="button" disabled={busy} onClick={() => void changeState(email, true)}>Activar</button>}</div>}</article>)}</div>}{open && <EmailPanel email={editing} usages={usages} catalogError={catalogError} busy={busy} onCancel={() => { setOpen(false); setEditing(null) }} onSave={(payload) => void save(payload)} />}</section>
+}
+
+function EmailPanel({ email, usages, catalogError, busy, onCancel, onSave }: { email: ManagedCustomerEmail | null; usages: CustomerEmailUsage[]; catalogError: string; busy: boolean; onCancel: () => void; onSave: (payload: CustomerEmailPayload) => void }) {
+  const [address, setAddress] = useState('')
+  const [contact, setContact] = useState(email?.contact ?? '')
+  const defaultUsageCode = usages.find(usage => usage.description.toLocaleLowerCase().includes('factura'))?.code ?? usages[0]?.code
+  const [selected, setSelected] = useState<number[]>(email?.usageCodes ?? (defaultUsageCode === undefined ? [] : [defaultUsageCode]))
+  const [error, setError] = useState('')
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!email && !address.trim()) { setError('Captura un correo electrónico.'); return }
+    if (selected.length === 0) { setError('Selecciona al menos un uso de correo.'); return }
+    onSave({ email: address.trim() || null, contact: contact.trim() || null, usageCodes: selected })
+  }
+  function toggle(code: number) { setSelected(current => current.includes(code) ? current.filter(item => item !== code) : [...current, code]) }
+  const unavailable = Boolean(catalogError) || usages.length === 0
+  return <div className="side-panel-backdrop"><aside className="side-panel" role="dialog" aria-modal="true" aria-labelledby="email-panel-title"><h4 id="email-panel-title">{email ? 'Editar correo' : 'Agregar correo'}</h4>{catalogError && <div className="notice notice-error" role="alert">{catalogError}</div>}{!catalogError && usages.length === 0 && <p role="status">No hay usos de correo disponibles.</p>}<form onSubmit={submit}><label>Correo electrónico<input type="email" autoComplete="off" value={address} onChange={event => setAddress(event.target.value)} placeholder={email ? 'Dejar vacío para conservar' : undefined} required={!email} /></label><label>Contacto<input value={contact} maxLength={250} onChange={event => setContact(event.target.value)} /></label><fieldset><legend>Usos del correo</legend>{usages.map(usage => <label key={usage.code}><input type="checkbox" checked={selected.includes(usage.code)} onChange={() => toggle(usage.code)} />{usage.description}</label>)}</fieldset>{error && <div className="notice notice-error" role="alert">{error}</div>}<div className="side-panel-actions"><button type="button" onClick={onCancel}>Cancelar</button><button type="submit" disabled={busy || unavailable}>{busy ? 'Guardando…' : 'Guardar correo'}</button></div></form></aside></div>
 }
 
 function AccountManagement({ accounts, personId, canWrite, onUnauthorized, onRefresh }: { accounts: ManagedCustomerAccount[]; personId: number; canWrite: boolean; onUnauthorized: () => void; onRefresh: () => Promise<void> }) {
@@ -222,5 +280,7 @@ function defaultUses(type: number): string[] { return type === 1 ? ['billing', '
 function friendlyUses(uses: string[]): string { return uses.map(use => use === 'billing' ? 'Facturación' : use === 'statements' ? 'Estado de cuenta' : 'Otros').join(', ') || 'Ninguno' }
 function handleAddressError(error: unknown, onUnauthorized: () => void, setMessage: (message: string) => void, fallback: string) { if (error instanceof ApiError && error.status === 401) { onUnauthorized(); return } if (error instanceof ApiError && error.status === 409) { setMessage(error.code === 'address_default_required' ? 'Selecciona un domicilio activo de reemplazo.' : 'El domicilio cambió; vuelve a cargarlo antes de guardar.') } else setMessage(error instanceof ApiError ? apiErrorMessage(error, fallback) : fallback) }
 function handlePhoneError(error: unknown, onUnauthorized: () => void, setMessage: (message: string) => void, fallback: string) { if (error instanceof ApiError && error.status === 401) { onUnauthorized(); return } if (error instanceof ApiError && error.status === 409) { setMessage(error.code === 'phone_default_required' ? 'Selecciona un teléfono activo de reemplazo.' : 'El teléfono cambió; vuelve a cargarlo antes de guardar.') } else setMessage(error instanceof ApiError ? apiErrorMessage(error, fallback) : fallback) }
+function handleEmailError(error: unknown, onUnauthorized: () => void, setMessage: (message: string) => void, fallback: string) { if (error instanceof ApiError && error.status === 401) { onUnauthorized(); return } if (error instanceof ApiError && error.status === 409) { setMessage(error.code === 'email_duplicate' ? 'Ya existe ese correo activo para este cliente.' : 'El correo cambió; vuelve a cargarlo antes de guardar.') } else setMessage(error instanceof ApiError ? apiErrorMessage(error, fallback) : fallback) }
+function friendlyEmailUses(codes: number[], catalog: CustomerEmailUsage[]): string { return codes.map(code => catalog.find(item => item.code === code)?.description ?? `Uso ${code}`).join(', ') || 'Ninguno' }
 function phoneTypeName(code: number): string { return ({ 1: 'Casa', 2: 'Oficina', 3: 'Celular', 4: 'Fax', 5: 'Fiscal', 6: 'Actividad económica', 10: 'Otros', 11: 'Otros casa', 12: 'Otros oficina', 13: 'Otros celular' } as Record<number, string>)[code] ?? `Tipo ${code}` }
 function Detail({ label, value }: { label: string; value: string | null | undefined }) { return <div className="detail-field"><dt>{label}</dt><dd>{value || 'No disponible'}</dd></div> }

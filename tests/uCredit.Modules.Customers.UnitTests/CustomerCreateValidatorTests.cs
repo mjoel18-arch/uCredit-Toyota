@@ -5,14 +5,6 @@ namespace UCredit.Modules.Customers.UnitTests;
 public sealed class CustomerCreateValidatorTests
 {
     [Fact]
-    public void RejectsDuplicateEmailUsagesWithoutRequiringAddressData()
-    {
-        var command = Valid() with { EmailUsageCodes = [1, 1] };
-        var errors = CustomerCreateValidator.Validate(command);
-        Assert.Contains("emailUsageCodes", errors.Keys);
-    }
-
-    [Fact]
     public void RequiresPersonFieldsByPersonality()
     {
         var errors = CustomerCreateValidator.Validate(Valid() with { FirstName = null, PaternalSurname = null, MaternalSurname = null });
@@ -21,16 +13,11 @@ public sealed class CustomerCreateValidatorTests
     }
 
     [Fact]
-    public void AcceptsPhysicalPersonalitiesAndConfirmedEmailUses()
+    public void AcceptsPhysicalPersonalitiesWithoutEmailData()
     {
         foreach (var personality in new[] { CustomerCreatePersonality.Individual, CustomerCreatePersonality.IndividualBusiness })
         {
-            var command = Valid() with
-            {
-                LegalPersonality = personality,
-                LegalName = personality == CustomerCreatePersonality.Moral ? "Synthetic Company" : null,
-                CapitalRegime = personality == CustomerCreatePersonality.Moral ? "Synthetic Capital" : null
-            };
+            var command = Valid() with { LegalPersonality = personality };
             Assert.Empty(CustomerCreateValidator.Validate(command));
         }
     }
@@ -57,5 +44,5 @@ public sealed class CustomerCreateValidatorTests
     private static CustomerCreateCommand Valid() => new(
         CustomerCreatePersonality.Individual, "AAA010101AAA", "Synthetic", "Person", "Test", null, null,
         new DateOnly(1980, 1, 1), 1, 1, 1, 1, "605",
-        1, "55", "5555555555", null, null, "Test Contact", "test@example.invalid", [1, 2]);
+        1, "55", "5555555555", null, null);
 }

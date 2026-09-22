@@ -17,7 +17,7 @@ afterEach(() => {
   createMock.mockReset()
 })
 
-describe('CustomerCreateView email usages', () => {
+describe('CustomerCreateView', () => {
   it('maps the temporary tax regime by legal personality', () => {
     expect(getTemporaryTaxRegimeCode(1)).toBe('605')
     expect(getTemporaryTaxRegimeCode(2)).toBe('612')
@@ -57,34 +57,20 @@ describe('CustomerCreateView email usages', () => {
     expect(Object.keys(payload).some(key => key.toLowerCase().includes('address') || key.toLowerCase().includes('postal') || key === 'state' || key === 'city')).toBe(false)
   })
 
-  it('selects invoice delivery initially', () => {
+  it('does not render or send initial email fields', async () => {
+    createMock.mockResolvedValue({ personId: 42, pepValidationStatus: 'NotExecuted' })
     render(<CustomerCreateView onBack={vi.fn()} onCreated={vi.fn()} />)
 
-    expect(screen.getByLabelText('Envío de facturas')).toHaveProperty('checked', true)
-    expect(screen.getByLabelText('Envío de estado de cuenta')).toHaveProperty('checked', false)
-    expect(screen.getByLabelText('Salesforce')).toHaveProperty('checked', false)
-  })
+    expect(screen.queryByLabelText('Contacto del correo')).toBeNull()
+    expect(screen.queryByLabelText('Correo electrónico')).toBeNull()
+    expect(screen.queryByText('Usos del correo')).toBeNull()
 
-  it('does not allow removing the last usage and announces the error', () => {
-    render(<CustomerCreateView onBack={vi.fn()} onCreated={vi.fn()} />)
-
-    fireEvent.click(screen.getByLabelText('Envío de facturas'))
-
-    expect(screen.getByLabelText('Envío de facturas')).toHaveProperty('checked', true)
-    expect(screen.getByRole('alert').textContent).toContain('al menos un uso')
-    expect(document.activeElement).toBe(screen.getByRole('group'))
-    expect(createMock).not.toHaveBeenCalled()
-  })
-
-  it('supports multiple usages', () => {
-    render(<CustomerCreateView onBack={vi.fn()} onCreated={vi.fn()} />)
-
-    fireEvent.click(screen.getByLabelText('Envío de estado de cuenta'))
-    fireEvent.click(screen.getByLabelText('Salesforce'))
-
-    expect(screen.getByLabelText('Envío de facturas')).toHaveProperty('checked', true)
-    expect(screen.getByLabelText('Envío de estado de cuenta')).toHaveProperty('checked', true)
-    expect(screen.getByLabelText('Salesforce')).toHaveProperty('checked', true)
+    fireEvent.submit(document.querySelector('form.customer-create-form') as HTMLFormElement)
+    await waitFor(() => expect(createMock).toHaveBeenCalledTimes(1))
+    const payload = createMock.mock.calls[0][0] as unknown as Record<string, unknown>
+    expect(payload).not.toHaveProperty('email')
+    expect(payload).not.toHaveProperty('emailContact')
+    expect(payload).not.toHaveProperty('emailUsageCodes')
   })
 
   it('asks for PEP confirmation after the controlled 422 and retries only once', async () => {
