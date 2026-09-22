@@ -1,5 +1,3 @@
-using System.Net.Mail;
-
 namespace UCredit.Modules.Customers.Customers;
 
 public enum CustomerCreatePersonality
@@ -27,10 +25,7 @@ public sealed record CustomerCreateCommand(
     string AreaCode,
     string PhoneNumber,
     string? PhoneExtension,
-    string? PhoneContact,
-    string EmailContact,
-    string Email,
-    IReadOnlyList<int> EmailUsageCodes);
+    string? PhoneContact);
 
 public sealed record CustomerCreateResult(int PersonId);
 
@@ -89,12 +84,6 @@ public static class CustomerCreateValidator
         if (command.PhoneTypeCode <= 0) Add("phoneTypeCode", "Phone type is required.");
         Require(command.AreaCode, 10, "areaCode", Add);
         Require(command.PhoneNumber, 30, "phoneNumber", Add);
-        Require(command.EmailContact, 250, "emailContact", Add);
-        Require(command.Email, 250, "email", Add);
-        if (!MailAddress.TryCreate(command.Email, out _)) Add("email", "Email format is invalid.");
-        if (command.EmailUsageCodes.Count == 0 || command.EmailUsageCodes.Any(code => code is < 1 or > 3) || command.EmailUsageCodes.Distinct().Count() != command.EmailUsageCodes.Count)
-            Add("emailUsageCodes", "Email usages must contain one or more distinct values from 1 through 3.");
-
         if (command.LegalPersonality == CustomerCreatePersonality.Moral)
         {
             Require(command.LegalName, 200, "legalName", Add);

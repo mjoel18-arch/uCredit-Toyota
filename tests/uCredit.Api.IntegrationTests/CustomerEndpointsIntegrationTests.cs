@@ -6,6 +6,48 @@ namespace UCredit.Api.IntegrationTests;
 public sealed class CustomerEndpointsIntegrationTests(TestApiFactory factory)
     : IClassFixture<TestApiFactory>
 {
+    private static readonly int[] InvoiceUse = [1];
+    private static readonly int[] InvoiceAndStatementsUses = [1, 2];
+    private static readonly int[] StatementsUse = [2];
+    private static readonly int[] UnknownUse = [99];
+    private static readonly int[] DuplicateUses = [1, 1];
+    private static readonly int[] InactiveUse = [4];
+
+    [Fact]
+    public async Task CustomerCreateRejectsLegacyEmailProperties()
+    {
+        using var client = CreateClient("customers-write");
+        var csrf = await GetCsrfAsync(client);
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/customers")
+        {
+            Content = JsonContent.Create(new
+            {
+                legalPersonality = 1,
+                rfc = "AAA010101AAA",
+                firstName = "Synthetic",
+                paternalSurname = "Person",
+                maternalSurname = "Test",
+                constitutionOrBirthDate = "1980-01-01",
+                countryCode = 1,
+                groupCode = 1,
+                riskCode = 1,
+                contactFormCode = 1,
+                taxRegimeCode = "605",
+                phoneTypeCode = 1,
+                areaCode = "55",
+                phoneNumber = "5555555555",
+                phoneContact = (string?)null,
+                pepConfirmed = false,
+                email = "legacy@example.invalid"
+            })
+        };
+        request.Headers.Add(csrf.HeaderName, csrf.RequestToken);
+
+        var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
     [Fact]
     public async Task AnonymousCustomerSearchReturnsUnauthorized()
     {
@@ -35,6 +77,7 @@ public sealed class CustomerEndpointsIntegrationTests(TestApiFactory factory)
         Assert.Equal("ABC0******B1", customer.RfcMasked);
         Assert.Equal("FISICA", customer.LegalPersonality.Description);
         Assert.Equal("CLIENTE", Assert.Single(customer.Roles).Description);
+        Assert.DoesNotContain("cliente@example.test", await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -336,6 +379,176 @@ public sealed class CustomerEndpointsIntegrationTests(TestApiFactory factory)
 
         using var noTenant = CreateClient("customers-without-tenant");
         Assert.Equal(HttpStatusCode.Forbidden, (await noTenant.GetAsync("/api/v1/catalogs/banks", TestContext.Current.CancellationToken)).StatusCode);
+    }
+
+    [Fact]
+    public async Task EmailListReturnsEmptyAndMultipleEmailsWithUsages()
+    {
+        using var client = CreateClient("customers-with-permission");
+        var empty = await client.GetAsync("/api/v1/customers/47/emails", TestContext.Current.CancellationToken);
+        var multiple = await client.GetAsync("/api/v1/customers/42/emails", TestContext.Current.CancellationToken);
+        var json = await multiple.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, empty.StatusCode);
+        Assert.Equal("[]", await empty.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(HttpStatusCode.OK, multiple.StatusCode);
+        Assert.Contains("uno@example.invalid", json, StringComparison.Ordinal);
+        Assert.Contains("usageCodes", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("MAI_", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("MAI_FG_OMITIR_ENVIO", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("USR_CL_CVE", json, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task EmailListRequiresAuthenticationPermissionTenantAndExistingCustomer()
+    {
+        var anonymous = await factory.CreateClient().GetAsync("/api/v1/customers/42/emails", TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
+
+        using var noPermission = CreateClient("with-permission");
+        Assert.Equal(HttpStatusCode.Forbidden, (await noPermission.GetAsync("/api/v1/customers/42/emails", TestContext.Current.CancellationToken)).StatusCode);
+
+        using var noTenant = CreateClient("customers-without-tenant");
+        Assert.Equal(HttpStatusCode.Forbidden, (await noTenant.GetAsync("/api/v1/customers/42/emails", TestContext.Current.CancellationToken)).StatusCode);
+
+        using var client = CreateClient("customers-with-permission");
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/api/v1/customers/999/emails", TestContext.Current.CancellationToken)).StatusCode);
+    }
+
+    [Fact]
+    public async Task EmailCatalogReturnsOnlyActiveUsagesAndNeverBlacklistOrLegacyColumns()
+    {
+        using var client = CreateClient("customers-with-permission");
+        var response = await client.GetAsync("/api/v1/catalogs/email-uses", TestContext.Current.CancellationToken);
+        var json = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.True(json.IndexOf("Envío de facturas", StringComparison.Ordinal) < json.IndexOf("Salesforce", StringComparison.Ordinal));
+        Assert.DoesNotContain("248", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("PAR_FL_CVE", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("direccion", json, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task EmailCatalogRequiresAuthenticationPermissionAndTenant()
+    {
+        var anonymous = await factory.CreateClient().GetAsync("/api/v1/catalogs/email-uses", TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
+
+        using var noPermission = CreateClient("with-permission");
+        Assert.Equal(HttpStatusCode.Forbidden, (await noPermission.GetAsync("/api/v1/catalogs/email-uses", TestContext.Current.CancellationToken)).StatusCode);
+
+        using var noTenant = CreateClient("customers-without-tenant");
+        Assert.Equal(HttpStatusCode.Forbidden, (await noTenant.GetAsync("/api/v1/catalogs/email-uses", TestContext.Current.CancellationToken)).StatusCode);
+    }
+
+    [Fact]
+    public async Task EmailCreateUpdateAndStateEndpointsEnforceWriteAndAntiforgery()
+    {
+        using var readOnlyClient = CreateClient("customers-with-permission");
+        var forbidden = await readOnlyClient.PostAsJsonAsync("/api/v1/customers/42/emails", new { email = "nuevo@example.invalid", usageCodes = InvoiceUse }, TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
+
+        using var client = CreateClient("customers-write");
+        var missingToken = await client.PostAsJsonAsync("/api/v1/customers/42/emails", new { email = "nuevo@example.invalid", usageCodes = InvoiceUse }, TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.BadRequest, missingToken.StatusCode);
+
+        var csrf = await GetCsrfAsync(client);
+        async Task<HttpResponseMessage> Send(HttpMethod method, string path, object body)
+        {
+            using var request = new HttpRequestMessage(method, path) { Content = JsonContent.Create(body) };
+            request.Headers.Add(csrf.HeaderName, csrf.RequestToken);
+            return await client.SendAsync(request, TestContext.Current.CancellationToken);
+        }
+
+        var created = await Send(HttpMethod.Post, "/api/v1/customers/42/emails", new { email = "nuevo@example.invalid", contact = "Contacto", usageCodes = InvoiceAndStatementsUses });
+        var preserved = await Send(HttpMethod.Put, "/api/v1/customers/42/emails/8001", new { contact = "Otro contacto", usageCodes = InvoiceUse, email = (string?)null, expectedModifiedAt = "2025-01-01T00:00:00Z" });
+        var replaced = await Send(HttpMethod.Put, "/api/v1/customers/42/emails/8001", new { email = "reemplazo@example.invalid", usageCodes = StatementsUse, expectedModifiedAt = "2025-01-01T00:00:00Z" });
+        var activated = await Send(HttpMethod.Post, "/api/v1/customers/42/emails/8001/activate", new { expectedModifiedAt = "2025-01-01T00:00:00Z" });
+        var deactivated = await Send(HttpMethod.Post, "/api/v1/customers/42/emails/8001/deactivate", new { expectedModifiedAt = "2025-01-01T00:00:00Z" });
+
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, preserved.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, replaced.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, activated.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, deactivated.StatusCode);
+        Assert.NotNull(created.Headers.Location);
+        Assert.Null(preserved.Headers.Location);
+        Assert.Null(replaced.Headers.Location);
+        Assert.Null(activated.Headers.Location);
+        Assert.Null(deactivated.Headers.Location);
+    }
+
+    [Fact]
+    public async Task EmailErrorsExposeOnlyControlledCodesWithoutSubmittedEmail()
+    {
+        using var client = CreateClient("customers-write");
+        var csrf = await GetCsrfAsync(client);
+        async Task<HttpResponseMessage> PostFor(int personId, object body)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/customers/{personId}/emails") { Content = JsonContent.Create(body) };
+            request.Headers.Add(csrf.HeaderName, csrf.RequestToken);
+            return await client.SendAsync(request, TestContext.Current.CancellationToken);
+        }
+
+        var duplicate = await PostFor(48, new { email = "sensitive@example.invalid", usageCodes = InvoiceUse });
+        var unavailable = await PostFor(50, new { email = "sensitive@example.invalid", usageCodes = InvoiceUse });
+        var invalid = await PostFor(42, new { email = "no-es-correo", usageCodes = Array.Empty<int>() });
+        var unknownUse = await PostFor(42, new { email = "sensitive@example.invalid", usageCodes = UnknownUse });
+        var duplicateUses = await PostFor(42, new { email = "sensitive@example.invalid", usageCodes = DuplicateUses });
+        var inactiveUse = await PostFor(42, new { email = "sensitive@example.invalid", usageCodes = InactiveUse });
+        var blacklisted = await PostFor(51, new { email = "sensitive@example.invalid", usageCodes = InvoiceUse });
+        var missingPerson = await PostFor(999, new { email = "sensitive@example.invalid", usageCodes = InvoiceUse });
+
+        Assert.Equal(HttpStatusCode.Conflict, duplicate.StatusCode);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, unavailable.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, unknownUse.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, duplicateUses.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, inactiveUse.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, blacklisted.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, missingPerson.StatusCode);
+        foreach (var response in new[] { duplicate, unavailable, invalid, unknownUse, duplicateUses, inactiveUse, blacklisted, missingPerson })
+        {
+            var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+            Assert.DoesNotContain("sensitive@example.invalid", body, StringComparison.Ordinal);
+            Assert.DoesNotContain("MAI_FG_OMITIR_ENVIO", body, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("USR_CL_CVE", body, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    [Fact]
+    public async Task EmailStateAndUpdateConflictsAndMissingExpectedTimestampAreControlled()
+    {
+        using var client = CreateClient("customers-write");
+        var csrf = await GetCsrfAsync(client);
+        async Task<HttpResponseMessage> Send(HttpMethod method, string path, object body)
+        {
+            using var request = new HttpRequestMessage(method, path) { Content = JsonContent.Create(body) };
+            request.Headers.Add(csrf.HeaderName, csrf.RequestToken);
+            return await client.SendAsync(request, TestContext.Current.CancellationToken);
+        }
+
+        var modified = await Send(HttpMethod.Put, "/api/v1/customers/49/emails/8001", new { email = (string?)null, usageCodes = InvoiceUse, expectedModifiedAt = "2025-01-01T00:00:00Z" });
+        var duplicateUpdate = await Send(HttpMethod.Put, "/api/v1/customers/48/emails/8001", new { email = "duplicado@example.invalid", usageCodes = InvoiceUse, expectedModifiedAt = "2025-01-01T00:00:00Z" });
+        var unavailableUpdate = await Send(HttpMethod.Put, "/api/v1/customers/50/emails/8001", new { email = "nuevo@example.invalid", usageCodes = InvoiceUse, expectedModifiedAt = "2025-01-01T00:00:00Z" });
+        var invalidUpdate = await Send(HttpMethod.Put, "/api/v1/customers/42/emails/8001", new { email = "nuevo@example.invalid", usageCodes = Array.Empty<int>(), expectedModifiedAt = "2025-01-01T00:00:00Z" });
+        var missingUpdate = await Send(HttpMethod.Put, "/api/v1/customers/999/emails/8001", new { email = (string?)null, usageCodes = InvoiceUse, expectedModifiedAt = "2025-01-01T00:00:00Z" });
+        var duplicate = await Send(HttpMethod.Post, "/api/v1/customers/48/emails/8001/activate", new { expectedModifiedAt = "2025-01-01T00:00:00Z" });
+        var missingTimestamp = await Send(HttpMethod.Post, "/api/v1/customers/42/emails/8001/deactivate", new { });
+        var missingEmail = await Send(HttpMethod.Post, "/api/v1/customers/999/emails/8001/deactivate", new { expectedModifiedAt = "2025-01-01T00:00:00Z" });
+
+        Assert.Equal(HttpStatusCode.Conflict, modified.StatusCode);
+        Assert.Contains("email_modified", await modified.Content.ReadAsStringAsync(TestContext.Current.CancellationToken), StringComparison.Ordinal);
+        Assert.Equal(HttpStatusCode.Conflict, duplicateUpdate.StatusCode);
+        Assert.Contains("email_duplicate", await duplicateUpdate.Content.ReadAsStringAsync(TestContext.Current.CancellationToken), StringComparison.Ordinal);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, unavailableUpdate.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, invalidUpdate.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, missingUpdate.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, duplicate.StatusCode);
+        Assert.Contains("email_duplicate", await duplicate.Content.ReadAsStringAsync(TestContext.Current.CancellationToken), StringComparison.Ordinal);
+        Assert.Equal(HttpStatusCode.BadRequest, missingTimestamp.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, missingEmail.StatusCode);
     }
 
     private HttpClient CreateClient(string mode)

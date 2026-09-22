@@ -151,6 +151,10 @@ export type CustomerPhone = {
 }
 
 export type CustomerEmail = { emailId: number; contact: string | null; email: string | null }
+export type ManagedCustomerEmail = { emailId: number; personId: number; contact: string | null; email: string; status: 'Active' | 'Inactive' | 'Unknown'; usageCodes: number[]; modifiedAt: string }
+export type CustomerEmailUsage = { code: number; description: string }
+export type CustomerEmailPayload = { contact?: string | null; email?: string | null; usageCodes: number[]; expectedModifiedAt?: string }
+export type EmailStatePayload = { expectedModifiedAt: string }
 export type CustomerRole = { code: number; description: string | null }
 export type CustomerListItem = {
   personId: number
@@ -289,6 +293,25 @@ export function getCustomerPhones(personId: number): Promise<ManagedCustomerPhon
   return apiRequest<ManagedCustomerPhone[]>(`/api/v1/customers/${encodeURIComponent(personId)}/phones`)
 }
 
+export function getCustomerEmails(personId: number): Promise<ManagedCustomerEmail[]> {
+  return apiRequest<ManagedCustomerEmail[]>(`/api/v1/customers/${encodeURIComponent(personId)}/emails`)
+}
+export function getCustomerEmailUsages(): Promise<CustomerEmailUsage[]> {
+  return apiRequest<CustomerEmailUsage[]>('/api/v1/catalogs/email-uses')
+}
+export function createCustomerEmail(personId: number, payload: CustomerEmailPayload): Promise<ManagedCustomerEmail> {
+  return withCsrf<ManagedCustomerEmail>(`/api/v1/customers/${encodeURIComponent(personId)}/emails`, { method: 'POST', body: JSON.stringify(payload) })
+}
+export function updateCustomerEmail(personId: number, emailId: number, payload: CustomerEmailPayload & { expectedModifiedAt: string }): Promise<ManagedCustomerEmail> {
+  return withCsrf<ManagedCustomerEmail>(`/api/v1/customers/${encodeURIComponent(personId)}/emails/${encodeURIComponent(emailId)}`, { method: 'PUT', body: JSON.stringify(payload) })
+}
+export function activateCustomerEmail(personId: number, emailId: number, payload: EmailStatePayload): Promise<ManagedCustomerEmail> {
+  return withCsrf<ManagedCustomerEmail>(`/api/v1/customers/${encodeURIComponent(personId)}/emails/${encodeURIComponent(emailId)}/activate`, { method: 'POST', body: JSON.stringify(payload) })
+}
+export function deactivateCustomerEmail(personId: number, emailId: number, payload: EmailStatePayload): Promise<ManagedCustomerEmail> {
+  return withCsrf<ManagedCustomerEmail>(`/api/v1/customers/${encodeURIComponent(personId)}/emails/${encodeURIComponent(emailId)}/deactivate`, { method: 'POST', body: JSON.stringify(payload) })
+}
+
 export function createCustomerPhone(personId: number, payload: CustomerPhonePayload): Promise<ManagedCustomerPhone> {
   return withCsrf<ManagedCustomerPhone>(`/api/v1/customers/${encodeURIComponent(personId)}/phones`, { method: 'POST', body: JSON.stringify(payload) })
 }
@@ -374,9 +397,6 @@ export type CustomerCreatePayload = {
   phoneNumber: string
   phoneExtension?: string
   phoneContact?: string
-  emailContact: string
-  email: string
-  emailUsageCodes: number[]
   pepConfirmed: boolean
 }
 

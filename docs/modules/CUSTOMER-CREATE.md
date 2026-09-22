@@ -4,7 +4,9 @@
 
 ### Contrato vigente: alta de persona sin domicilio
 
-Desde `feature/customer-create-without-address`, `POST /api/v1/customers` crea únicamente la persona y sus datos explícitos de teléfono y correo. El request HTTP, `CustomerCreateCommand`, el validador y el formulario ya no aceptan propiedades de domicilio. La administración de `CDOMICILIO` permanece exclusivamente en sus endpoints y panel independientes.
+Desde `feature/customer-create-without-address`, `POST /api/v1/customers` crea únicamente la persona y el teléfono explícitamente capturado. El request HTTP, `CustomerCreateCommand`, el validador y el formulario no aceptan propiedades de domicilio ni de correo. La administración de `CDOMICILIO` y `CPERSONA_EMAIL` permanece exclusivamente en sus endpoints y paneles independientes.
+
+El flujo vigente es: crear la persona, obtener `PNA_FL_PERSONA` y completar posteriormente domicilios y correos desde sus secciones independientes. El alta no reserva consecutivos ni escribe `CPERSONA_EMAIL` o `KEMAIL_USO`; tampoco consulta los catálogos 244 o 248. Los correos no forman parte de readiness ni de la habilitación de contratos.
 
 El alta no reserva `CCATCONSEC` para `CDOMICILIO`, no ejecuta `INSERT`, `UPDATE` ni `DELETE` sobre esa tabla y no crea domicilios vacíos o provisionales. Tras `201 Created`, la aplicación abre el detalle del cliente; readiness informa `hasAddress = false`, muestra que falta domicilio y mantiene deshabilitada la captura de contrato. La acción **Agregar domicilio** usa el módulo independiente.
 
@@ -72,7 +74,7 @@ La evidencia de esquema confirma que las siguientes columnas son `NOT NULL` y no
 
 `DMO_DS_NUMINT` se envía siempre como parámetro Dapper `DbType.String` con tamaño 100. Los campos `State`, `City`, `Municipality` y `Neighborhood` se validan con el máximo confirmado de 70; `ExteriorNumber` con 100; `StreetAndNumber` con 200; `AddressReference` y `AddressSchedule` con 100.
 
-La inserción se ejecuta por etapas separadas (`person`, `subtype`, `role`, `address`, `phone`, `email`, `email_usage`, `audit`, `commit`). Así, un error de compatibilidad en domicilio se registra como `Stage=address` y provoca rollback completo. Una `SqlException` de mapeo, como el error 515, no se clasifica como indisponibilidad 503: se propaga al manejador global como 500 con respuesta genérica.
+La inserción se ejecuta por etapas separadas (`person`, `subtype`, `role`, `phone`, `audit`, `commit`). No contiene etapas de correo ni domicilio. Un error de compatibilidad se registra en la etapa concreta y provoca rollback completo. Una `SqlException` de mapeo, como el error 515, no se clasifica como indisponibilidad 503: se propaga al manejador global como 500 con respuesta genérica.
 
 | Campo | Valor inicial | Origen | Validación | Tabla destino | Efecto secundario | Evidencia |
 |---|---|---|---|---|---|---|
@@ -80,7 +82,7 @@ La inserción se ejecuta por etapas separadas (`person`, `subtype`, `role`, `add
 | `PNA_CL_PJURIDICA` | Selección | `cmbPerFiscal` | Catálogo de personalidad; distingue PF/PM | `CPERSONA` | Decide la extensión física o moral | `su_MtoPersona.aspx.vb`, `cmdGuardar_Click` |
 | `PNA_CL_RFC` | Capturado o calculado | `txtRFC`; PF puede recalcularse con nombre y fecha | Validador Legacy y longitud según personalidad | `CPERSONA` | Participa en validaciones de duplicidad | `su_MtoPersona.aspx.vb`, `cmdGuardar_Click` |
 | `PNA_DS_NOMBRE` | Composición Legacy | PF: apellidos y nombre; PM: razón social y régimen de capital | Nombre/apellidos o razón social obligatorios | `CPERSONA` | Resumen utilizado en búsquedas | `sdLsenet/sd_clsPersona.vb`, `ActualizaPersona` |
-| `PNA_DS_EMAIL` | Valor resumido capturado | Campo de correo de la pantalla principal | No sustituye `CPERSONA_EMAIL` | `CPERSONA` | Conserva el resumen Legacy | `su_MtoPersona.aspx.vb` |
+| `PNA_DS_EMAIL` | Fuera del contrato moderno | El alta ya no captura correo | No se envía ni se escribe desde `CustomerCreate` | `CPERSONA` | El correo se administra en `CPERSONA_EMAIL` | `CustomerCreateEndpoints`, `LegacyCustomerWriteRepository` |
 | `PNA_FG_FCONTACTO` | Selección | `cmbForCont` | Selección obligatoria | `CPERSONA` | Clasifica forma de contacto | `su_MtoPersona.aspx.vb` |
 | `GPR_FL_CVE` | Selección | `cmbGpo` | Selección obligatoria | `CPERSONA` | Clasifica grupo | `su_MtoPersona.aspx.vb` |
 | `GRI_FL_CVE` | Selección | `cmbRiesgo` | Selección obligatoria | `CPERSONA` | Clasifica riesgo | `su_MtoPersona.aspx.vb` |
@@ -105,12 +107,9 @@ La inserción se ejecuta por etapas separadas (`person`, `subtype`, `role`, `add
 | `TTL_FL_CVE` | Selección | `cmbTipoTel` | Catálogo de tipos de teléfono | `CTELEFONO` | Clasifica teléfono | `su_MtoTelefono.aspx.vb` |
 | `TFN_FG_STATUS` | Selección | Combo de estatus | Catálogo de estatus | `CTELEFONO` | Activo/inactivo | `su_MtoTelefono.aspx.vb`; `ActualizaTelefono` |
 | `TFN_FG_REGDEFAULT` | `1` para el primer teléfono; después selección | `chkDef` y regla del método | Al marcarlo desmarca los demás | `CTELEFONO` | Principal por persona | `sd_clsPersona.vb`, `ActualizaTelefono` |
-| `MAI_FL_CVE` | Consecutivo | `ObtenConsecutivo("CPERSONA_EMAIL")` | Consecutivo de correo | `CPERSONA_EMAIL` | Identificador de correo | `Proleasenet.Negocio/sn_clsPersona.vb`, `InsertaActualizaPersona_Email` |
-| `MAI_FG_STATUS` | Selección | `ddlStatus` | Nombre y correo obligatorios; formato validado | `CPERSONA_EMAIL` | Activo/inactivo | `su_MtoPersonaEmail.aspx.vb`, `cmbGuardar_Click` |
-| `MAI_FG_OMITIR_ENVIO` | `0` | Constante del alta | No es selección del usuario | `CPERSONA_EMAIL` | El correo no queda omitido | `InsertaActualizaPersona_Email` |
-| Uso de correo | Uno o varios usos marcados | Checkboxes de tipos de uso, catálogo 244 | Cada uso seleccionado se conserva | `KEMAIL_USO` | En actualización elimina usos previos y reinserta los elegidos | `su_MtoPersonaEmail.aspx.vb`; `InsertaActualizaPersona_Email` |
-| `KEMAIL_USO.USR_CL_CVE` | Usuario de sesión | `strUser` / `LegacyUserCode` | Usuario requerido | `KEMAIL_USO` | Trazabilidad | `InsertaActualizaPersona_Email` |
-| `KEMAIL_USO.USO_FE_MODIFICACION` | Fecha/hora del servidor | `GETDATE()` | Generada por Legacy | `KEMAIL_USO` | Fecha técnica del uso | `InsertaActualizaPersona_Email` |
+| `MAI_FL_CVE` | Fuera del alta moderna | Se genera al agregar un correo desde su sección | No participa en `CustomerCreate` | `CPERSONA_EMAIL` | Identificador de correo independiente | `CustomerEmailManagement` |
+| `MAI_FG_STATUS` | Fuera del alta moderna | Se valida en la sección Correos | No participa en `CustomerCreate` | `CPERSONA_EMAIL` | Estado administrado independientemente | `CustomerEmailManagement` |
+| Uso de correo | Fuera del alta moderna | Se captura posteriormente | No participa en `CustomerCreate` | `KEMAIL_USO` | Usos administrados independientemente | `CustomerEmailManagement` |
 | `BIT_FL_CVE` | Consecutivo | `ObtenConsecutivo("KBITACORA")` | Sólo si la acción está configurada para bitácora | `KBITACORA` | Auditoría | `Seguridad.vb`, `Bitacora.Guarda` |
 | `ATV_FL_CVE` | `4` en alta; `5` en modificación | `CommandArgumentControl` de `cmdGuardar` | Consulta `KACCION.ATV_FG_BITACORA` | `KBITACORA` | Decide si se audita | `su_MtoPersona.aspx.vb`; `Seguridad.vb` |
 | `BIT_FE_OPERACION` | Fecha de operación | `Utils.ObtenFechaOperacion()` | Fecha de negocio | `KBITACORA` | Auditoría funcional | `Seguridad.vb`, `Bitacora.Guarda` |
@@ -122,7 +121,7 @@ La inserción se ejecuta por etapas separadas (`person`, `subtype`, `role`, `add
 - `PNA_NO_CODE` es `DealerCode`: blanco se convierte en `0`, se valida que no esté asignado a otra persona y sólo es obligatorio para roles dealer, planta o sucursal.
 - La integración PEP del alta queda desacoplada mediante `IPersonPepChecker`; el flujo moderno no consulta directamente ninguna tabla Legacy PEP ni registra un resultado negativo simulado. El proveedor representa `NoMatch`, `Match` o `Unavailable`. Una coincidencia exige `pepConfirmed=true` en una segunda solicitud explícita; sin confirmación devuelve 422 y `pep_confirmation_required`, mientras que `Unavailable` devuelve 503. En Development, `CustomerCreation__RequirePepCheck=false` permite la demostración, ignora `pepConfirmed` y expone el estado `NotExecuted`; esa configuración no está permitida en Production.
 - El primer domicilio y el primer teléfono quedan predeterminados aunque sus módulos independientes no envíen la marca; una nueva selección default desmarca los existentes. El alta de persona ya no crea el primer domicilio.
-- Los usos de correo son múltiples. El alta crea una fila por uso seleccionado; la actualización elimina usos anteriores y los vuelve a crear.
+- Los usos de correo son múltiples. La sección independiente Correos crea una fila por uso seleccionado; la actualización elimina usos anteriores y los vuelve a crear. El alta inicial no recibe usos.
 - `CPERSONA_EMAIL` recibe la fecha de modificación proporcionada; `KEMAIL_USO` recibe la fecha/hora del servidor Legacy.
 - `KEMAIL_USO` tiene FK física confirmada de `MAI_FL_CVE` a `CPERSONA_EMAIL`; no se confirmó PK física.
 - La actividad `4` corresponde al alta desde `cmdGuardar`; la clase de bitácora sólo persiste si `KACCION` la habilita. La bitácora se escribe después de la operación de persona y no comparte esa transacción.
@@ -167,7 +166,7 @@ No se ejecutaron SQL Server, escrituras Legacy, migraciones, IdentityAdmin, comm
 - La comprobación PEP ocurre antes de cualquier inserción. Una coincidencia exige confirmación explícita; ausencia de confirmación devuelve 422 y una falla del servicio devuelve 503. La notificación queda detrás de una interfaz separada y no participa en el commit.
 - La escritura moderna de `KBITACORA` se realiza dentro de la misma transacción de cliente. Usa `ATV_FL_CVE = 4`, `BIT_TOP_CVE` vacío compatible con la columna, `BIT_FE_FECHA` generado por SQL Server, `LegacyUserCode` como actor y la referencia funcional Legacy sin RFC ni datos de contacto. Esta es una diferencia deliberada frente a Legacy, donde la bitácora se guarda después: si la auditoría moderna falla, todo el alta hace rollback.
 - La conexión de escritura es distinta de la de lectura y está cerrada por defecto. Las pruebas de escritura sólo se habilitan en `Development`, con `UCREDIT_ALLOW_LEGACY_WRITE_TESTS=true`, `UCREDIT_LEGACY_WRITE_TEST_DATABASE=pr_t`, conexión separada y verificación efectiva de `DB_NAME() = pr_t` antes de abrir la transacción.
-- `CCATCONSEC` se bloquea dentro de la transacción para obtener los consecutivos de persona, teléfono, correo y bitácora. El consecutivo de domicilio se reserva únicamente desde la administración independiente de domicilios. No se usa `MAX + 1`.
+- `CCATCONSEC` se bloquea dentro de la transacción para obtener los consecutivos de persona, teléfono y bitácora. El consecutivo de correo se reserva únicamente desde la administración independiente de correos; el de domicilio se reserva únicamente desde su módulo. No se usa `MAX + 1`.
 - Se añadió el contrato `POST /api/v1/customers`, permiso `customers.write`, DTO HTTP explícito, antiforgery y actor `LegacyUserCode`. La migración `AddLegacyUserCodeToUserTenantMembership` sólo se generó para revisión y no fue aplicada.
 
 `IdentityAdmin` ahora aprovisiona idempotentemente `contracts.read`, `customers.read` y `customers.write` sólo en la membresía activa del tenant indicado, y carga `LegacyUserCode` desde `UCREDIT_BOOTSTRAP_LEGACY_USER_CODE`. La herramienta no se ejecutó. El código se valida contra la membresía del tenant activo y rechaza cambiar un valor existente distinto.

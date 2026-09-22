@@ -117,9 +117,9 @@ public sealed record CustomerCreateRequest(
     CustomerCreatePersonality LegalPersonality, string Rfc, string? FirstName, string? PaternalSurname, string? MaternalSurname,
     string? LegalName, string? CapitalRegime, DateOnly ConstitutionOrBirthDate, int CountryCode, int GroupCode, int RiskCode,
     int ContactFormCode, string TaxRegimeCode, int PhoneTypeCode, string AreaCode, string PhoneNumber, string? PhoneExtension,
-    string? PhoneContact, string EmailContact, string Email, IReadOnlyList<int> EmailUsageCodes, bool PepConfirmed)
+    string? PhoneContact, bool PepConfirmed)
 {
-    public CustomerCreateCommand ToCommand() => new(LegalPersonality, Rfc, FirstName, PaternalSurname, MaternalSurname, LegalName, CapitalRegime, ConstitutionOrBirthDate, CountryCode, GroupCode, RiskCode, ContactFormCode, TaxRegimeCode, PhoneTypeCode, AreaCode, PhoneNumber, PhoneExtension, PhoneContact, EmailContact, Email, EmailUsageCodes ?? []);
+    public CustomerCreateCommand ToCommand() => new(LegalPersonality, Rfc, FirstName, PaternalSurname, MaternalSurname, LegalName, CapitalRegime, ConstitutionOrBirthDate, CountryCode, GroupCode, RiskCode, ContactFormCode, TaxRegimeCode, PhoneTypeCode, AreaCode, PhoneNumber, PhoneExtension, PhoneContact);
 }
 
 public sealed record CustomerCreateResponse(int PersonId, string PepValidationStatus);
