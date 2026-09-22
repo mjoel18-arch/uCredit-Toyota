@@ -291,7 +291,7 @@ observado en SQL Legacy no se traslada automáticamente como regla moderna.
 | intPlaza | SUC_FL_CVE | Plaza Legacy | Capturada por usuario | Catálogo pendiente | Pendiente | Ninguna confirmada |
 | intTasa | TAS_FL_CVE | Selector de tasa | Capturada por usuario | Catálogo pendiente | Pendiente | Ninguna confirmada |
 | intPropuesta | KPR_FL_CVE | Propuesta asociada | Capturada/derivada | Fuera de alcance | Pendiente | KCONTRATO_CALCULO_TAMORTIZACION |
-| intLineaCred | LCR_FL_CVE | Línea de crédito | Capturada por usuario | Catálogo pendiente | Pendiente | Ninguna confirmada |
+| intLineaCred | LCR_FL_CVE | Línea de crédito | Resultado interno de generación automática | No se acepta desde el navegador; requiere rama Legacy de automatización | Parcial | `sn_clsCredito.LineaAutomatica` y creación en `sn_clsContratos` |
 | intPaquete/intOpcPaq | KPQ_FL_CVE/OPP_FL_CVE | Paquete y opción | Capturada por usuario | Catálogo pendiente | Pendiente | Producto |
 | intProducto | PRD_FL_CVE | Producto | Capturada por usuario | Catálogo pendiente | Pendiente | Facturación |
 | intStatCont | CTO_FG_STATUS | Flujo de estado | Sin regla confirmada | Catálogo pendiente | Pendiente | Ninguna confirmada |
@@ -732,8 +732,9 @@ Los parámetros técnicos identificados incluyen:
 - intEmpresa: valor recibido desde la selección/contexto Legacy; para el MVP
   se solicita 1, pero la resolución moderna aún no está confirmada.
 - strTipoOper: valor del selector de operación; para el MVP es CD.
-- intLineaCred: línea seleccionada o automática; no se puede asumir NULL para
-  CD sin confirmar LineaAutomatica.
+- intLineaCred: no es una selección del usuario. Para el MVP CD, `LCR_FL_CVE`
+  debe ser un resultado interno de generación automática; el payload moderno
+  no lo acepta y no puede enviar un identificador arbitrario.
 - intPaquete, intOpcPaq, intProducto: controles de producto/paquete, con
   NULL cuando la ruta Legacy los considera ausentes.
 - intPlaza: valor de la plaza seleccionada/preseleccionada.
@@ -769,7 +770,7 @@ Los valores son simbólicos y no son datos reales.
 | CTO_FL_CVE | <generatedContractKey> | spLsnetGeneraClaveContrato | Confirmada |
 | EMP_FL_CVE | 1 | intEmpresa/contexto | Pendiente |
 | TAS_FL_CVE | <selectedRateId> | selector de tasa | Pendiente |
-| LCR_FL_CVE | <selectedCreditLineId> o NULL técnico | línea/LineaAutomatica | Pendiente |
+| LCR_FL_CVE | <generatedCreditLineId> | generación automática Legacy | Parcial; falta cerrar esquema y rama CD |
 | CTO_FE_GENERACION | <businessDate> | CFECHA_OPERACION | Confirmada |
 | CTO_FE_INICIO | <capturedStartDate> | strFecIni | Pendiente |
 | CTO_FG_REESTRUCTURA | 0 en el escenario | intFgReestructura | Parcial; aprobar constante |
@@ -859,6 +860,177 @@ uCredit; representan el origen pendiente de resolver.
 
 No se debe sustituir ninguna fecha pendiente por DateTime.Now. Las fechas
 derivadas deben usar CFECHA_OPERACION o el cálculo Legacy equivalente.
+
+## Enlace upstream de las 70 columnas
+
+En el Legacy, GuardaInfo arma la llamada posicional a
+sn_clsContratoPropuesta.ActualizaContrato. El adaptador de negocio reenvía
+los argumentos a sd_clsContratoPropuesta.ActualizaContrato. El último punto
+de la cadena es el SQL dinámico strSQL. Por ello, una columna puede tener
+origen técnico localizado aunque su regla funcional moderna continúe pendiente.
+
+Abreviaturas usadas en la matriz:
+
+- GF: GuardaInfo / controles de su_actContratoPropuesta.aspx.
+- ACP: sn_clsContratoPropuesta.ActualizaContrato.
+- DCP: sd_clsContratoPropuesta.ActualizaContrato.
+- OP: CFECHA_OPERACION.
+- ESQ: ObtenEsquemaFinanciamiento.
+- CALC: cálculo de pagos, tasa o importes.
+- CAT: catálogo Legacy.
+
+| Columna | Expresión/valor en INSERT | Parámetro o argumento | Origen upstream | Valor CD | Evidencia | Regla |
+|---|---|---|---|---|---|---|
+| CTO_FL_CVE | strLlaveContrato | strContrato/strNoOper | ACP/DCP/SP | <generatedContractKey> | GuardaInfo, ACP, DCP | Confirmada |
+| EMP_FL_CVE | intEmpresa | intEmpresa | GF/contexto | 1 | GuardaInfo y firma ACP | Pendiente aprobación |
+| TAS_FL_CVE | intTasa | intTasa | cmbTipoTasa | <selectedRateId> | ASPX, GuardaInfo | CAT pendiente |
+| LCR_FL_CVE | resultado de generación automática | `LineaAutomatica` + alta de `KLINEA_CREDITO` | servidor Legacy/servicio de contrato | <generatedCreditLineId> | `sn_clsContratos`, `sn_clsCredito`, `sd_clsCredito` | Parcial; no es entrada del usuario |
+| CTO_FE_GENERACION | CFECHA_OPERACION | strFecOper | OP | <businessDate> | DCP INSERT | Confirmada |
+| CTO_FE_INICIO | strFecIni | strFecIni | control fecha inicio | <startDate> | GF/ValidaCampos | Fecha pendiente |
+| CTO_FG_REESTRUCTURA | intFgReestructura | intFgReestructura | flujo reestructura | 0 en MVP | GF/ACP | Constante por aprobar |
+| CTO_FG_STATUS | intStatCont | intStatCont | estado/carga | <initialStatus> | GF/ACP | Estado pendiente |
+| CTO_CL_MONEDA | intMoneda | intMoneda | cmbMoneda | <nationalCurrency> | GF/ACP | CAT pendiente |
+| CTO_NO_MTO_FINANCIAR | dblMtoFinanciar | ByRef dblMtoFinanciar | cálculo financiero | <calculatedFinancedAmount> | ACP y DCP UPDATE/INSERT | Cálculo pendiente |
+| CTO_NO_MTO_ANTICIPO | IIf(ESQ_FG_ANT_RENTA=1,dblMtoAnt,0) | dblMtoAnt | ESQ + GF | 0 o <advanceAmount> | DCP INSERT | Esquema pendiente |
+| CTO_NO_PRC_ANTICIPO | IIf(ESQ_FG_ANT_RENTA=1,dblPtjAnt,0) | dblPtjAnt | ESQ + GF | 0 o <advancePercent> | DCP INSERT | Esquema pendiente |
+| CTO_NO_PLAZO | intPlazo | intPlazo | txtPlazo | <term> | ValidaCampos | Regla pendiente |
+| CTO_NO_MTO_ENGANCHE | IIf(ESQ_FG_ENGANCHE=1,dblMtoAnt,0) | dblMtoAnt | ESQ + GF | 0 o <downPayment> | DCP INSERT | Esquema pendiente |
+| CTO_NO_PRC_ENGANCHE | IIf(ESQ_FG_ENGANCHE=1,dblPtjAnt,0) | dblPtjAnt | ESQ + GF | 0 o <downPaymentPercent> | DCP INSERT | Esquema pendiente |
+| CTO_NO_DEPRENTAS | dblNoRent | dblNoRent | txtRentas | 0 o <rentCount> | GF/ValidaCampos | Esquema pendiente |
+| CTO_NO_MTO_DEPRENTAS | dblMtoRent | dblMtoRent | txtMonto | 0 o <rentAmount> | GF | Esquema pendiente |
+| CTO_CL_IVA | dblTasaIVA | dblTasaIVA | cliente/régimen | <validatedTaxValue> | IvaClienteFronterizo | Compatibilidad pendiente |
+| CTO_NO_MTO_DEPOSITO | dblDeposito | dblDeposito | txtDeposito/esquema | 0 o <depositAmount> | GF/ACP | Esquema pendiente |
+| CNB_FL_CVE | intCNB | intCNB | ddlCNB/su_catCNB | <selectedCnbId> | GF/CCNB | Compatibilidad parcial |
+| CTO_CL_EDOEQUIPO | intEdoEquipo | intEdoEquipo | control equipo | <equipmentStatus> | GF | CAT pendiente |
+| CTO_NO_TASA_BASE | dblTasaBase | dblTasaBase | txtTasaBase | <baseRate> | pestaña Tasa | Cálculo pendiente |
+| CTO_NO_PUNTOS_ADIC | dblPuntos | dblPuntos | txtPuntos | <additionalPoints> | pestaña Tasa | Cálculo pendiente |
+| CTO_NO_FACTOR | dblFactor | dblFactor | txtFactor | <rateFactor> | pestaña Tasa | Cálculo pendiente |
+| CTO_FE_PRIMER_PAGO | strFecPrimerPago | strFecPrimerPago | control/ObtenFechas | <firstPaymentDate> | GF/ObtenFechas | Fecha pendiente |
+| CTO_FE_ULTPAGO | Format(last CTP_FE_EXIGIBILIDAD) | recalculado DCP | ObtenPeriodosPagos | <calculatedLastPaymentDate> | ACP | Confirmada |
+| CTO_FE_SOL_DESEMBOLSO | strFecSolDesem | strFecSolDesem | control/regla | <disbursementDate> | GF/ValidaCampos | Origen pendiente |
+| CTO_FE_ACTIVACION | strFecActivacion | strFecActivacion | estado | <activationDate> | GF/DCP | Fecha pendiente |
+| CTO_NO_TASA_NOMINAL | dblTasaNom | dblTasaNom | cálculo tasa | <nominalRate> | pestaña Tasa | Fórmula pendiente |
+| CTO_CL_FPAGO_SEGBIEN | intFormaPagoSeg | intFormaPagoSeg | seguro | <insurancePaymentMethod> | GF | CAT pendiente |
+| CTO_FE_BAJA | strFecBaja | strFecBaja | estado | <legacySentinelDate> | GF | Sentinel pendiente |
+| CTO_FE_FIRMA_CONTRATO | strFecFirmaCont | strFecFirmaCont | control firma | <contractSignatureDate> | GF | Fecha pendiente |
+| CTO_FE_FIRMAANEXO | strFecFirmaAnexo | strFecFirmaAnexo | control firma | <annexSignatureDate> | GF | Fecha pendiente |
+| CTO_CL_EXIGIBILIDAD | intExigibilidad | intExigibilidad | catálogo | <dueRule> | GF | CAT pendiente |
+| CTO_CL_CALENDARIO | intCalendario | intCalendario | catálogo | <calendar> | GF | CAT pendiente |
+| CTO_CL_FPAGO | 1 en INSERT Legacy | intPeriodicidad | esquema | <paymentMethod> | DCP INSERT | Constante/significado pendiente |
+| PPG_FL_CVE | intPeriodicidad | intPeriodicidad | cmbPeriodicidad | <paymentPeriodicity> | GF | CAT pendiente |
+| CTO_FG_SEGVIDA | intAplicaSegVida | intAplicaSegVida | seguro | 0 en MVP | GF/ACP | Constante por aprobar |
+| CTO_NO_MTO_VRESIDUAL | IIf(flag residual,dblMtoValRes,0) | dblMtoValRes | esquema | 0 en MVP | DCP INSERT | Regla pendiente |
+| CTO_CL_ESQPAGO | intEsqPago | intEsqPago | esquema | <paymentScheme> | GF | CAT pendiente |
+| CTO_NO_PRC_VRESIDUAL | IIf(flag residual,dblPtjValRes,0) | dblPtjValRes | esquema | 0 en MVP | DCP INSERT | Regla pendiente |
+| CTO_NO_SALDO | dblSaldo=dblMtoFinanciar | dblSaldo | ACP cálculo | <calculatedFinancedAmount> | ACP | Confirmada |
+| CTO_CL_AMORT | intCveAmor | intCveAmor | catálogo | <amortizationType> | GF | CAT pendiente |
+| TLO_FL_CVE | intTipoCalc | intTipoCalc | catálogo tasa | <calculationType> | GF | CAT pendiente |
+| CTO_FE_ULTMOD | CFECHA_OPERACION | strFecOper | OP | <businessDate> | DCP INSERT | Confirmada |
+| CTO_FG_TASA_REGULADA | intAplicaTasaReg | intAplicaTasaReg | checkbox tasa | <regulatedFlag> | GF | Condicional |
+| CTO_NO_TASA_TECHO | IIf(regulada,dblValTasaTecho,0) | dblValTasaTecho | tasa | 0 o <rateCeiling> | DCP INSERT | Condicional |
+| CTO_NO_TASA_PISO | IIf(regulada,dblValTasaPiso,0) | dblValTasaPiso | tasa | 0 o <rateFloor> | DCP INSERT | Condicional |
+| TAS_FL_CVEMORA | intTasaMora | intTasaMora | ObtieneTasaDefault | <moratoryRateId> | GF/ObtieneTasaDefault | CAT pendiente |
+| TLO_FL_CVEMORA | intTipoCalcMora | intTipoCalcMora | ObtieneTasaDefault | <moratoryCalcType> | GF | CAT pendiente |
+| TAS_NO_BASEMORA | dblTasaBaseMora | dblTasaBaseMora | tasa moratoria | <moratoryBase> | pestaña moratoria | Cálculo pendiente |
+| CTO_NO_PUNTOS_MORA | dblPuntosMora | dblPuntosMora | tasa moratoria | <moratoryPoints> | pestaña moratoria | Cálculo pendiente |
+| CTO_NO_FACTOR_MORA | dblFactorMora | dblFactorMora | tasa moratoria | <moratoryFactor> | pestaña moratoria | Cálculo pendiente |
+| CTO_NO_NOMINAL_MORA | dblTasaNomMora | dblTasaNomMora | cálculo moratorio | <moratoryNominal> | pestaña moratoria | Fórmula pendiente |
+| CTO_NO_MTO_OPCIONCOMPRA | dblMtoOpcCompra | dblMtoOpcCompra | pagos finales | 0 en MVP | DCP INSERT | Constante por aprobar |
+| CTO_NO_PRC_OPCIONCOMPRA | dblPrjOpcCompra | dblPrjOpcCompra | pagos finales | 0 en MVP | DCP INSERT | Constante por aprobar |
+| CTO_NO_MTO_PAGOFINAL | IIf(flag final,dblMtoValRes,0) | dblMtoValRes | esquema | 0 en MVP | DCP INSERT | Constante por aprobar |
+| CTO_NO_PRC_PAGOFINAL | IIf(flag final,dblPtjValRes,0) | dblPtjValRes | esquema | 0 en MVP | DCP INSERT | Constante por aprobar |
+| CTO_FG_CHKLIST | literal 0 observado | no expuesto | constante | SQL DCP | 0 técnico | Significado pendiente |
+| CTO_FG_MAESTRO | intEsContMtro | intEsContMtro | flujo maestro | 0 en MVP | GF/ACP | Constante por aprobar |
+| CTO_NO_ANEXO | intAnexo | intAnexo | flujo Legacy | <annexNumber> | GF | Regla pendiente |
+| CTO_FE_ULTCALC_INTERES | fecha del cálculo | cálculo | procedimiento | <interestCalculationDate> | DCP posterior | Regla pendiente |
+| CTO_NO_GRACIA_INT | valor de esquema | ESQ | catálogo/cálculo | <graceInterest> | DCP/ESQ | Cálculo pendiente |
+| CTO_FG_CESION | intFgCesionado | flujo cesión | constante para MVP | 0 en MVP | GF/ACP | Constante por aprobar |
+| CTO_FG_CV | literal de ruta | SQL DCP | constante | DCP INSERT | <legacyCvFlag> | Significado pendiente |
+| PNA_FL_PERSONA | intPersona | cliente seleccionado | derivada | <selectedPersonId> | GF/ACP/FK | Confirmada |
+| SCB_FL_CVE | intAplicaSegVida/estado cobranza | seguro/cobranza | procedimiento/catálogo | <collectionStatusId> | DCP | Origen pendiente |
+| CTO_NO_SDOANT | literal o reestructura | flujo especial | constante/condicional | 0 en MVP | DCP/reestructura | Constante por aprobar |
+| CTO_NO_EVM | Monto_EVM | control/configuración | parámetro | 0 o <evmAmount> | GF | Regla pendiente |
+| CTO_NO_PORC_EVM | Porcentaje_EVM | control/configuración | parámetro | 0 o <evmPercent> | GF | Regla pendiente |
+
+La tabla enlaza cada columna con el punto técnico visible. Los valores
+marcados como cero son valores técnicos de la ruta Legacy o del escenario
+MVP; aún requieren aprobación explícita para conservarlos en uCredit.
+
+## Causas de las 64 reglas funcionales pendientes
+
+La clasificación no trata el origen técnico como desconocido:
+
+| Causa | Total |
+|---|---:|
+| Fuente Legacy no encontrada | 0 |
+| Archivo o ensamblado faltante | 0 |
+| Valor visible pero significado funcional pendiente | 12 |
+| Constante visible pendiente de aprobación | 6 |
+| Cálculo visible pendiente de validar | 18 |
+| Catálogo identificado sin filtro/compatibilidad cerrada | 12 |
+| Dependencia del tipo de operación | 6 |
+| Dependencia de amortización | 4 |
+| Dependencia de línea de crédito | 1 |
+| No aplica al MVP CD pero KCONTRATO exige valor técnico | 5 |
+| **Total** | **64** |
+
+## Campos adicionales que Legacy necesita para CD
+
+| Campo adicional | Motivo | ¿Derivable? | ¿Nuevo control? | Catálogo | Decisión |
+|---|---|---|---|---|---|
+| Empresa/plaza | Determina alcance y sucursal operativa | Parcialmente | Sí o resolución server-side | CEMPRESA/plaza | Aprobar resolución por despliegue |
+| Línea de crédito | Alimenta LCR_FL_CVE y límites | Sí, mediante resolución automática | No; sólo resultado interno | KLINEA_CREDITO/KLTOPERA | Aprobado: el usuario no selecciona la línea; falta cerrar esquema y valores de la rama CD |
+| Periodicidad/esquema | Calcula pagos y último vencimiento | No | Sí | CPERPAGO/esquema | Aprobar conjunto CD |
+| Tipo y cálculo de tasa | Alimenta tasas ordinaria/moratoria | Parcial | Sí | CTASA/tipos | Aprobar tasas fijas CD |
+| CNBV | Columna NOT NULL y compatibilidad operativa | No | Sí | CCNB | Completar regla CD |
+| Uso CFDI | Validación fiscal y clave almacenada | No | Sí | CUSO_COMPROBANTES/relación | Confirmar activo compatible |
+| Estado de equipo | Columna obligatoria | No confirmada | Sí si aplica | Catálogo equipo | Decidir valor CD |
+| Seguro | Columnas obligatorias relacionadas | No confirmada | No si MVP lo excluye, pero requiere valor | Catálogo seguro | Aprobar constantes de no seguro |
+| Fechas de firma/desembolso | Cumplimiento del flujo | Algunas | Sí | CFECHA_OPERACION/controles | Confirmar fechas CD |
+| Pagos finales/residual | Evita valores incompletos | Por esquema | Sí | Esquema amortización | Aprobar “sin pagos especiales” |
+
+## Separación final de estados
+
+### A. Origen upstream
+
+- Confirmado: 6 columnas.
+- Localizado técnicamente pero upstream CD incompleto: 64.
+- Fuente o ensamblado faltante: 0 en las rutas revisadas.
+
+### B. Comportamiento Legacy
+
+- Confirmado: asignación SQL, generación de clave, fecha contable, saldo
+  inicial, último pago y cancelación de transacción.
+- Parcialmente confirmado: estado inicial, CNBV, desembolso, tasas, CFDI,
+  línea, seguro y campos condicionales.
+- Desconocido: significado funcional de algunos literales y defaults de
+  campos no expuestos.
+
+### C. Decisiones modernas
+
+- Puede conservarse exactamente: uso de CFECHA_OPERACION, generación de clave
+  por SP, rollback y derivación de saldo/último pago.
+- Requiere aprobación: constantes cero/uno, estado inicial, fechas centinela,
+  “sin seguro”, “sin pagos especiales” y valores EVM.
+- Requiere campo adicional o resolución server-side: empresa, plaza, línea,
+  esquema, tasas, CNBV, CFDI y fechas.
+- Fuera del MVP CD: propuesta, reestructura, contrato maestro, subsidio,
+  seguros financiados y efectos de propuesta.
+
+## Decisiones concretas pendientes de aprobación
+
+1. Valor y resolución server-side de empresa/plaza para CD.
+2. Cerrar la rama exacta de generación automática para CD: esquema físico de `KLINEA_CREDITO`, valores de cada NOT NULL, compatibilidad empresa/operación/moneda/tasa y semántica de asociación.
+3. Moneda nacional, esquema, periodicidad, tasas ordinarias y moratorias.
+4. Estado inicial y fechas de desembolso, activación, firma y baja.
+5. Valores “sin seguro”, “sin residual”, “sin opción” y “sin pagos finales”.
+6. Valor y compatibilidad CNBV, CFDI y estado de equipo.
+7. Inclusión y alcance de cargos automáticos, facturación y CAT en la primera
+   transacción moderna.
+
+Conclusión: el MVP CD está bloqueado por 7 decisiones concretas, no por una
+fuente Legacy ausente. Podrá considerarse listo sólo después de aprobarlas y
+confirmar los catálogos y cálculos correspondientes.
 
 ## Bloqueos para un POST seguro
 
@@ -1138,3 +1310,827 @@ clave, INSERT, cálculos, tablas relacionadas y auditoría.
 - Columnas NOT NULL aún bloqueadas específicamente para CD: 64.
 - El MVP CD no tiene una matriz completa.
 - No es seguro implementar todavía un primer POST limitado a CD.
+
+## Línea de crédito automática aprobada para el MVP CD
+
+### Decisión funcional
+
+La línea de crédito no será seleccionada por el usuario y `LCR_FL_CVE` no
+forma parte del request HTTP. Para CD, el backend debe generar o resolver la
+línea dentro del flujo de alta y utilizar el identificador resultante al
+insertar `KCONTRATO`. Un identificador enviado por el navegador, un `NULL`
+arbitrario o un valor inventado deben rechazarse. Si la creación de la línea
+falla, el contrato no puede confirmarse.
+
+### Evidencia Legacy localizada
+
+| Archivo y método | Evidencia funcional | Orden observado |
+|---|---|---|
+| `Proleasenet.Negocio/sn_clsCredito.vb`, `LineaAutomatica` | Consulta la empresa y habilita la automatización según `EMP_FG_AUT_PROPUESTA` para opción 1 o `EMP_FG_AUT_CONTRATO` para opción 2. | Validación previa de la modalidad; no genera por sí sola una fila. |
+| `sdLsenet/sd_clsContratoPropuesta.vb`, `LineaAutomatica` | Repite la decisión leyendo `CEMPRESA` y devuelve si la empresa permite línea automática para contrato. | Se invoca desde el flujo de captura antes de la persistencia del contrato. |
+| `Proleasenet.Negocio/sn_clsContratos.vb`, rama `If blnLinAut Then` | Reserva `KLINEA_CREDITO`, construye `Linea_credito` con persona, moneda, monto financiado, plazo, tasas/valores iniciales y usuario, y llama `sn_clsCredito.ActualizaLineaCredito`. | 1) consecutivo; 2) alta de la línea; 3) recarga de la línea; 4) `ActualizaOperacionesLinea`; 5) continúa el flujo del contrato. |
+| `sdLsenet/sd_clsCredito.vb`, `ActualizaLineaUsuario` | En el alta obtiene el consecutivo mediante `ObtenConsecutivo("KLINEA_CREDITO", ...)`, inserta la línea y sincroniza `KLTOPERA` para las operaciones recibidas; registra bitácora cuando la bandera lo solicita. | La rutina tiene transacción propia si no recibe una transacción externa. |
+| `Proleasenet.Negocio/sn_clsCredito.vb`, `ActualizaLineaCredito` | Convierte el objeto a SQL mediante `Linea_creditoSentencias.ActualizarUno` y ejecuta la actualización. | La variante observada en la rama automática recibe la conexión del flujo de contrato. |
+
+La evidencia confirma que existe una modalidad de alta automática que crea una
+línea nueva, no una selección obligatoria del usuario. También confirma la
+asociación de la línea con operaciones mediante `KLTOPERA` en el flujo de
+administración de líneas. No demuestra todavía que todas las instalaciones o
+todos los tipos de operación CD usen esa misma rama ni que la llamada desde
+`GuardaInfo` comparta una única transacción con `ActualizaContrato`; ambas
+condiciones deben verificarse antes del POST moderno.
+
+### Valores observados en la rama de alta automática
+
+El constructor `Linea_credito` y la sentencia de alta muestran los siguientes
+campos escritos. La evidencia de valor es técnica y no sustituye la
+confirmación del esquema físico completo:
+
+| Columna | Origen observado | Valor/regla para CD | Estado |
+|---|---|---|---|
+| `LCR_FL_CVE` | `ObtenConsecutivo("KLINEA_CREDITO", ...)` | Nuevo consecutivo; no reutilizar por selección del usuario | Parcialmente confirmado |
+| `PNA_FL_PERSONA` | cliente capturado | Persona seleccionada; debe pertenecer al tenant | Confirmado en la rama |
+| `LCR_FL_ANALISTA` | usuario/analista del flujo | `LegacyUserCode` o equivalente Legacy, sujeto a longitud física | Parcial |
+| `LCR_FE_REGISTRO` | fecha recibida por la rutina | Fecha de registro de línea | Parcial |
+| `LCR_FE_VENCIMIENTO` | fecha calculada por la rutina | En una llamada observada se deriva de la fecha de operación más el plazo configurado | Parcial |
+| `LCR_CL_MONEDA` | condición financiera | Moneda del contrato | Parcial |
+| `LCR_NO_MTO_APROBADO` | monto del contrato/línea | En la rama automática observada se usa el monto financiado | Parcial |
+| `LCR_NO_MTO_DISPUESTO` | cálculo de disposición | Inicializado en cero en la llamada observada | Parcial; confirmar regla de CD |
+| `LCR_NO_MTO_DISPONIBLE` | cálculo de línea | Inicializado con la capacidad disponible de la línea | Parcial |
+| `LCR_CL_TLINEA` | tipo de línea | La llamada observada usa el valor técnico 1; falta catálogo y regla funcional | Bloqueado |
+| `LCR_FG_TASA_DFT` | selección/configuración de tasa | La llamada automática usa el valor técnico 0; falta confirmar significado | Bloqueado |
+| `TAS_FL_CVE` | tasa de contrato | Puede ser nulo en la rutina Legacy cuando no hay tasa seleccionada | Bloqueado por regla CD |
+| `LCR_NO_TASA_BASE` | cálculo/configuración de tasa | Parámetro de tasa base | Bloqueado |
+| `LCR_NO_PUNTOS_ADIC` | cálculo/configuración de tasa | Puntos adicionales | Bloqueado |
+| `LCR_NO_FACTOR` | cálculo financiero | Factor de la línea | Bloqueado |
+| `LCR_NO_TASA_NOMINAL` | cálculo financiero | Tasa nominal | Bloqueado |
+| `LCR_DS_COMPOSICION` | composición de la línea | Cadena técnica recibida por la rutina | Bloqueado por semántica |
+| `LCR_DS_OBSERVACIONES` | observaciones Legacy | Valor recibido por la rutina | Bloqueado; no aceptar texto arbitrario sin contrato |
+| `LCR_FG_STATUS` | estado de línea | La llamada automática usa 0 en el constructor observado; no está aprobado como estado de alta moderno | Bloqueado |
+| `LCR_FE_ULTMOD` | fecha de modificación | La implementación observada usa fecha del reloj del proceso en una ruta; debe sustituirse por regla de fecha operativa si así lo exige el contrato moderno | Bloqueado |
+| `USR_CL_CVE` | usuario Legacy | `LegacyUserCode` de la membresía seleccionada | Parcial |
+| `LCR_NO_PLAZOCTO` | plazo del contrato | Plazo del contrato | Parcial |
+| `LCR_NO_PLAZO_MINIMO` | regla de plazo | La rutina usa el plazo mínimo si es positivo y, en caso contrario, 1 | Parcial |
+| `LCR_FG_MULTIMONEDA` | configuración monetaria | La rama observada usa 0 | Bloqueado por regla CD |
+| `LCR_NO_TIPO_CAMBIO` | configuración monetaria | La rama observada usa 0 | Bloqueado |
+| `LCR_NO_MTO_SALDO_INSOLUTO` | cálculo financiero | La rama observada usa 0 | Bloqueado |
+| `TLC_FL_CVE` | tipo de cartera | Para el MVP CD se resuelve mediante `CLTOPERACION` y la relación `CD -> 2`; la variante histórica que usa 0 no es la regla moderna | Parcial; requiere validar catálogo activo |
+
+Esta tabla no se presenta como el esquema completo de `KLINEA_CREDITO`: es la
+lista de columnas que las fuentes consultadas muestran explícitamente en las
+sentencias de alta. El constructor también distingue algunos parámetros
+nullable (`LCR_NO_PLAZOCTO`, `PNA_FL_PERSONA` y `TAS_FL_CVE` en su firma), pero
+la nulabilidad real debe prevalecer sobre esa firma.
+
+### Semántica de creación y reutilización
+
+La única modalidad de creación automática localizada para la ruta de contrato
+reserva un nuevo consecutivo y construye una nueva línea. La evidencia
+revisada no permite afirmar que siempre se cree una línea para cada contrato
+CD en Toyota, ni descarta que otras ramas reutilicen una línea existente. La
+ruta alternativa `If Not blnLinAut Then` reutiliza `intLineaCred`, recarga la
+línea existente y actualiza sus montos; esa rama no debe confundirse con el MVP
+aprobado y tampoco convierte `LCR_FL_CVE` en un campo seleccionable por el
+usuario moderno.
+
+`Reestructuras.vb` contiene otra creación de línea, pero corresponde a
+reestructura y queda fuera del escenario CD nuevo. `sd_clsCesion.vb` también
+crea líneas para cesión; no es evidencia aplicable al MVP.
+
+### Transacción e idempotencia propuestas
+
+El alta moderna debe usar una única transacción `Serializable` y bloquear la
+identidad lógica del intento antes de reservar el consecutivo. El orden
+propuesto, sujeto a confirmar con `GuardaInfo`, es:
+
+1. autenticar, autorizar, validar tenant, membresía y `LegacyUserCode`;
+2. validar readiness y catálogos del cliente/operación CD;
+3. verificar una clave de idempotencia del intento de alta;
+4. comprobar la habilitación de línea automática para la empresa y contrato;
+5. reservar el consecutivo de `KLINEA_CREDITO` mediante el mecanismo Legacy;
+6. insertar la línea y sus asociaciones de operación (`KLTOPERA`) dentro de la transacción;
+7. ejecutar `spLsnetGeneraClaveContrato` dentro de la misma transacción;
+8. insertar `KCONTRATO` con el `LCR_FL_CVE` generado;
+9. ejecutar pagos, amortización, CAT, cargos y bitácora según la rama CD;
+10. confirmar sólo si todas las operaciones terminan correctamente.
+
+Un reintento con la misma clave debe devolver el resultado ya confirmado o un
+conflicto controlado, nunca reservar una segunda línea. Un fallo debe revertir
+la línea, `KLTOPERA`, su consecutivo, la clave de contrato, contrato, pagos,
+amortización, cargos y bitácora que pertenezcan a la misma transacción.
+
+### Esquema físico pendiente de KLINEA_CREDITO
+
+Las fuentes Legacy disponibles no constituyen evidencia autoritativa de todas
+las columnas, tipos, defaults, PK/FK, índices, triggers y CHECK constraints.
+No se ejecutó SQL. Para cerrar la matriz se requieren consultas de sólo
+lectura como las siguientes, sin seleccionar datos personales ni valores
+financieros:
+
+```sql
+SELECT c.column_id, c.name, t.name AS type_name, c.max_length,
+       c.precision, c.scale, c.is_nullable, c.is_identity,
+       dc.definition AS default_definition
+FROM sys.columns AS c
+JOIN sys.tables AS tb ON tb.object_id = c.object_id
+JOIN sys.types AS t ON t.user_type_id = c.user_type_id
+LEFT JOIN sys.default_constraints AS dc ON dc.parent_object_id = c.object_id
+    AND dc.parent_column_id = c.column_id
+WHERE tb.name = 'KLINEA_CREDITO'
+ORDER BY c.column_id;
+
+SELECT i.name, i.is_unique, i.is_primary_key, ic.key_ordinal,
+       c.name AS column_name
+FROM sys.indexes AS i
+JOIN sys.index_columns AS ic ON ic.object_id = i.object_id
+    AND ic.index_id = i.index_id
+JOIN sys.columns AS c ON c.object_id = ic.object_id
+    AND c.column_id = ic.column_id
+JOIN sys.tables AS tb ON tb.object_id = i.object_id
+WHERE tb.name = 'KLINEA_CREDITO'
+ORDER BY i.name, ic.key_ordinal;
+
+SELECT fk.name, OBJECT_NAME(fk.parent_object_id) AS child_table,
+       COL_NAME(fkc.parent_object_id, fkc.parent_column_id) AS child_column,
+       OBJECT_NAME(fk.referenced_object_id) AS parent_table,
+       COL_NAME(fkc.referenced_object_id, fkc.referenced_column_id) AS parent_column
+FROM sys.foreign_keys AS fk
+JOIN sys.foreign_key_columns AS fkc ON fkc.constraint_object_id = fk.object_id
+WHERE fk.parent_object_id = OBJECT_ID('dbo.KLINEA_CREDITO');
+
+SELECT tr.name, tr.is_disabled
+FROM sys.triggers AS tr
+WHERE tr.parent_id = OBJECT_ID('dbo.KLINEA_CREDITO');
+
+SELECT cc.name, cc.definition
+FROM sys.check_constraints AS cc
+WHERE cc.parent_object_id = OBJECT_ID('dbo.KLINEA_CREDITO');
+
+SELECT CCS_DS_NOMTABLA, CCT_DS_CAMPO, CCT_NO_CONSECUTIVO, ID_FL_CVE
+FROM dbo.CCATCONSEC
+WHERE CCS_DS_NOMTABLA = 'KLINEA_CREDITO';
+```
+
+La matriz de columnas NOT NULL de `KLINEA_CREDITO` queda bloqueada hasta
+recibir ese resultado y la trazabilidad de la rama CD. No es seguro rellenar
+las columnas faltantes con ceros por frecuencia, por la firma del constructor
+o por una ruta de reestructura.
+
+### Resultado frente al MVP CD
+
+- Modalidad confirmada: existe alta automática con nuevo consecutivo; la
+  reutilización pertenece a otra rama y no es una selección del usuario.
+- `LCR_FL_CVE`: resultado interno obligatorio, no propiedad HTTP.
+- Tablas involucradas observadas: `KLINEA_CREDITO`, `KLTOPERA`, `KCONTRATO` y
+  las tablas posteriores de pagos, amortización, cargos y auditoría según la
+  ruta de contrato.
+- Procedimientos/métodos involucrados: `LineaAutomatica`,
+  `ActualizaLineaUsuario`, `ActualizaLineaCredito`,
+  `ActualizaOperacionesLinea` y `spLsnetGeneraClaveContrato`.
+- Consecutivos: `KLINEA_CREDITO` usa `ObtenConsecutivo`; la numeración de
+  `KCONTRATO` sigue usando el procedimiento de clave ya documentado.
+- Bloqueos restantes: esquema físico completo de la línea, valores de sus
+  NOT NULL para CD, catálogo de tipo de línea/cartera, asociación exacta de
+  operaciones, frontera transaccional real de `GuardaInfo` y reglas de
+  idempotencia.
+- El MVP CD no está listo para implementar un POST seguro. La decisión de no
+  pedir la línea al usuario sí queda incorporada; no sustituye la evidencia
+  faltante de persistencia y de transacción.
+
+## Estado de la evidencia SQL y frontera transaccional
+
+En este turno no se recibió ni quedó accesible un resultado nuevo de
+`sys.columns`, índices, claves, defaults, triggers o CHECK constraints para
+`KLINEA_CREDITO` y `KLTOPERA`. Por tanto, la matriz física completa y el
+conteo autoritativo de columnas `NOT NULL` continúan pendientes. Las fuentes
+Legacy sólo permiten documentar las columnas que aparecen en las sentencias
+de alta y no sustituyen la evidencia de `sys.columns`.
+
+### Matriz física disponible
+
+| Objeto | Evidencia disponible | Estado |
+|---|---|---|
+| `KLINEA_CREDITO` | Sentencias Legacy muestran `LCR_FL_CVE`, `PNA_FL_PERSONA`, campos de usuario, fechas, moneda, importes, tipo de línea, tasa, estado, plazo, multimoneda, tipo de cambio, saldo insoluto y `TLC_FL_CVE` en variantes de alta. La evidencia SQL confirma 29 columnas, 18 `NOT NULL`, PK en `LCR_FL_CVE`, sin defaults, triggers ni CHECK, y FK de persona. | Esquema físico confirmado; reglas de negocio de varias columnas siguen pendientes. |
+| `KLTOPERA` | El código elimina asociaciones previas para `LCR_FL_CVE` y agrega pares `LCR_FL_CVE`/`TOP_CL_CVE`, con fecha de modificación y usuario. La evidencia SQL confirma 4 columnas, 3 `NOT NULL`, PK compuesta, sin defaults, triggers ni CHECK, y sin FK físicas confirmadas. | Esquema físico confirmado; fecha y usuario requieren regla de alta cerrada. |
+| `CCATCONSEC` | El código usa `ObtenConsecutivo("KLINEA_CREDITO", ...)`. | El mecanismo está localizado; empresa/parámetros exactos y efecto de rollback requieren evidencia SQL y del adaptador. |
+
+No se deben convertir las listas de columnas de las sentencias Legacy en una
+matriz física: una columna omitida puede tener default, aceptar NULL o ser
+asignada por otro procedimiento.
+
+### Matriz de NOT NULL para CD
+
+La siguiente matriz es deliberadamente conservadora. No se marca como
+confirmada ninguna columna sólo por aparecer en el `INSERT`.
+
+| Columna o grupo visible en la alta | Valor exacto CD | Origen | Validación requerida | Evidencia | Estado |
+|---|---|---|---|---|---|
+| `LCR_FL_CVE` | Nuevo consecutivo | `ObtenConsecutivo("KLINEA_CREDITO")` | Unicidad, pertenencia a persona y asociación a CD | `sd_clsCredito.ActualizaLineaUsuario`; rama automática de `sn_clsContratos` | Parcial |
+| `PNA_FL_PERSONA` | Persona seleccionada | Cliente | Persona activa y alcance del tenant | Constructor de `Linea_credito` y sentencia de alta | Parcial |
+| `LCR_FL_ANALISTA`, `USR_CL_CVE` | Usuario Legacy de la membresía | Actor de ejecución | `LegacyUserCode` presente y longitud física confirmada | Parámetros `strCveAnalCredito`/`strUser` | Parcial |
+| Fechas de registro, vencimiento y última modificación | Fecha de operación o cálculo Legacy | Fecha operativa/cálculo | `CFECHA_OPERACION`, precisión y reglas de vencimiento | `ActualizaLineaUsuario` y constructor automático | Bloqueado |
+| `LCR_CL_MONEDA` | Moneda compatible con CD | Contrato/catálogo | Catálogo activo y compatibilidad | Parámetro `shrtCveMoneda` | Bloqueado |
+| Importes (`LCR_NO_MTO_APROBADO`, `LCR_NO_MTO_DISPUESTO`, `LCR_NO_MTO_DISPONIBLE`) | Monto financiado y saldos iniciales | Cálculo financiero | Fórmula CD, límites y consistencia | Parámetros de `ActualizaLineaUsuario` | Bloqueado |
+| `LCR_CL_TLINEA`, `TLC_FL_CVE` | Tipo de línea y cartera resueltos por catálogos | `CLTOPERACION`/`CLINEA_CREDITO` | Vigencia y compatibilidad con CD | Constructor, relación de operación y catálogo | Parcial para `TLC_FL_CVE`; `LCR_CL_TLINEA` pendiente |
+| Tasas (`TAS_FL_CVE`, `LCR_FG_TASA_DFT`, `LCR_NO_TASA_BASE`, `LCR_NO_PUNTOS_ADIC`, `LCR_NO_FACTOR`, `LCR_NO_TASA_NOMINAL`) | Depende de la configuración CD | Catálogo/cálculo | Regla de tasa ordinaria y nulabilidad real | Parámetros de `ActualizaLineaUsuario` | Bloqueado |
+| `LCR_DS_COMPOSICION`, `LCR_DS_OBSERVACIONES` | Texto construido por Legacy | Constante/cálculo/usuario | Longitud, contenido permitido y ausencia de PII | Argumentos de la rutina | Bloqueado |
+| `LCR_FG_STATUS`, `LCR_FG_MULTIMONEDA` | Valores técnicos observados | Constante/configuración | Significado funcional y estado inicial aprobado | Rama automática/variantes de INSERT | Bloqueado |
+| `LCR_NO_PLAZOCTO`, `LCR_NO_PLAZO_MINIMO` | Plazo CD y mínimo aplicable | Operación/cálculo | Plazo permitido y regla de valor mínimo | Constructor y `ActualizaLineaUsuario` | Parcial |
+| `LCR_NO_TIPO_CAMBIO`, `LCR_NO_MTO_SALDO_INSOLUTO` | Valores monetarios derivados | Cálculo | Regla para moneda nacional/multimoneda | Variante de alta con esos campos | Bloqueado |
+
+El listado exacto de todas las columnas `NOT NULL` no puede cerrarse sin el
+resultado físico solicitado. En particular, no es válido afirmar que las
+columnas omitidas por una variante sean nullable ni asignarles cero.
+
+### Respuestas transaccionales
+
+| Pregunta | Conclusión actual | Evidencia/pendiente |
+|---|---|---|
+| ¿La línea usa el mismo `_Tran` que `KCONTRATO`? | No confirmado. | `sn_clsContratos` pasa `objConexion` a `ActualizaLineaCredito`; el código localizado no demuestra que sea el mismo `_Tran` de `sd_clsContratoPropuesta.ActualizaContrato`. |
+| ¿`KLTOPERA` está en la misma transacción? | Confirmado sólo para la rutina `ActualizaLineaUsuario` cuando recibe o crea `objTran`; no confirmado para la rama automática del contrato. | La rutina ejecuta el borrado/inserción de `KLTOPERA` antes de su commit; falta trazar `ActualizaOperacionesLinea` en la rama CD. |
+| ¿`ObtenConsecutivo` participa en la transacción? | Parcial. | `ActualizaLineaUsuario` lo invoca con `objTran`; la rama automática usa `Utils.ObtenConsecutivo(..., objConexion)`, sin evidencia del objeto transaccional. |
+| ¿Rollback revierte el consecutivo? | No confirmado. | Requiere leer la implementación de `ObtenConsecutivo`/`CCATCONSEC` y una prueba controlada; no se ejecutará SQL en esta etapa. |
+| ¿Puede quedar una línea huérfana si falla `ActualizaContrato`? | Sí, es un riesgo plausible mientras no se pruebe la transacción compartida. | La llamada automática crea la línea antes de continuar con contrato y usa una abstracción de conexión distinta a la rutina transaccional explícita. |
+| ¿Cuándo comprobar idempotencia? | Antes de reservar `LCR_FL_CVE`, y volver a verificar bajo el mismo bloqueo antes de insertar. | Evita duplicar línea, contrato, pagos y cargos ante reintentos concurrentes. |
+
+La implementación moderna debe exigir evidencia de una transacción única antes
+de adoptar esta secuencia. Si el Legacy no comparte el `_Tran`, uCredit debe
+mantener la operación bloqueada o encapsular explícitamente línea, asociaciones,
+contrato, pagos, amortización, cargos, bitácora y consecutivos en una única
+transacción compatible; no debe aceptar una línea huérfana como estado válido.
+
+### Conteo y decisión
+
+- Columnas obligatorias de `KLINEA_CREDITO`: no determinable sin `sys.columns`.
+- Columnas confirmadas con valor técnico: sólo las asignaciones visibles en las
+  sentencias Legacy; no equivalen a columnas físicamente `NOT NULL`.
+- Columnas bloqueadas: todas las columnas físicamente `NOT NULL` cuyo origen,
+  default o regla CD no estén confirmados; el total no puede calcularse sin
+  el esquema autoritativo.
+- Tablas escritas observadas: `KLINEA_CREDITO` y `KLTOPERA`; posteriormente
+  `KCONTRATO` y tablas de pagos/amortización/cargos según el flujo.
+- Consecutivos afectados: `KLINEA_CREDITO` y la clave de contrato; cualquier
+  consecutivo adicional debe confirmarse en la rama CD.
+- Riesgo principal: línea o asociación huérfana si el alta de línea no comparte
+  la transacción del contrato o si el consecutivo no revierte.
+- El MVP CD no puede pasar todavía a diseño técnico implementable. La decisión
+  funcional de generación automática queda aprobada, pero faltan los
+  metadatos SQL y la prueba/confirmación de la frontera transaccional real.
+
+## Evidencia SQL adicional: línea automática y `KLTOPERA`
+
+### Esquema físico confirmado
+
+| Objeto | Columnas | NOT NULL | Nullable | PK | FK | Defaults/triggers/CHECK |
+|---|---:|---:|---:|---|---|---|
+| `KLINEA_CREDITO` | 29 | 18 | 11 | `LCR_FL_CVE` | `PNA_FL_PERSONA → CPERSONA.PNA_FL_PERSONA` | Sin defaults, triggers ni CHECK confirmados |
+| `KLTOPERA` | 4 | 3 | 1 | (`LCR_FL_CVE`, `TOP_CL_CVE`) | Ninguna FK física confirmada | Sin defaults, triggers ni CHECK confirmados |
+
+`CCATCONSEC` contiene actualmente dos filas con el mismo valor reportado:
+
+| Tabla lógica | Empresa | Consecutivo | Campo | ID |
+|---|---:|---:|---|---|
+| `KLINEA_CREDITO` | 0 | 861945 | `LCR_FL_CVE` | `LCR_FL_CVE` |
+| `KLTOPERA` | 0 | 861945 | `LCR_FL_CVE` | `LCR_FL_CVE` |
+
+La coincidencia numérica no demuestra que ambas filas deban incrementarse.
+La rama automática llama `Utils.ObtenConsecutivo("KLINEA_CREDITO", objConexion)`
+y no llama a `ObtenConsecutivo("KLTOPERA", ...)`. `KLTOPERA` recibe el mismo
+identificador generado para la línea; no reserva un identificador propio.
+
+### Matriz de las 18 columnas NOT NULL de `KLINEA_CREDITO`
+
+Los tipos físicos deben conservarse desde la evidencia `sys.columns` recibida;
+no se han inferido desde VB.NET. La expresión y los valores se documentan
+separadamente para no convertir una frecuencia histórica en regla.
+
+| Columna | Expresión/valor del INSERT Legacy | Argumento upstream | Origen | Valor CD | Validación | Evidencia | Estado |
+|---|---|---|---|---|---|---|---|
+| `LCR_FL_CVE` | valor del consecutivo usado en `VALUES` | `intCveLCredito` | consecutivo | nuevo valor de `CCATCONSEC` | PK y no reutilización del intento | `sn_clsContratos`, `Utils.ObtenConsecutivo` | Confirmado técnicamente |
+| `LCR_FE_REGISTRO` | `dateFecRegistro` formateada | `dateFecRegistro` | fecha de línea | fecha operativa o fecha de registro Legacy confirmada por rama | fecha válida y precisión física | `sd_clsCredito.ActualizaLineaUsuario` | Parcial |
+| `LCR_FE_VENCIMIENTO` | `dateFecVencimiento` formateada | `dateFecVencimiento` | cálculo de línea | plazo de línea según CD | vencimiento posterior al registro | misma rutina | Parcial |
+| `LCR_NO_PLAZOCTO` | `intPlazoMaxCto` | `intPlazoMaxCto` | operación/cálculo | plazo CD | rango y compatibilidad con esquema | sentencia de alta | Parcial |
+| `LCR_NO_PLAZO_MINIMO` | `IIf(intPlazoMinimo > 0, intPlazoMinimo, 1)` | `intPlazoMinimo` | regla Legacy | mínimo recibido; `1` sólo si la regla Legacy aplica | rango y relación con plazo | sentencia de alta | Parcial |
+| `LCR_CL_MONEDA` | `shrtCveMoneda` | `intMoneda`/`shrtCveMoneda` | catálogo/operación | moneda CD aprobada por catálogo | activo y compatible | constructor y `ActualizaLineaUsuario` | Parcial |
+| `LCR_NO_MTO_APROBADO` | `dblMtoAprobado` | monto aprobado | cálculo financiero | monto de línea CD | decimal, límites y no negativo | sentencia de alta | Pendiente funcional |
+| `LCR_NO_MTO_DISPUESTO` | `intMtoDispuesto` | monto dispuesto | cálculo financiero | valor inicial Legacy, no asumir cero fuera de evidencia | consistencia con aprobado/disponible | sentencia de alta | Pendiente |
+| `LCR_NO_MTO_DISPONIBLE` | `dblMtoDisponible` | disponible | cálculo financiero | disponible inicial CD | `aprobado - dispuesto` según regla cerrada | sentencia de alta | Pendiente |
+| `LCR_CL_TLINEA` | `shrtCveTLinea` | tipo de línea | catálogo | no usar 1 sólo por frecuencia | activo y compatible con CD | sentencia de alta | Pendiente |
+| `LCR_FG_TASA_DFT` | `shrtTDefault` | indicador de tasa default | configuración/tasa | no usar 1 sólo por frecuencia | valores permitidos y relación con tasa | sentencia de alta | Pendiente |
+| `LCR_NO_TASA_BASE` | `dblTBase` | tasa base | cálculo/catálogo | tasa base CD | rango y vigencia | sentencia de alta | Pendiente |
+| `LCR_NO_PUNTOS_ADIC` | `shrtPuntosAdic` | puntos adicionales | cálculo/catálogo | puntos CD | rango y compatibilidad | sentencia de alta | Pendiente |
+| `LCR_NO_FACTOR` | `dblFactor` | factor | cálculo financiero | factor CD | fórmula confirmada | sentencia de alta | Pendiente |
+| `LCR_NO_TASA_NOMINAL` | `dblTNominal` | tasa nominal | cálculo financiero | tasa nominal CD | fórmula, rango y precisión | sentencia de alta | Pendiente |
+| `LCR_FG_STATUS` | `shrtStatus` | estado de línea | estado/configuración | no convertir la frecuencia `1` en regla sin catálogo | estado inicial autorizado | sentencia de alta | Pendiente |
+| `LCR_FE_ULTMOD` | `Format$(Now, "yyyy-MM-dd")` en la variante observada | reloj de proceso Legacy | fecha de modificación | debe definirse con la política de fecha operativa moderna | precisión y fuente autorizada | `sd_clsCredito.vb` | Pendiente; no replicar `Now` automáticamente |
+| `TLC_FL_CVE` | `0` en una variante histórica del INSERT, pero el MVP resuelve `2` | relación operación/catálogo | `CLTOPERACION.TOP_CL_CVE = 'CD'` | `2` | fila activa `TLC_FG_STATUS = 1`; rechazar si falta relación/catálogo | `CLTOPERACION` y `CLINEA_CREDITO` | Parcial; regla CD confirmada |
+
+Aunque `PNA_FL_PERSONA` es nullable físicamente en la tabla, el MVP lo trata
+como obligatorio: debe ser la persona seleccionada, activa y dentro del
+tenant. Las once columnas nullable no se rellenan automáticamente; su uso
+debe documentarse por separado antes de implementar.
+
+### Matriz de `KLTOPERA`
+
+| Columna | Regla CD | Origen | Validación | Estado |
+|---|---|---|---|---|
+| `LCR_FL_CVE` | Identificador generado internamente para la línea | resultado de `KLINEA_CREDITO` | la línea debe existir y pertenecer a la persona | Confirmado |
+| `TOP_CL_CVE` | `CD` | operación seleccionada y validada | operación activa, autorizada y compatible | Confirmado para el MVP |
+| `LTP_FE_ULTMOD` | fecha de operación o fuente Legacy que se confirme | `ActualizaOperacionesLinea`/`InsertaLtOpera` | fecha operativa única y precisión física | Parcial |
+| `USR_CL_CVE` | `LegacyUserCode` | membresía activa seleccionada | longitud y pertenencia al tenant | Parcial |
+
+`ActualizaOperacionesLinea` primero elimina asociaciones de la línea y después
+inserta una fila por operación. Para una línea nueva del MVP debe producir una
+sola relación para `CD`; no se deben trasladar asociaciones históricas.
+
+### `TLC_FL_CVE`
+
+El campo aparece en `CLINEA_CREDITO`, `CLTEQUIPO`, `CLTOPERACION` y
+`KLINEA_CREDITO`. La evidencia nueva confirma:
+
+- `TLC_FL_CVE = 2`;
+- `TLC_DS_NOMBRE = LINEA CD`;
+- `TLC_FG_STATUS = 1`;
+- `TLC_NO_DIAS = 180`;
+- `TLC_FG_TIPOB = 1`;
+- `CLTOPERACION.TOP_CL_CVE = 'CD'` se relaciona con `TLC_FL_CVE = 2`.
+
+Para el MVP, el frontend no envía `TLC_FL_CVE`; el backend debe resolverlo por
+`TOP_CL_CVE = 'CD'` y validar después la fila activa de `CLINEA_CREDITO`. No se
+usa `0`, aunque sea frecuente históricamente. `TLC_NO_DIAS = 180` queda como
+dato de catálogo; todavía no se afirma que `LCR_FE_VENCIMIENTO` se calcule
+sumando 180 días porque esa operación no está confirmada en el código Legacy.
+Si falta la relación o el catálogo activo, el alta debe fallar de forma
+controlada antes de reservar el consecutivo o escribir datos.
+
+Se conservan además las siguientes consultas de sólo lectura para cerrar el
+resto del catálogo y sus relaciones:
+
+```sql
+SELECT c.column_id, c.name, t.name AS type_name, c.max_length,
+       c.precision, c.scale, c.is_nullable, dc.definition
+FROM sys.columns AS c
+JOIN sys.tables AS tb ON tb.object_id = c.object_id
+JOIN sys.types AS t ON t.user_type_id = c.user_type_id
+LEFT JOIN sys.default_constraints AS dc ON dc.parent_object_id = c.object_id
+    AND dc.parent_column_id = c.column_id
+WHERE tb.name = 'CLINEA_CREDITO'
+ORDER BY c.column_id;
+
+SELECT i.name, i.is_unique, i.is_primary_key, c.name AS column_name,
+       ic.key_ordinal
+FROM sys.indexes AS i
+JOIN sys.index_columns AS ic ON ic.object_id = i.object_id
+    AND ic.index_id = i.index_id
+JOIN sys.columns AS c ON c.object_id = ic.object_id
+    AND c.column_id = ic.column_id
+JOIN sys.tables AS tb ON tb.object_id = i.object_id
+WHERE tb.name = 'CLINEA_CREDITO'
+ORDER BY i.name, ic.key_ordinal;
+
+SELECT fk.name, OBJECT_NAME(fk.parent_object_id) AS child_table,
+       COL_NAME(fkc.parent_object_id, fkc.parent_column_id) AS child_column,
+       OBJECT_NAME(fk.referenced_object_id) AS parent_table,
+       COL_NAME(fkc.referenced_object_id, fkc.referenced_column_id) AS parent_column
+FROM sys.foreign_keys AS fk
+JOIN sys.foreign_key_columns AS fkc ON fkc.constraint_object_id = fk.object_id
+WHERE fk.parent_object_id = OBJECT_ID('dbo.CLINEA_CREDITO');
+
+SELECT tr.name, tr.is_disabled
+FROM sys.triggers AS tr
+WHERE tr.parent_id = OBJECT_ID('dbo.CLINEA_CREDITO');
+
+SELECT cc.name, cc.definition
+FROM sys.check_constraints AS cc
+WHERE cc.parent_object_id = OBJECT_ID('dbo.CLINEA_CREDITO');
+
+SELECT TOP_CL_CVE, TLC_FL_CVE, TOP_FG_STATUS, TOP_FG_PP, EMP_FL_CVE
+FROM dbo.CLTOPERACION
+WHERE TOP_CL_CVE = 'CD';
+
+SELECT TLC_FL_CVE, COUNT(*) AS Total
+FROM dbo.CLINEA_CREDITO
+GROUP BY TLC_FL_CVE
+ORDER BY TLC_FL_CVE;
+```
+
+### Consecutivos y frontera transaccional
+
+`Utils.ObtenConsecutivo` recibe sólo el nombre de tabla y un objeto
+`ManejaBD`. Para la ruta observada actualiza la fila cuyo
+`CCS_DS_NOMTABLA` coincide con `KLINEA_CREDITO`, lee el valor actualizado y lo
+devuelve. No actualiza la fila de `KLTOPERA`. El código no muestra
+`UPDLOCK`/`HOLDLOCK` explícitos; la serialización depende de la operación SQL,
+la conexión y la transacción del objeto `ManejaBD`.
+
+Por tanto:
+
+1. El consecutivo que la rama automática incrementa es `KLINEA_CREDITO`.
+2. La fila `KLTOPERA` con el mismo valor no se incrementa; sólo se reutiliza
+   el `LCR_FL_CVE` generado.
+3. La llamada automática pasa `objConexion` a `ActualizaLineaCredito` y a
+   `ActualizaOperacionesLinea`, pero el fragmento localizado no prueba que
+   `objConexion` tenga el mismo `_Tran` que el INSERT de `KCONTRATO`.
+4. `ActualizaLineaUsuario` sí tiene una transacción propia y ejecuta sus
+   escrituras de línea y `KLTOPERA` antes de commit; no demuestra la frontera
+   del flujo `SDInsertaContrato`.
+5. No hay evidencia suficiente para confirmar que el rollback del contrato
+   revierta el incremento de `CCATCONSEC`; debe probarse en una transacción
+   controlada antes del POST.
+6. Mientras esa frontera no esté confirmada, existe riesgo de línea huérfana
+   si el contrato falla después de la línea o de `KLTOPERA`.
+
+El diseño moderno debe envolver línea, relación, contrato, pagos,
+amortización, cargos, auditoría y el único registro de `CCATCONSEC` de línea
+en una sola transacción. Debe comprobar idempotencia antes de reservar el
+consecutivo y repetir la comprobación bajo bloqueo dentro de la misma
+transacción.
+
+### Resultado actualizado del MVP CD
+
+- Campos obligatorios de `KLINEA_CREDITO`: 18.
+- Confirmados completamente dentro de las 18 columnas físicamente NOT NULL:
+  1 (`LCR_FL_CVE`). `PNA_FL_PERSONA` queda fuera de ese conteo por ser
+  nullable física, pero es obligatorio por regla de aplicación del MVP y debe
+  corresponder al cliente seleccionado.
+- Parciales: fechas/plazos, moneda, usuario y asociación operativa; sus
+  valores exactos de negocio aún requieren cierre.
+- Pendientes o bloqueados: las restantes columnas NOT NULL, especialmente
+  tipo de línea, tasas, estado, importes y cartera. `TLC_FL_CVE` ya tiene una
+  regla funcional para CD (`CLTOPERACION` resuelve `2` y `CLINEA_CREDITO` debe
+  estar activa), aunque la validación debe ejecutarse antes de reservar el
+  consecutivo.
+- `KLTOPERA`: relación `LCR_FL_CVE`/`CD` confirmada; fecha y usuario requieren
+  confirmar fuente exacta.
+- Consecutivo a incrementar: sólo `KLINEA_CREDITO`; no incrementar
+  `KLTOPERA` sin nueva evidencia.
+- Líneas compartidas: excepciones históricas; no replicarlas en el MVP.
+- Bloqueos restantes: tipos y valores de línea, transacción compartida,
+  rollback del consecutivo, cierre de las columnas
+  NOT NULL y prueba de idempotencia.
+- El MVP CD aún no puede pasar a implementación segura.
+## Revisión adicional de la línea automática: montos, moneda, plazo y tasas
+
+Esta revisión incorpora la evidencia agregada sin convertir frecuencias en
+defaults. Los valores actuales de `KLINEA_CREDITO` pueden haber cambiado
+después del alta; por ello la fuente autoritativa sigue siendo la rama
+automática y la asignación que llega a `sd_clsCredito.ActualizaLineaUsuario`.
+
+### Hechos confirmados por la sentencia de alta
+
+En `sdLsenet/sd_clsCredito.vb`, `ActualizaLineaUsuario`, caso `intCveLCredito
+= 0`, el `INSERT` recibe explícitamente `dateFecRegistro`,
+`dateFecVencimiento`, `shrtCveMoneda`, `dblMtoAprobado`,
+`intMtoDispuesto`, `dblMtoDisponible`, `shrtCveTLinea`, `shrtTDefault`,
+`dblTBase`, `shrtPuntosAdic`, `dblFactor`, `dblTNominal`,
+`intPlazoMaxCto` e `intPlazoMinimo`. La misma rutina:
+
+- obtiene `LCR_FL_CVE` mediante `ObtenConsecutivo("KLINEA_CREDITO", ...)`;
+- normaliza `LCR_NO_PLAZO_MINIMO` a `1` cuando `intPlazoMinimo` no es positivo;
+- escribe `LCR_FG_MULTIMONEDA`, `LCR_NO_TIPO_CAMBIO`,
+  `LCR_NO_MTO_SALDO_INSOLUTO` y `TLC_FL_CVE` con `0` en una variante del
+  `INSERT`; esos literales no se promueven automáticamente a regla moderna;
+- usa `TAS_FL_CVE = NULL` cuando `shrtCveTasa = 0` en la variante donde la
+  tasa es nullable;
+- usa `Format$(Now, "yyyy-MM-dd")` para `LCR_FE_ULTMOD` en la ruta observada.
+
+La sentencia confirma el destino y los argumentos, pero no demuestra por sí
+sola cómo la rama automática calcula los argumentos upstream. En particular,
+no se encontró todavía en el fragmento revisado una asignación directa que
+demuestre que `dateFecRegistro` y `dateFecVencimiento` provienen de
+`CFECHA_OPERACION`, ni una fórmula que use `TLC_NO_DIAS`.
+
+### Montos
+
+La igualdad observada en los grupos agregados es:
+
+`LCR_NO_MTO_APROBADO = LCR_NO_MTO_DISPUESTO + LCR_NO_MTO_DISPONIBLE`.
+
+Se documenta como invariante observada y como validación candidata. Sigue
+parcial hasta localizar en la rama automática el cálculo que asigna los tres
+argumentos y confirmar si la igualdad aplica antes del `INSERT`, después de
+una actualización o sólo para el subconjunto analizado. No se usará la
+distribución para fijar valores iniciales.
+
+### Moneda
+
+La distribución muestra coincidencia entre `LCR_CL_MONEDA` y
+`CTO_CL_MONEDA`, pero la regla sólo quedará confirmada para el MVP cuando el
+código de la rama automática muestre que `shrtCveMoneda` se copia del valor
+de moneda del contrato. La sentencia de `ActualizaLineaUsuario` sí recibe
+`shrtCveMoneda` y lo inserta en `LCR_CL_MONEDA`; el origen contractual aún
+requiere esa trazabilidad upstream.
+
+### Plazo y vencimiento
+
+Para `TLC_FL_CVE = 2`, `LCR_NO_PLAZO_MINIMO = 1` y los plazos observados son
+variables. Esto no prueba una fórmula. El código localizado confirma que:
+
+- `LCR_NO_PLAZOCTO` recibe `intPlazoMaxCto`;
+- `LCR_NO_PLAZO_MINIMO` recibe `intPlazoMinimo` o `1` si éste no es positivo;
+- `LCR_FE_REGISTRO` y `LCR_FE_VENCIMIENTO` reciben parámetros ya calculados,
+  `dateFecRegistro` y `dateFecVencimiento`;
+- no queda confirmado que `LCR_FE_VENCIMIENTO` use `TLC_NO_DIAS = 180`,
+  `DATEADD`, meses, días naturales o `CFECHA_OPERACION`;
+- existen rutas posteriores que pueden actualizar el vencimiento, por lo que
+  el estado actual no representa necesariamente el valor inicial.
+
+### Fechas
+
+La coincidencia predominante entre `LCR_FE_REGISTRO` y
+`CTO_FE_GENERACION` es evidencia auxiliar. Falta localizar la asignación de
+`dateFecRegistro` en la rama automática para confirmar si ambos parten de
+`CFECHA_OPERACION`. No se autoriza `GETDATE` ni `DateTime.Now` como sustituto.
+Además, la rutina revisada usa el reloj del proceso para `LCR_FE_ULTMOD`, por
+lo que esa columna permanece pendiente de una regla moderna explícita.
+
+### Tasas
+
+La rama de persistencia copia los argumentos `shrtTDefault`, `shrtCveTasa`,
+`dblTBase`, `shrtPuntosAdic`, `dblFactor` y `dblTNominal` a las columnas de
+la línea. La evidencia de `CTASA` cierra la configuración técnica del MVP,
+pero no autoriza a recibir el identificador desde el navegador:
+
+- la configuración activa de tasa fija ordinaria en pesos es la fila técnica
+  actualmente identificada como `TAS_FL_CVE = 1`, con `TAS_DS_TASA = FIJA
+  PESOS`, `TAS_FG_TTASA = 1`, `TAS_CL_MONEDA = 1`, `TAS_FG_STATUS = 1` y
+  `TAS_FG_REVISION = 0`;
+- el backend debe resolverla por tipo de tasa, moneda y operación, y volver a
+  validar todos esos campos en `CTASA`; no debe confiar en un `TAS_FL_CVE`
+  enviado por el frontend ni sustituir la tasa nominal anual;
+- `TAS_FL_CVE = 7`, `8`, `2`, `5`, `6`, `9`, `3` y `4` quedan fuera de este
+  MVP por las restricciones funcionales recibidas;
+- si la consulta no devuelve exactamente una configuración activa compatible,
+  el futuro POST debe responder `422 contract_rate_configuration_required`
+  antes de reservar consecutivos o escribir.
+
+La selección del catálogo queda confirmada para el MVP; la asignación final
+de sus parámetros a la rama automática aún debe verificarse en el caller de
+`ActualizaLineaUsuario`. Por tanto:
+
+| Columna | Lo que queda confirmado | Lo que falta confirmar |
+|---|---|---|
+| `LCR_FG_TASA_DFT` | recibe `shrtTDefault`; el MVP propone `1` | confirmar asignación automática y significado Legacy |
+| `TAS_FL_CVE` | se resuelve dinámicamente a la configuración activa fija en pesos; la evidencia actual identifica `1` | confirmar caller y validación duplicada en contrato/línea |
+| `LCR_NO_TASA_BASE` | el MVP propone `0` | confirmar que la rama fija no lo deriva de otro catálogo |
+| `LCR_NO_PUNTOS_ADIC` | el MVP propone `0` | confirmar que no existe componente adicional |
+| `LCR_NO_FACTOR` | el MVP propone `0` | confirmar que no existe cálculo alterno |
+| `LCR_NO_TASA_NOMINAL` | tasa nominal anual capturada por usuario | validar límites, precisión y copia al contrato/línea |
+
+No se hardcodean `1`, `0` ni una tasa nominal por frecuencia histórica.
+
+### Estado actualizado de las 18 columnas NOT NULL
+
+| Estado | Total | Criterio |
+|---|---:|---|
+| Confirmadas | 1 | `LCR_FL_CVE`, generado por el consecutivo de la línea |
+| Parciales | 16 | La política MVP propone valores para tipo de línea, tasa fija, estado y montos/tasas, pero falta verificar la asignación exacta en la rama automática |
+| Bloqueadas | 1 | `LCR_FE_ULTMOD` entra en conflicto con el `Now` observado y aún no está demostrada su sustitución por `CFECHA_OPERACION` |
+| **Total** | **18** | |
+
+La columna bloqueada es `LCR_FE_ULTMOD`. Las parciales son
+`LCR_FE_REGISTRO`, `LCR_FE_VENCIMIENTO`, `LCR_CL_MONEDA`,
+`LCR_NO_MTO_APROBADO`, `LCR_NO_MTO_DISPUESTO`, `LCR_NO_MTO_DISPONIBLE`,
+`USR_CL_CVE`, `LCR_NO_PLAZOCTO`, `LCR_NO_PLAZO_MINIMO`, `LCR_CL_TLINEA`,
+`LCR_FG_TASA_DFT`, `LCR_NO_TASA_BASE`, `LCR_NO_PUNTOS_ADIC`, `LCR_NO_FACTOR`,
+`LCR_NO_TASA_NOMINAL` y `LCR_FG_STATUS`.
+
+### Bloqueos agrupados y fragmentos aún faltantes
+
+1. **Fechas y vencimiento:** falta el caller que asigna
+   `dateFecRegistro`/`dateFecVencimiento` y la rutina que calcula el
+   vencimiento; no basta `TLC_NO_DIAS = 180`.
+2. **Plazos:** falta el origen de `intPlazoMaxCto` e `intPlazoMinimo` para la
+   operación CD y confirmar cambios posteriores al alta.
+3. **Montos:** falta el cálculo upstream de los tres importes y la
+   confirmación de la igualdad como invariante de escritura.
+4. **Tasas:** falta el evento de la pestaña Tasa y sus consultas/cálculos para
+   los seis valores de tasa.
+5. **Estado y tipo de línea:** falta la regla de `LCR_CL_TLINEA` y el estado
+   inicial autorizado de `LCR_FG_STATUS`; `TLC_FL_CVE` sí está resuelto para
+   CD como `2`, sujeto a validación activa previa.
+6. **Transacción y consecutivo:** falta probar en código/adaptador que la
+   rama automática usa el mismo objeto transaccional para línea, operación y
+   contrato y que el incremento se revierte con rollback.
+
+Con la evidencia actual, la línea automática no puede diseñarse todavía con
+seguridad para un POST CD: el enlace `CD -> TLC_FL_CVE 2` está confirmado,
+pero las tasas, estado, tipo de línea, fechas y cálculos financieros aún
+requieren trazabilidad de la rama Legacy.
+
+## Política propuesta para el MVP CD: línea simple de tasa fija
+
+La siguiente política queda documentada como propuesta limitada a `TOP_CL_CVE
+= 'CD'`, moneda `1`, una línea nueva por contrato, sin subsidio, PBA, RUSH,
+revisión, tasa variable, multimóneda ni reutilización de líneas. No se
+implementa todavía ni convierte por sí sola los valores en defaults globales:
+
+| Campo | Propuesta MVP | Estado de evidencia |
+|---|---|---|
+| `LCR_CL_TLINEA` | `1` | Pendiente de confirmar el catálogo/regla en el caller automático |
+| `LCR_FG_TASA_DFT` | `1` | Pendiente de confirmar la asignación `shrtTDefault` |
+| `LCR_NO_TASA_BASE` | `0` | Propuesta; confirmar en la rama fija |
+| `LCR_NO_PUNTOS_ADIC` | `0` | Propuesta; confirmar en la rama fija |
+| `LCR_NO_FACTOR` | `0` | Propuesta; confirmar en la rama fija |
+| `LCR_NO_TASA_NOMINAL` | Tasa nominal anual capturada por el usuario | Pendiente de validación de rango, precisión y propagación |
+| `LCR_FG_STATUS` | `1` | Pendiente de confirmar el estado inicial de alta |
+| `LCR_FE_ULTMOD` | `CFECHA_OPERACION` | Bloqueada hasta eliminar la discrepancia con `Now` observado |
+
+Para `KLINEA_CREDITO.TAS_FL_CVE` y `KCONTRATO.TAS_FL_CVE`, el contrato
+moderno no recibe un identificador libre. Resuelve dinámicamente la
+configuración de tasa fija ordinaria en pesos y valida `CTASA` con:
+`TAS_FG_STATUS = 1`, `TAS_FG_TTASA = 1`, `TAS_CL_MONEDA = 1` y
+`TAS_FG_REVISION = 0`. La evidencia actual identifica `TAS_FL_CVE = 1`, pero
+ese valor no se hardcodea como entrada: es el resultado vigente del catálogo.
+La tasa nominal anual es un valor distinto y proviene del usuario.
+
+La política de montos propuesta para una línea nueva exclusiva es:
+
+`LCR_NO_MTO_APROBADO = monto a financiar`,
+`LCR_NO_MTO_DISPUESTO = 0`,
+`LCR_NO_MTO_DISPONIBLE = LCR_NO_MTO_APROBADO`.
+
+Debe cumplirse la igualdad aprobada como invariante de escritura, pero la
+asignación queda pendiente hasta confirmar el caller automático y distinguir
+el alta de modificaciones/disposiciones históricas.
+
+La fórmula de `LCR_FE_VENCIMIENTO` continúa pendiente: no se asume
+`DATEADD(DAY, 180, ...)`, meses naturales ni otra operación a partir de
+`TLC_NO_DIAS = 180`. También debe confirmarse que `LCR_FE_REGISTRO` y
+`LCR_FE_ULTMOD` se alimentan de `CFECHA_OPERACION` y que no se utiliza `Now`.
+
+### Decisión de preparación
+
+La configuración de `CTASA` y la relación `CD -> TLC_FL_CVE = 2` ya permiten
+definir las consultas dinámicas de catálogos. La línea automática completa no
+está lista para diseño seguro del POST mientras permanezcan pendientes la
+fórmula de vencimiento, la asignación exacta de montos, la confirmación de
+tipo/estado de línea, la propagación del nominal y la frontera transaccional
+del consecutivo.
+
+## Cierre aprobado de `KLINEA_CREDITO` para el MVP CD
+
+Esta sección es la referencia vigente para el alcance limitado a `TOP_CL_CVE
+= 'CD'`, moneda nacional, tasa fija, una línea nueva por contrato, sin
+propuesta, subsidio, PBA, RUSH, seguros financiados, revisión, tasa variable,
+multimóneda ni reutilización de líneas. No generaliza estas decisiones a otras
+operaciones.
+
+### Fecha operativa y frontera de la transacción
+
+La aplicación moderna debe obtener exactamente una fila válida de
+`CFECHA_OPERACION` al inicio de una única transacción `Serializable`. Esa
+fecha se reutiliza sin consultar nuevamente el reloj del servidor para:
+`KLINEA_CREDITO`, `KLTOPERA` y `KCONTRATO`. Si no existe exactamente una fecha
+válida, la operación falla antes de reservar cualquier consecutivo.
+
+No se debe reproducir `Now`, `DateTime.Now` ni `GETDATE`. La fecha de
+vencimiento aprobada para el MVP es:
+
+`LCR_FE_VENCIMIENTO = DATEADD(MONTH, 6, LCR_FE_REGISTRO)`.
+
+Las excepciones históricas observadas no cambian la regla de alta nueva.
+`TLC_NO_DIAS = 180` se valida como dato del catálogo, pero no participa en el
+`DATEADD` del MVP.
+
+### Matriz definitiva de las 18 columnas `NOT NULL`
+
+| Columna | Valor exacto MVP CD | Origen y asignación | Evidencia | Estado |
+|---|---|---|---|---|
+| `LCR_FL_CVE` | Consecutivo nuevo de `KLINEA_CREDITO` | `ObtenConsecutivo` dentro de la transacción | Código Legacy de alta automática | Confirmada por evidencia Legacy |
+| `LCR_FE_REGISTRO` | Fecha única de `CFECHA_OPERACION` | Fecha operativa tomada al inicio | Decisión moderna y regla de fecha | Aprobada MVP |
+| `LCR_FE_VENCIMIENTO` | `DATEADD(MONTH, 6, fechaOperativa)` | Cálculo de línea | Decisión funcional; 161221 coincidencias históricas son auxiliares | Aprobada MVP |
+| `LCR_NO_PLAZOCTO` | Plazo del contrato | Captura/validación del contrato CD | `intPlazoMaxCto` y control de plazo Legacy | Aprobada MVP; catálogo/rango pendiente |
+| `LCR_NO_PLAZO_MINIMO` | `1` | Constante de línea CD | Regla aprobada; Legacy usa `1` cuando no hay mínimo positivo | Aprobada MVP |
+| `LCR_CL_MONEDA` | `1` | Moneda nacional del contrato | Restricción MVP y parámetro `shrtCveMoneda` | Aprobada MVP |
+| `LCR_NO_MTO_APROBADO` | Monto a financiar | Derivado del contrato | Regla moderna aprobada; asignación Legacy exacta pendiente | Aprobada MVP |
+| `LCR_NO_MTO_DISPUESTO` | `0` | Constante de alta nueva | Regla moderna aprobada | Aprobada MVP |
+| `LCR_NO_MTO_DISPONIBLE` | Monto a financiar | Derivado del monto aprobado | Regla moderna aprobada | Aprobada MVP |
+| `LCR_CL_TLINEA` | `1` | Tipo de línea del MVP | Política moderna; catálogo funcional Legacy aún debe validarse | Aprobada MVP, validación pendiente |
+| `LCR_FG_TASA_DFT` | `1` | Constante de tasa fija | Política moderna y parámetro `shrtTDefault` | Aprobada MVP, asignación Legacy pendiente |
+| `LCR_NO_TASA_BASE` | `0` | Constante de tasa fija del MVP | Política moderna | Aprobada MVP |
+| `LCR_NO_PUNTOS_ADIC` | `0` | Constante de tasa fija del MVP | Política moderna | Aprobada MVP |
+| `LCR_NO_FACTOR` | `0` | Constante de tasa fija del MVP | Política moderna | Aprobada MVP |
+| `LCR_NO_TASA_NOMINAL` | Tasa nominal anual capturada | Usuario; se valida y propaga también a `KCONTRATO` | Política moderna y parámetro `dblTNominal` | Aprobada MVP; límites pendientes |
+| `LCR_FG_STATUS` | `1` | Constante de línea activa | Política moderna | Aprobada MVP, asignación Legacy pendiente |
+| `LCR_FE_ULTMOD` | Fecha única de `CFECHA_OPERACION` | Fecha operativa de la transacción | Decisión moderna; reemplaza el `Now` observado | Aprobada MVP |
+| `TLC_FL_CVE` | `2` | Resolución `CLTOPERACION` para `CD`; validar `CLINEA_CREDITO` activa | Evidencia agregada: `LINEA CD`, activa, 180 días | Confirmada para CD con validación previa |
+
+`PNA_FL_PERSONA` no forma parte de las 18 columnas físicas `NOT NULL` de esta
+matriz, pero es obligatorio por regla de aplicación, debe corresponder al
+cliente seleccionado y se valida antes de reservar el consecutivo.
+
+### Clasificación de la evidencia
+
+| Categoría | Columnas/decisiones |
+|---|---|
+| Evidencia Legacy | `LCR_FL_CVE`, recepción de parámetros de fecha, moneda, montos, tasas, plazo y usuario en `ActualizaLineaUsuario` |
+| Evidencia agregada | coincidencias de seis meses; relación `CD -> TLC_FL_CVE = 2`; catálogo activo de línea y configuración actual de CTASA |
+| Decisión moderna aprobada | fecha operativa única, vencimiento de seis meses, línea activa `1`, moneda `1`, tasa fija, montos iniciales y no uso de valores históricos como defaults |
+| Validación aún necesaria | catálogo/rango de plazo, catálogo de `LCR_CL_TLINEA`, límites de tasa nominal, propagación efectiva a KCONTRATO y transacción compartida |
+
+Con estas decisiones, ninguna de las 18 columnas queda bloqueada por falta de
+una decisión funcional del MVP. Permanecen validaciones técnicas y de código,
+pero la línea automática ya está lista para diseño técnico restringido a CD;
+el POST no se implementa hasta cerrar esas validaciones.
+
+Resumen solicitado de estados: `LCR_FL_CVE` es la única columna con valor
+directamente confirmado por la evidencia de generación Legacy; las otras 17
+quedan cubiertas por decisiones modernas aprobadas para este MVP y por la
+asignación de parámetros ya localizada, pero requieren verificación del
+caller/adaptador antes de codificar. En términos funcionales del MVP hay 18
+aprobadas, 0 parciales y 0 bloqueadas; en términos de trazabilidad técnica
+hay 17 pendientes de verificación de integración. `LCR_FE_VENCIMIENTO` ya no
+es un bloqueo: su fórmula aprobada es `DATEADD(MONTH, 6, fechaOperativa)`.
+
+## `KLTOPERA` dentro del MVP
+
+La fila se inserta en la misma transacción moderna con:
+
+| Columna | Valor |
+|---|---|
+| `LCR_FL_CVE` | Identificador recién generado de la línea |
+| `TOP_CL_CVE` | `CD` |
+| `LTP_FE_ULTMOD` | La fecha operativa única de `CFECHA_OPERACION` |
+| `USR_CL_CVE` | `LegacyUserCode` de la membresía activa seleccionada |
+
+No se incrementa un consecutivo independiente para `KLTOPERA`. Cualquier
+error en la línea, relación de operación, contrato, pagos, amortización,
+CAT, cargos o bitácora revierte la transacción completa, incluido el
+consecutivo de `KLINEA_CREDITO`.
+
+## Bloqueos restantes de `KCONTRATO` para CD
+
+El cierre de la línea no resuelve automáticamente las columnas obligatorias
+del contrato. Las decisiones pendientes se mantienen separadas:
+
+### Capturados por UI
+
+- operación `CD` sólo si el catálogo activo lo permite;
+- cliente/persona;
+- plazo autorizado;
+- monto a financiar;
+- tasa nominal anual;
+- datos financieros restantes únicamente cuando sus reglas CD estén cerradas.
+
+### Catálogos y resoluciones server-side
+
+- empresa/despliegue autorizado;
+- tasa fija ordinaria en pesos de `CTASA`;
+- `CNB` activo compatible con la operación;
+- calendario, periodicidad, esquema de pago, exigibilidad y amortización;
+- Uso CFDI compatible con el régimen fiscal;
+- valores de estado de equipo y demás catálogos requeridos.
+
+### Constantes del MVP
+
+- sin reestructura, subsidio, propuesta, contrato maestro, PBA, RUSH,
+  seguros financiados, multimóneda ni revisión;
+- moneda nacional;
+- línea nueva por contrato;
+- tasa base, puntos adicionales y factor de línea en cero;
+- línea activa y mínimo de plazo `1`.
+
+### Derivados y cálculos posteriores
+
+- clave `CTO_FL_CVE` mediante `spLsnetGeneraClaveContrato`;
+- fechas desde la fecha operativa única;
+- saldo inicial y montos financieros;
+- fechas y pagos de amortización;
+- cargos, CAT y bitácora obligatoria.
+
+Continúan bloqueando el POST CD las columnas de `KCONTRATO` cuyo catálogo,
+valor técnico, cálculo financiero o efecto posterior aún no tengan evidencia
+Legacy completa. En particular: estado inicial, tasa nominal y campos
+condicionales de seguros/pagos finales, CNBV, periodicidad/amortización,
+fechas de desembolso/firma y la frontera exacta de procedimientos posteriores.
+
+## Contrato HTTP propuesto para el futuro POST CD
+
+El navegador enviará sólo datos funcionales, nunca identificadores técnicos
+de línea, tasa, banco o consecutivos:
+
+```json
+{
+  "personId": 0,
+  "operationCode": "CD",
+  "term": 0,
+  "financedAmount": 0,
+  "nominalAnnualRate": 0,
+  "taxRegimeUseCode": "",
+  "equipmentStatusCode": 0,
+  "paymentPeriodicityCode": 0,
+  "scheduleCode": 0,
+  "dueRuleCode": 0,
+  "calendarCode": 0,
+  "amortizationCode": 0,
+  "requestedDisbursementDate": ""
+}
+```
+
+El ejemplo es de diseño, no un contrato implementado. El backend resolverá
+`TAS_FL_CVE`, `TLC_FL_CVE`, empresa, CNBV y demás claves; validará readiness,
+cliente, operación, catálogos y fecha operativa antes de reservar
+consecutivos. La idempotencia se comprobará antes de reservar y nuevamente
+bajo bloqueo dentro de la transacción para impedir duplicar línea,
+`KLTOPERA`, contrato, pagos o cargos.
