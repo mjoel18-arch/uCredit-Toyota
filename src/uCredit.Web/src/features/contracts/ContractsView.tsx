@@ -14,9 +14,10 @@ type ContractsViewProps = {
   productName: string
   customerName: string
   onUnauthorized: () => void
+  onCreateContract?: () => void
 }
 
-export function ContractsView({ onUnauthorized }: ContractsViewProps) {
+export function ContractsView({ onUnauthorized, onCreateContract = () => undefined }: ContractsViewProps) {
   const [contractNumber, setContractNumber] = useState('')
   const [detail, setDetail] = useState<ContractDetail | null>(null)
   const [amortization, setAmortization] = useState<ContractAmortization | null>(null)
@@ -94,6 +95,7 @@ export function ContractsView({ onUnauthorized }: ContractsViewProps) {
         <span className="status-dot" /> Consulta de sólo lectura
         <h2 id="contracts-title">Consulta de contratos</h2>
         <p>Consulta la información operativa disponible para el alcance autorizado de tu tenant.</p>
+        <button type="button" onClick={onCreateContract}>Capturar contrato</button>
       </div>
 
       <form onSubmit={submit} className="search-form">

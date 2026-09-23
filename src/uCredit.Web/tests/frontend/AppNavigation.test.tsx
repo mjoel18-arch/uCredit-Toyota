@@ -52,7 +52,11 @@ vi.mock('../../src/features/auth/useAuthSession', () => ({
 }))
 
 vi.mock('../../src/features/contracts/ContractsView', () => ({
-  ContractsView: () => <div data-testid="contracts-view">ContractsView</div>,
+  ContractsView: ({ onCreateContract }: { onCreateContract?: () => void }) => <div data-testid="contracts-view"><button type="button" onClick={onCreateContract}>Capturar contrato desde contratos</button></div>,
+}))
+
+vi.mock('../../src/features/contracts/ContractCreateView', () => ({
+  ContractCreateView: ({ onBack }: { onBack: () => void }) => <div data-testid="contract-create-view"><h2>Captura preliminar</h2><label>Identificador del cliente<input aria-label="Identificador del cliente" /></label><label>Operación<select aria-label="Operación"><option>Crédito directo</option></select></label><button type="button" disabled>Creación pendiente de configuración</button><button type="button" onClick={onBack}>Volver a contratos</button></div>,
 }))
 
 vi.mock('../../src/features/customers/CustomersView', () => ({
@@ -104,7 +108,7 @@ describe('App navigation', () => {
     expect(screen.getByRole('button', { name: 'Contratos' }).getAttribute('aria-current')).toBe('page')
   })
 
-  it('keeps contract capture disabled and prevents customers without permission', () => {
+  it('keeps customers unavailable while exposing contract capture to contracts readers', () => {
     mocks.auth = authenticatedSession(['contracts.read'])
     render(<App />)
 
@@ -113,8 +117,45 @@ describe('App navigation', () => {
     expect(customers.getAttribute('aria-disabled')).toBe('true')
     expect(screen.getByTestId('contracts-view')).toBeTruthy()
 
-    const contractCapture = screen.getByRole('button', { name: 'Captura de contrato · Próximamente' })
-    expect(contractCapture).toHaveProperty('disabled', true)
-    expect(contractCapture.getAttribute('aria-disabled')).toBe('true')
+    const contractCapture = screen.getByRole('button', { name: 'Captura de contrato' })
+    expect(contractCapture).toHaveProperty('disabled', false)
+    expect(contractCapture.getAttribute('aria-disabled')).toBe('false')
+  })
+
+  it('opens the capture view from the sidebar and returns to contracts', () => {
+    render(<App />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Captura de contrato' }))
+    expect(screen.getByTestId('contract-create-view')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Captura de contrato' }).getAttribute('aria-current')).toBe('page')
+    expect(screen.getByRole('button', { name: 'Captura de contrato' }).className).toContain('active')
+    expect(screen.getByRole('button', { name: 'Contratos' }).getAttribute('aria-current')).toBeNull()
+    expect(screen.getByRole('heading', { name: 'Captura preliminar' })).toBeTruthy()
+    expect(screen.getByLabelText('Identificador del cliente')).toBeTruthy()
+    expect(screen.getByLabelText('Operación')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Creación pendiente de configuración' })).toHaveProperty('disabled', true)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Volver a contratos' }))
+    expect(screen.getByTestId('contracts-view')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Contratos' }).getAttribute('aria-current')).toBe('page')
+    expect(screen.getByRole('button', { name: 'Captura de contrato' }).getAttribute('aria-current')).toBeNull()
+  })
+
+  it('opens capture from ContractsView without invoking a create endpoint', () => {
+    render(<App />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Capturar contrato desde contratos' }))
+    expect(screen.getByTestId('contract-create-view')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Captura de contrato' }).getAttribute('aria-current')).toBe('page')
+    expect(screen.getByRole('button', { name: 'Contratos' }).getAttribute('aria-current')).toBeNull()
+  })
+
+  it('does not expose capture to users without contracts.read', () => {
+    mocks.auth = authenticatedSession(['customers.read'])
+    render(<App />)
+
+    const capture = screen.getByRole('button', { name: 'Captura de contrato' })
+    expect(capture).toHaveProperty('disabled', true)
+    expect(screen.queryByTestId('contract-create-view')).toBeNull()
   })
 })

@@ -68,9 +68,9 @@ export function apiErrorMessage(error: unknown, fallback = 'No fue posible compl
     case 422:
       return 'La solicitud requiere una confirmación o corrección adicional.'
     case 500:
-      return 'El servicio no está disponible en este momento.'
+      return 'Ocurrió un error interno al consultar la información del contrato.'
     case 503:
-      return 'El servicio no está disponible; no se guardó información.'
+      return 'El servicio no está disponible en este momento.'
     default:
       return fallback
   }

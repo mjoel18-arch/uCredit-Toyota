@@ -2841,3 +2841,56 @@ quedan cerradas por evidencia Legacy; `CTO_FG_TASA_USAORDINARIA` se mueve a
 los bloqueos funcionales adicionales por ser nullable y no se cuenta entre
 las 70. No se mantuvo el total anterior por inercia: las dos listas son
 exhaustivas y disjuntas.
+
+## Fase 1 implementada: fundamento de captura sin persistencia
+
+La rama `feature/contract-create-foundation` implementa únicamente la fase
+de lectura, validación y cálculo preliminar. No implementa el alta de
+contratos ni modifica Legacy.
+
+### Endpoints disponibles
+
+Se agregaron los siguientes endpoints bajo `/api/v1/contracts`:
+
+- `GET /catalogs/operations`: operaciones activas, no propuesta y dentro del
+  alcance de empresa autorizado.
+- `GET /catalogs/cnbv?operationCode=CD`: opciones activas de `CCNB` para la
+  operación seleccionada.
+- `GET /catalogs/cfdi-uses?personId={personId}`: usos CFDI activos compatibles
+  con el régimen fiscal de la persona.
+- `GET /catalogs/addresses?personId={personId}`: domicilios activos del
+  cliente, para seleccionar el domicilio del contrato.
+- `GET /catalogs/ordinary-rate?operationCode=CD`: configuración de tasa fija
+  ordinaria en pesos. El navegador no proporciona el identificador técnico.
+- `GET /catalogs/late-rate?operationCode=CD`: configuración moratoria activa
+  para la operación y moneda.
+- `POST /preview`: valida y calcula la captura sin insertar filas, reservar
+  consecutivos ni ejecutar procedimientos de numeración.
+
+Todos usan consultas Dapper parametrizadas y de sólo lectura, requieren
+autenticación, tenant seleccionado, coincidencia con
+`Deployment:TenantCode` y el permiso `contracts.read`. La vista no usa
+`localStorage` ni `sessionStorage`.
+
+### Alcance explícitamente fuera de esta fase
+
+No se implementaron `CCATCONSEC`, `spLsnetGeneraClaveContrato`,
+`KLINEA_CREDITO`, `KLTOPERA`, `KCONTRATO`, pagos, amortización, CAT, cargos,
+movimientos, facturación ni bitácora de escritura. Tampoco existe todavía
+`POST /api/v1/contracts`.
+
+La pantalla “Captura de contrato” permite seleccionar cliente y operación
+CD, muestra la preparación de Generales, Tasa, Tasa moratoria y Pagos
+finales, y bloquea la creación con el mensaje “Creación pendiente de
+configuración”. La acción de preview queda bloqueada cuando el expediente
+no tiene domicilio, teléfono o cuenta activos. La propuesta se muestra sólo
+como información visual y no se consulta ni se envía `KPR_FL_CVE`.
+
+### Resultado de la fase
+
+El preview devuelve únicamente datos calculados y reglas pendientes; no
+persiste información. Las reglas aún bloqueadas se conservan como control
+explícito: 19 columnas físicas `NOT NULL` de `KCONTRATO` y 7 bloqueos
+funcionales adicionales nullable/proceso. Por ello esta fase habilita la
+UI, los catálogos y el cálculo sin escritura, pero no autoriza un POST de
+creación.

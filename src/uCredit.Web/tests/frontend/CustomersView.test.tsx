@@ -306,6 +306,7 @@ describe('CustomersView', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Agregar correo' })
     fireEvent.change(screen.getByLabelText('Correo electrónico'), { target: { value: 'nuevo@example.invalid' } })
     fireEvent.click(screen.getByRole('button', { name: 'Guardar correo' }))
+    await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Guardando…' })).toBeTruthy())
     fireEvent.click(screen.getByRole('button', { name: 'Guardando…' }))
     expect(createEmailMock).toHaveBeenCalledOnce()
     resolveCreate({})

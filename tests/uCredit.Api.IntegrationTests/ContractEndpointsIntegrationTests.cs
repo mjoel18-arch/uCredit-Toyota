@@ -8,6 +8,125 @@ public sealed class ContractEndpointsIntegrationTests(TestApiFactory factory)
     : IClassFixture<TestApiFactory>
 {
     [Fact]
+    public async Task AddressCatalogReturnsOnlySafeActiveOptions()
+    {
+        var response = await CreateClient("customers-with-permission").GetAsync(
+            "/api/v1/contracts/catalogs/addresses?personId=42",
+            TestContext.Current.CancellationToken);
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        var addresses = document.RootElement.EnumerateArray().ToArray();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(2, addresses.Length);
+        Assert.Equal(7, addresses[0].GetProperty("id").GetInt32());
+        Assert.Equal("Dirección única", addresses[0].GetProperty("typeDescription").GetString());
+        Assert.False(addresses[0].TryGetProperty("personId", out _));
+        Assert.False(addresses[0].TryGetProperty("postalCode", out _));
+    }
+
+    [Fact]
+    public async Task AddressCatalogReturnsEmptyForCustomerWithoutActiveAddresses()
+    {
+        var response = await CreateClient("customers-with-permission").GetAsync(
+            "/api/v1/contracts/catalogs/addresses?personId=43",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("[]", await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task AddressCatalogReturnsNotFoundForUnknownCustomer()
+    {
+        var response = await CreateClient("customers-with-permission").GetAsync(
+            "/api/v1/contracts/catalogs/addresses?personId=999",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Null(response.Headers.Location);
+    }
+
+    [Fact]
+    public async Task AddressCatalogRequiresAuthenticationAndContractsReadPermission()
+    {
+        var anonymous = await factory.CreateClient().GetAsync(
+            "/api/v1/contracts/catalogs/addresses?personId=42",
+            TestContext.Current.CancellationToken);
+        var forbidden = await CreateClient("without-permission").GetAsync(
+            "/api/v1/contracts/catalogs/addresses?personId=42",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
+        Assert.Null(anonymous.Headers.Location);
+        Assert.Null(forbidden.Headers.Location);
+    }
+
+    [Fact]
+    public async Task AddressCatalogRejectsASelectedTenantThatDoesNotMatchDeployment()
+    {
+        var response = await CreateClient("contracts-invalid-tenant").GetAsync(
+            "/api/v1/contracts/catalogs/addresses?personId=42",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Null(response.Headers.Location);
+    }
+
+    [Fact]
+    public async Task AddressCatalogKeepsUnexpectedErrorsAsInternalServerError()
+    {
+        var response = await CreateClient("customers-with-permission").GetAsync(
+            "/api/v1/contracts/catalogs/addresses?personId=500",
+            TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        Assert.DoesNotContain("unavailable", body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Synthetic catalog failure", body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SearchBy562947CdReturnsTheRequestedPagedResult()
+    {
+        var response = await CreateClient("with-permission").GetAsync(
+            "/api/v1/contracts/?contractNumber=562947CD&page=1&pageSize=10",
+            TestContext.Current.CancellationToken);
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(1, document.RootElement.GetProperty("total").GetInt32());
+        Assert.Equal(1, document.RootElement.GetProperty("items").GetArrayLength());
+        Assert.Equal("562947CD", document.RootElement.GetProperty("items")[0].GetProperty("contractNumber").GetString());
+    }
+
+    [Fact]
+    public async Task Get562947CdOpensTheContractDetailWithoutFoundationDependencies()
+    {
+        var response = await CreateClient("with-permission").GetAsync(
+            "/api/v1/contracts/562947CD",
+            TestContext.Current.CancellationToken);
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("562947CD", document.RootElement.GetProperty("contractNumber").GetString());
+    }
+
+    [Fact]
+    public async Task MissingContractStillReturnsNotFoundAndCatalogRoutesRemainSeparate()
+    {
+        var missing = await CreateClient("with-permission").GetAsync(
+            "/api/v1/contracts/does-not-exist",
+            TestContext.Current.CancellationToken);
+        var addresses = await CreateClient("customers-with-permission").GetAsync(
+            "/api/v1/contracts/catalogs/addresses?personId=43",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, addresses.StatusCode);
+    }
+
+    [Fact]
     public async Task SearchWithoutAuthenticationReturnsUnauthorized()
     {
         var response = await factory.CreateClient().GetAsync("/api/v1/contracts/?contractNumber=CONTRACT-1", TestContext.Current.CancellationToken);

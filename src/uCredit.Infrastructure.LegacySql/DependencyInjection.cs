@@ -24,6 +24,8 @@ public static class DependencyInjection
             .Validate(options => options.CommandTimeoutSeconds is > 0 and <= 300, "Command timeout must be between 1 and 300 seconds.");
         services.AddScoped<IContractReadRepository, LegacyContractReadRepository>();
         services.AddScoped<IContractAmortizationReadRepository, LegacyContractAmortizationReadRepository>();
+        services.AddScoped<IContractFoundationRepository, LegacyContractFoundationRepository>();
+        services.AddScoped<IContractPreviewService, ContractPreviewService>();
         services.AddScoped<ICustomerReadRepository, LegacyCustomerReadRepository>();
         services.AddScoped<ICustomerAddressReadRepository, LegacyCustomerAddressReadRepository>();
         services.AddScoped<ICustomerPhoneReadRepository, LegacyCustomerPhoneReadRepository>();

@@ -1,9 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { ApiError, apiRequest } from '../../src/shared/api/apiClient'
+import { ApiError, apiErrorMessage, apiRequest } from '../../src/shared/api/apiClient'
 import {
   getContractByNumber,
   getContractAmortization,
+  getContractAddresses,
+  getContractCfdiUses,
   getSession,
+  getCustomerByPersonId,
+  getCustomerProfileReadiness,
   login,
   logout,
   searchContracts,
@@ -134,5 +138,30 @@ describe('local Identity API client', () => {
     await apiRequest('/api/v1/auth/me')
     expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ credentials: 'include' })
     expect(fetchMock.mock.calls[0]?.[1]?.body).toBeUndefined()
+  })
+
+  it('preserves distinct messages for unexpected 500 and unavailable 503 responses', () => {
+    expect(apiErrorMessage(new ApiError(500))).toBe('Ocurrió un error interno al consultar la información del contrato.')
+    expect(apiErrorMessage(new ApiError(503))).toBe('El servicio no está disponible en este momento.')
+  })
+
+  it('uses the exact customer capture read URLs', async () => {
+    fetchMock
+      .mockResolvedValueOnce(response(200, {}))
+      .mockResolvedValueOnce(response(200, {}))
+      .mockResolvedValueOnce(response(200, []))
+      .mockResolvedValueOnce(response(200, []))
+
+    await getCustomerByPersonId(759161)
+    await getCustomerProfileReadiness(759161)
+    await getContractCfdiUses(759161)
+    await getContractAddresses(759161)
+
+    expect(fetchMock.mock.calls.map(call => call[0])).toEqual([
+      '/api/v1/customers/759161',
+      '/api/v1/customers/759161/readiness',
+      '/api/v1/contracts/catalogs/cfdi-uses?personId=759161',
+      '/api/v1/contracts/catalogs/addresses?personId=759161',
+    ])
   })
 })

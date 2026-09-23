@@ -202,7 +202,7 @@ describe('ContractsView', () => {
 
     renderAndSubmit()
 
-    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('El servicio no está disponible en este momento.'))
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Ocurrió un error interno al consultar la información del contrato.'))
     expect(setItem).not.toHaveBeenCalled()
   })
 })
