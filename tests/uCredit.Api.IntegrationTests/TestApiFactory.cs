@@ -38,6 +38,8 @@ public sealed class TestApiFactory : WebApplicationFactory<Program>
 
             services.RemoveAll<IContractReadRepository>();
             services.AddSingleton<IContractReadRepository, FakeContractReadRepository>();
+            services.RemoveAll<IContractFoundationRepository>();
+            services.AddSingleton<IContractFoundationRepository, FakeContractFoundationRepository>();
             services.AddSingleton<IContractAmortizationReadRepository, FakeContractAmortizationReadRepository>();
             services.RemoveAll<ICustomerReadRepository>();
             services.AddSingleton<ICustomerReadRepository, FakeCustomerReadRepository>();
@@ -97,6 +99,7 @@ internal sealed class TestAuthenticationHandler(
             new(ClaimTypes.NameIdentifier, userId.ToString("D"))
         };
         if (string.Equals(mode, "with-permission", StringComparison.Ordinal) ||
+            string.Equals(mode, "contracts-invalid-tenant", StringComparison.Ordinal) ||
             string.Equals(mode, "customers-with-permission", StringComparison.Ordinal))
         {
             claims.Add(new Claim("permission", "contracts.read"));
@@ -159,11 +162,15 @@ internal sealed class FakeContractReadRepository : IContractReadRepository
         null,
         null);
 
+    private static ContractSummary KnownLegacyContract => KnownContract with { ContractNumber = "562947CD" };
+
     public Task<PagedResult<ContractSummary>> SearchAsync(
         ContractSearchCriteria criteria,
         CancellationToken cancellationToken = default) =>
         Task.FromResult(new PagedResult<ContractSummary>(
-            [KnownContract],
+            [string.Equals(criteria.ContractNumber, KnownLegacyContract.ContractNumber, StringComparison.Ordinal)
+                ? KnownLegacyContract
+                : KnownContract],
             criteria.Page,
             criteria.PageSize,
             1));
@@ -174,7 +181,63 @@ internal sealed class FakeContractReadRepository : IContractReadRepository
         Task.FromResult<ContractSummary?>(
             string.Equals(contractNumber, KnownContract.ContractNumber, StringComparison.Ordinal)
                 ? KnownContract
+                : string.Equals(contractNumber, KnownLegacyContract.ContractNumber, StringComparison.Ordinal)
+                    ? KnownLegacyContract
                 : null);
+}
+
+internal sealed class FakeContractFoundationRepository : IContractFoundationRepository
+{
+    public Task<IReadOnlyList<ContractOperationCatalog>> GetOperationsAsync(
+        IReadOnlyCollection<int> companyIds,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<ContractOperationCatalog>>([new("CD", "Crédito directo", 1)]);
+
+    public Task<IReadOnlyList<ContractCnbvCatalog>> GetCnbvAsync(
+        string operationCode,
+        IReadOnlyCollection<int> companyIds,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<ContractCnbvCatalog>>([new(5, "CNBV sintético", true)]);
+
+    public Task<ContractCustomerContext?> GetCustomerAsync(
+        int personId,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<ContractCustomerContext?>(personId == 42
+            ? new ContractCustomerContext(42, true, "601", true, true, true)
+            : null);
+
+    public Task<IReadOnlyList<ContractCfdiUseCatalog>> GetCfdiUsesAsync(
+        int personId,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<ContractCfdiUseCatalog>>([new("G03", "Gastos en general")]);
+
+    public Task<IReadOnlyList<ContractAddressOption>?> GetActiveAddressesAsync(
+        int personId,
+        CancellationToken cancellationToken = default) => personId switch
+        {
+            42 => Task.FromResult<IReadOnlyList<ContractAddressOption>?>([
+                new(7, 1, "Dirección única"),
+                new(8, 2, "Dirección fiscal"),
+            ]),
+            43 => Task.FromResult<IReadOnlyList<ContractAddressOption>?>([]),
+            500 => Task.FromException<IReadOnlyList<ContractAddressOption>?>(new InvalidOperationException("Synthetic catalog failure.")),
+            _ => Task.FromResult<IReadOnlyList<ContractAddressOption>?>(null),
+        };
+
+    public Task<ContractRateConfiguration?> GetOrdinaryRateAsync(
+        string operationCode,
+        int currencyCode,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<ContractRateConfiguration?>(new(1, "FIJA PESOS", true, 1, true, false));
+
+    public Task<ContractLateRateConfiguration?> GetLateRateAsync(
+        string operationCode,
+        int currencyCode,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<ContractLateRateConfiguration?>(new(1, 1, 0m, 0m, 1, true));
+
+    public Task<DateOnly?> GetBusinessDateAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult<DateOnly?>(new DateOnly(2026, 9, 22));
 }
 
 internal sealed class FakeCustomerReadRepository : ICustomerReadRepository

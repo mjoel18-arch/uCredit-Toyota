@@ -77,9 +77,11 @@ public sealed class LegacyCustomerAddressReadRepository(
 
         await using var connection = new SqlConnection(_options.ReadConnectionString);
         await connection.OpenAsync(cancellationToken);
+        var parameters = new DynamicParameters();
+        parameters.Add("PersonId", personId, DbType.Int32);
         using var result = await connection.QueryMultipleAsync(new CommandDefinition(
             ReadSql,
-            new { PersonId = personId },
+            parameters,
             commandTimeout: _options.CommandTimeoutSeconds,
             commandType: CommandType.Text,
             cancellationToken: cancellationToken));

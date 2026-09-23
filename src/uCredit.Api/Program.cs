@@ -104,6 +104,7 @@ app.MapHealthChecks("/health");
 app.MapAuthEndpoints();
 app.MapBrandingEndpoints();
 app.MapContractEndpoints();
+app.MapContractFoundationEndpoints();
 app.MapCustomerEndpoints();
 app.MapCustomerAddressEndpoints();
 app.MapCustomerPhoneEndpoints();

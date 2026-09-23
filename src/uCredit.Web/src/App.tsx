@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useBranding } from './shared/branding/BrandingProvider'
 import { ContractsView } from './features/contracts/ContractsView'
+import { ContractCreateView } from './features/contracts/ContractCreateView'
 import { CustomersView } from './features/customers/CustomersView'
 import { useAuthSession } from './features/auth/useAuthSession'
 import type { AuthSession } from './features/auth/authApi'
@@ -179,6 +180,7 @@ function ApplicationView({
   const hasCustomersPermission = session.permissions.includes('customers.read')
   const hasCustomersWritePermission = session.permissions.includes('customers.write')
   const [activeModule, setActiveModule] = useState<'contracts' | 'customers'>('contracts')
+  const [contractCreateOpen, setContractCreateOpen] = useState(false)
 
   return (
     <div className="app-shell">
@@ -189,9 +191,9 @@ function ApplicationView({
           <small className="brand-customer">{theme.customerName || (brandingLoading ? 'Cargando identidad…' : session.tenant?.tenantCode)}</small>
         </div>
         <nav aria-label="Navegación principal">
-          <button type="button" className={activeModule === 'contracts' ? 'active' : ''} aria-current={activeModule === 'contracts' ? 'page' : undefined} onClick={() => setActiveModule('contracts')}>Contratos</button>
-          <button type="button" className={activeModule === 'customers' ? 'active' : ''} aria-current={activeModule === 'customers' ? 'page' : undefined} disabled={!hasCustomersPermission} aria-disabled={!hasCustomersPermission} onClick={() => setActiveModule('customers')}>Clientes</button>
-          <button type="button" disabled aria-disabled="true">Captura de contrato · Próximamente</button>
+          <button type="button" className={activeModule === 'contracts' && !contractCreateOpen ? 'active' : ''} aria-current={activeModule === 'contracts' && !contractCreateOpen ? 'page' : undefined} onClick={() => { setActiveModule('contracts'); setContractCreateOpen(false) }}>Contratos</button>
+          <button type="button" className={activeModule === 'customers' ? 'active' : ''} aria-current={activeModule === 'customers' ? 'page' : undefined} disabled={!hasCustomersPermission} aria-disabled={!hasCustomersPermission} onClick={() => { setActiveModule('customers'); setContractCreateOpen(false) }}>Clientes</button>
+          <button type="button" className={activeModule === 'contracts' && contractCreateOpen ? 'active' : ''} aria-current={activeModule === 'contracts' && contractCreateOpen ? 'page' : undefined} disabled={!hasContractsPermission} aria-disabled={!hasContractsPermission} onClick={() => { setActiveModule('contracts'); setContractCreateOpen(true) }}>Captura de contrato</button>
           <button type="button" disabled aria-disabled="true">Cobranza · Próximamente</button>
           <button type="button" disabled aria-disabled="true">Reportes · Próximamente</button>
         </nav>
@@ -212,11 +214,14 @@ function ApplicationView({
 
         {activeModule === 'customers' && hasCustomersPermission ? (
           <CustomersView productName={theme.productName} customerName={theme.customerName} onUnauthorized={onUnauthorized} canCreate={hasCustomersWritePermission} onCreated={() => undefined} />
+        ) : hasContractsPermission && contractCreateOpen ? (
+          <ContractCreateView onBack={() => { setContractCreateOpen(false); setActiveModule('contracts') }} onUnauthorized={onUnauthorized} />
         ) : hasContractsPermission ? (
           <ContractsView
             productName={theme.productName}
             customerName={theme.customerName}
             onUnauthorized={onUnauthorized}
+            onCreateContract={() => { setActiveModule('contracts'); setContractCreateOpen(true) }}
           />
         ) : (
           <section className="hero-card" aria-labelledby="forbidden-title">

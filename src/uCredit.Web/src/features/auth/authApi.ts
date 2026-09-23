@@ -423,6 +423,49 @@ export function getCustomerProfileReadiness(personId: number): Promise<CustomerP
   return apiRequest<CustomerProfileReadiness>('/api/v1/customers/' + encodeURIComponent(personId) + '/readiness')
 }
 
+export type ContractOperationCatalog = { code: string; description: string; companyId: number }
+export type ContractCnbvCatalog = { id: number; description: string; isDefault: boolean }
+export type ContractCfdiUseCatalog = { code: string; description: string }
+export type ContractAddressOption = { id: number; typeCode: number; typeDescription: string | null }
+export type ContractRateConfiguration = { rateId: number; description: string; isFixed: boolean; currencyCode: number; isActive: boolean; hasRevision: boolean }
+export type ContractLateRateConfiguration = { rateId: number; calculationTypeId: number; points: number; factor: number; currencyCode: number; isConfigured: boolean }
+export type ContractPreviewResponse = {
+  canCreate: boolean
+  operationCode: string
+  businessDate: string | null
+  amounts: { capital: number; downPayment: number; amountToFinance: number; initialBalance: number }
+  resolvedCatalogs: { rateId: number | null; cnbvId: number | null; cfdiUseCode: string | null; addressId: number | null }
+  pendingRules: { code: string; message: string }[]
+}
+
+export function getContractOperations(): Promise<ContractOperationCatalog[]> {
+  return apiRequest<ContractOperationCatalog[]>('/api/v1/contracts/catalogs/operations')
+}
+
+export function getContractCnbv(operationCode: string): Promise<ContractCnbvCatalog[]> {
+  return apiRequest<ContractCnbvCatalog[]>('/api/v1/contracts/catalogs/cnbv?operationCode=' + encodeURIComponent(operationCode))
+}
+
+export function getContractCfdiUses(personId: number): Promise<ContractCfdiUseCatalog[]> {
+  return apiRequest<ContractCfdiUseCatalog[]>('/api/v1/contracts/catalogs/cfdi-uses?personId=' + encodeURIComponent(personId))
+}
+
+export function getContractAddresses(personId: number): Promise<ContractAddressOption[]> {
+  return apiRequest<ContractAddressOption[]>('/api/v1/contracts/catalogs/addresses?personId=' + encodeURIComponent(personId))
+}
+
+export function getContractOrdinaryRate(operationCode: string): Promise<ContractRateConfiguration> {
+  return apiRequest<ContractRateConfiguration>('/api/v1/contracts/catalogs/ordinary-rate?operationCode=' + encodeURIComponent(operationCode))
+}
+
+export function getContractLateRate(operationCode: string): Promise<ContractLateRateConfiguration> {
+  return apiRequest<ContractLateRateConfiguration>('/api/v1/contracts/catalogs/late-rate?operationCode=' + encodeURIComponent(operationCode))
+}
+
+export function previewContract(payload: Record<string, unknown>): Promise<ContractPreviewResponse> {
+  return withCsrf<ContractPreviewResponse>('/api/v1/contracts/preview', { method: 'POST', body: JSON.stringify(payload) })
+}
+
 export type CustomerCreatePayload = {
   legalPersonality: number
   rfc: string
