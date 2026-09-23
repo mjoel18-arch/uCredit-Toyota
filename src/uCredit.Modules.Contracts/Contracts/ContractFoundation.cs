@@ -116,6 +116,9 @@ public sealed class ContractPreviewService(IContractFoundationRepository reposit
         CancellationToken cancellationToken = default)
     {
         var pending = new List<ContractPreviewPendingRule>();
+        pending.Add(new(
+            "contract_creation_not_implemented",
+            "La creación definitiva de contratos no está habilitada en esta fase."));
         if (command.PersonId <= 0) pending.Add(new("customer_required", "Selecciona un cliente válido."));
         if (!string.Equals(command.OperationCode, "CD", StringComparison.OrdinalIgnoreCase))
             pending.Add(new("contract_operation_not_available", "Sólo la operación CD está disponible en esta fase."));
@@ -163,7 +166,7 @@ public sealed class ContractPreviewService(IContractFoundationRepository reposit
 
         var amountToFinance = command.Capital - command.DownPayment;
         return new ContractPreviewResult(
-            pending.Count == 0,
+            false,
             "CD",
             businessDate,
             command.Capital,

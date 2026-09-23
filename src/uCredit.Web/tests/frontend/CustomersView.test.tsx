@@ -392,6 +392,7 @@ describe('CustomersView', () => {
     const section = screen.getByRole('heading', { name: 'Correos' }).closest('section') as HTMLElement
     fireEvent.click(section.querySelector('button') as HTMLButtonElement)
     await screen.findByRole('dialog', { name: 'Agregar correo' })
+    await screen.findByRole('checkbox', { name: 'Envío de facturas' })
     fireEvent.change(screen.getByLabelText('Correo electrónico'), { target: { value: 'unauthorized@example.invalid' } })
     fireEvent.click(screen.getByRole('button', { name: 'Guardar correo' }))
     await vi.waitFor(() => expect(unauthorized).toHaveBeenCalledOnce())
